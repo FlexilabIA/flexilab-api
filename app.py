@@ -6,13 +6,13 @@ import math
 import os
 import uuid
 
+# Set env BEFORE importing YOLO to reduce warnings
+os.environ["YOLO_CONFIG_DIR"] = "/tmp/Ultralytics"
+
 from ultralytics import YOLO
 from supabase import create_client
 
-# Avoid Ultralytics config warning
-os.environ["YOLO_CONFIG_DIR"] = "/tmp/Ultralytics"
-
-# Supabase connection
+# Supabase connection (backend only)
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY")
 
@@ -21,10 +21,9 @@ if SUPABASE_URL and SUPABASE_SERVICE_KEY:
     supabase = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 
 app = FastAPI()
-
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"],  # MVP. Later restrict to LearnWorlds domain(s)
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -70,28 +69,29 @@ def analyze_posture(xy, conf):
 
     def penalty(angle, optimal, severe, w=1.0):
         if angle <= optimal:
-            return 0
-        a = min(angle, severe)
-        t = (a - optimal) / (severe - optimal)
-        return w * 30 * (t ** 2)
+            return 0.0
+        a = min(float(angle), float(severe))
+        t = (a - float(optimal)) / (float(severe) - float(optimal))
+        return float(w) * 30.0 * (t ** 2)
 
     total_pen = (
-        penalty(neck_angle, 10, 55, 1.2) +
-        penalty(thoracic_angle, 5, 45, 1.0) +
-        penalty(pelvic_proxy_angle, 5, 40, 0.8)
+        penalty(neck_angle, 10, 55, 1.2)
+        + penalty(thoracic_angle, 5, 45, 1.0)
+        + penalty(pelvic_proxy_angle, 5, 40, 0.8)
     )
 
-    score = max(0, 100 - total_pen)
+    score = max(0.0, 100.0 - total_pen)
+    conf_out = max(0.6, min(1.0, float(quality)))
 
     return {
         "score": round(score, 1),
-        "confidence": round(float(quality), 3),
+        "confidence": round(conf_out, 3),
         "metrics": {
             "neck_angle": round(neck_angle, 2),
             "thoracic_angle": round(thoracic_angle, 2),
             "pelvic_proxy_angle": round(pelvic_proxy_angle, 2),
-            "side_used": side
-        }
+            "side_used": side,
+        },
     }
 
 
@@ -111,16 +111,13 @@ def analyze_shoulder(xy, conf, side="RIGHT"):
     dy = sh[1] - wr[1]
     angle = abs(math.degrees(math.atan2(dx, dy)))
 
-    deficit = max(0, 170 - angle)
-    score = max(0, 100 - deficit * 2)
+    deficit = max(0.0, 170.0 - float(angle))
+    score = max(0.0, 100.0 - deficit * 2.0)
 
     return {
         "score": round(score, 1),
-        "confidence": round(float(c), 3),
-        "metrics": {
-            "shoulder_flexion_angle": round(angle, 2),
-            "side": side
-        }
+        "confidence": round(max(0.6, min(1.0, float(c))), 3),
+        "metrics": {"shoulder_flexion_angle": round(angle, 2), "side": side},
     }
 
 
@@ -139,9 +136,7 @@ def analyze_squat(xy, conf):
     v2 = ankle - knee
 
     knee_angle = abs(
-        math.degrees(
-            math.atan2(v2[1], v2[0]) - math.atan2(v1[1], v1[0])
-        )
+        math.degrees(math.atan2(v2[1], v2[0]) - math.atan2(v1[1], v1[0]))
     )
     if knee_angle > 180:
         knee_angle = 360 - knee_angle
@@ -150,17 +145,105 @@ def analyze_squat(xy, conf):
     trunk_dy = hip[1] - shoulder[1]
     trunk_angle = abs(math.degrees(math.atan2(trunk_dx, trunk_dy)))
 
-    depth_score = min(100, knee_angle)
-    trunk_penalty = max(0, trunk_angle - 20) * 1.5
-    score = max(0, depth_score - trunk_penalty)
+    # Simple v1 scoring: depth good if knee_angle ~80-110, trunk penalty if lean >20
+    depth_pen = 0.0
+    if knee_angle > 120:
+        depth_pen = 35
+    elif knee_angle > 100:
+        depth_pen = 20
+    elif knee_angle > 85:
+        depth_pen = 10
+
+    trunk_pen = 0.0
+    if trunk_angle > 25:
+        trunk_pen = 20
+    elif trunk_angle > 15:
+        trunk_pen = 10
+
+    score = max(0.0, 100.0 - depth_pen - trunk_pen)
+    c = float(np.mean(conf))
+    conf_out = max(0.6, min(1.0, c))
 
     return {
         "score": round(score, 1),
-        "confidence": round(float(np.mean(conf)), 3),
-        "metrics": {
-            "knee_angle": round(knee_angle, 2),
-            "trunk_lean": round(trunk_angle, 2)
-        }
+        "confidence": round(conf_out, 3),
+        "metrics": {"knee_angle": round(knee_angle, 2), "trunk_lean": round(trunk_angle, 2)},
+    }
+
+
+def compute_composite(posture, shoulder_r, shoulder_l, squat):
+    # Use worst shoulder side for screening
+    shoulder = None
+    if shoulder_r is not None and shoulder_l is not None:
+        shoulder = min(shoulder_r, shoulder_l)
+    elif shoulder_r is not None:
+        shoulder = shoulder_r
+    elif shoulder_l is not None:
+        shoulder = shoulder_l
+
+    # If some tests missing, compute from what exists (normalized weights)
+    parts = []
+    if posture is not None:
+        parts.append(("posture", posture, 0.4))
+    if shoulder is not None:
+        parts.append(("shoulder", shoulder, 0.3))
+    if squat is not None:
+        parts.append(("squat", squat, 0.3))
+
+    if not parts:
+        return None
+
+    wsum = sum(w for _, _, w in parts)
+    composite = sum(val * w for _, val, w in parts) / wsum
+    return round(float(composite), 1)
+
+
+@app.post("/start_session")
+def start_session(user_email: str = Form(...)):
+    if supabase is None:
+        return {"error": "Supabase is not configured on server."}
+
+    resp = supabase.table("sessions").insert({
+        "user_email": user_email,
+        "status": "in_progress"
+    }).execute()
+
+    # Supabase returns inserted rows in data
+    session_id = resp.data[0]["id"]
+    return {"session_id": session_id}
+
+
+@app.post("/finalize_session")
+def finalize_session(session_id: str = Form(...)):
+    if supabase is None:
+        return {"error": "Supabase is not configured on server."}
+
+    # Read session row
+    s = supabase.table("sessions").select("*").eq("id", session_id).limit(1).execute()
+    if not s.data:
+        return {"error": "Session not found"}
+
+    row = s.data[0]
+    posture = row.get("posture_score")
+    sr = row.get("shoulder_right_score")
+    sl = row.get("shoulder_left_score")
+    squat = row.get("squat_score")
+
+    composite = compute_composite(posture, sr, sl, squat)
+
+    supabase.table("sessions").update({
+        "composite_score": composite,
+        "status": "completed"
+    }).eq("id", session_id).execute()
+
+    return {
+        "session_id": session_id,
+        "status": "completed",
+        "posture_score": posture,
+        "shoulder_right_score": sr,
+        "shoulder_left_score": sl,
+        "squat_score": squat,
+        "composite_score": composite
     }
 
 
@@ -168,60 +251,80 @@ def analyze_squat(xy, conf):
 async def analyze(
     image: UploadFile = File(...),
     user_email: str = Form(...),
-    test_type: str = Form(...)
+    test_type: str = Form(...),
+    session_id: str = Form(...)
 ):
+    if supabase is None:
+        return {"error": "Supabase is not configured on server."}
+
+    # Decode image
     img_bytes = await image.read()
     nparr = np.frombuffer(img_bytes, np.uint8)
     img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+    if img is None:
+        return {"error": "Invalid image"}
 
+    # Run pose
     res = model(img, conf=0.5, classes=[0])
 
     if res[0].keypoints is None or len(res[0].keypoints.xy) == 0:
         return {"error": "No person detected"}
 
+    # Select largest person
     boxes = res[0].boxes.xyxy.cpu().numpy()
-    areas = [(b[2]-b[0])*(b[3]-b[1]) for b in boxes]
+    areas = [(b[2] - b[0]) * (b[3] - b[1]) for b in boxes]
     main_idx = int(np.argmax(areas))
 
     xy = res[0].keypoints.xy[main_idx].cpu().numpy()
     conf = res[0].keypoints.conf[main_idx].cpu().numpy()
 
+    # Route analysis
     if test_type == "posture_side":
         result = analyze_posture(xy, conf)
+        session_update = {"posture_score": result["score"]}
     elif test_type == "shoulder_right":
         result = analyze_shoulder(xy, conf, "RIGHT")
+        session_update = {"shoulder_right_score": result["score"]}
     elif test_type == "shoulder_left":
         result = analyze_shoulder(xy, conf, "LEFT")
+        session_update = {"shoulder_left_score": result["score"]}
     elif test_type == "squat":
         result = analyze_squat(xy, conf)
+        session_update = {"squat_score": result["score"]}
     else:
         return {"error": "Invalid test_type"}
 
-    # Annotated image
+    # Annotated image upload
     annotated = res[0].plot()
     ok, png = cv2.imencode(".png", annotated)
-    annotated_url = None
+    if not ok:
+        return {"error": "Failed to encode annotated image"}
 
-    if supabase:
-        path = f"{user_email}/{test_type}/{uuid.uuid4()}.png"
-        supabase.storage.from_("screening").upload(
-            path,
-            png.tobytes(),
-            {"content-type": "image/png"}
-        )
-        annotated_url = supabase.storage.from_("screening").get_public_url(path)
+    path = f"{user_email}/{session_id}/{test_type}/{uuid.uuid4()}.png"
+    supabase.storage.from_("screening").upload(
+        path,
+        png.tobytes(),
+        {"content-type": "image/png"}
+    )
+    annotated_url = supabase.storage.from_("screening").get_public_url(path)
 
-        supabase.table("screenings").insert({
-            "user_email": user_email,
-            "test_type": test_type,
-            "score": result["score"],
-            "confidence": result["confidence"],
-            "metrics": result["metrics"],
-            "annotated_image_url": annotated_url
-        }).execute()
+    # Insert screening row
+    supabase.table("screenings").insert({
+        "user_email": user_email,
+        "session_id": session_id,
+        "test_type": test_type,
+        "score": result["score"],
+        "confidence": result["confidence"],
+        "metrics": result["metrics"],
+        "annotated_image_url": annotated_url
+    }).execute()
+
+    # Update session partial scores
+    supabase.table("sessions").update(session_update).eq("id", session_id).execute()
 
     return {
         "user_email": user_email,
+        "session_id": session_id,
         "test_type": test_type,
         "score": result["score"],
         "confidence": result["confidence"],
