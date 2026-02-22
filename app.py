@@ -4,15 +4,11 @@ import numpy as np
 import cv2
 import math
 import os
-import uuid
 
-# Set env BEFORE importing YOLO to reduce warnings
 os.environ["YOLO_CONFIG_DIR"] = "/tmp/Ultralytics"
-
 from ultralytics import YOLO
 from supabase import create_client
 
-# Supabase connection (backend only)
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY")
 
@@ -23,12 +19,11 @@ if SUPABASE_URL and SUPABASE_SERVICE_KEY:
 app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # MVP. Later restrict to LearnWorlds domain(s)
+    allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Load model once
 model = YOLO("yolov8n-pose.pt")
 
 
@@ -145,7 +140,6 @@ def analyze_squat(xy, conf):
     trunk_dy = hip[1] - shoulder[1]
     trunk_angle = abs(math.degrees(math.atan2(trunk_dx, trunk_dy)))
 
-    # Simple v1 scoring: depth good if knee_angle ~80-110, trunk penalty if lean >20
     depth_pen = 0.0
     if knee_angle > 120:
         depth_pen = 35
@@ -172,7 +166,6 @@ def analyze_squat(xy, conf):
 
 
 def compute_composite(posture, shoulder_r, shoulder_l, squat):
-    # Use worst shoulder side for screening
     shoulder = None
     if shoulder_r is not None and shoulder_l is not None:
         shoulder = min(shoulder_r, shoulder_l)
@@ -181,20 +174,19 @@ def compute_composite(posture, shoulder_r, shoulder_l, squat):
     elif shoulder_l is not None:
         shoulder = shoulder_l
 
-    # If some tests missing, compute from what exists (normalized weights)
     parts = []
     if posture is not None:
-        parts.append(("posture", posture, 0.4))
+        parts.append((posture, 0.4))
     if shoulder is not None:
-        parts.append(("shoulder", shoulder, 0.3))
+        parts.append((shoulder, 0.3))
     if squat is not None:
-        parts.append(("squat", squat, 0.3))
+        parts.append((squat, 0.3))
 
     if not parts:
         return None
 
-    wsum = sum(w for _, _, w in parts)
-    composite = sum(val * w for _, val, w in parts) / wsum
+    wsum = sum(w for _, w in parts)
+    composite = sum(val * w for val, w in parts) / wsum
     return round(float(composite), 1)
 
 
@@ -208,9 +200,7 @@ def start_session(user_email: str = Form(...)):
         "status": "in_progress"
     }).execute()
 
-    # Supabase returns inserted rows in data
-    session_id = resp.data[0]["id"]
-    return {"session_id": session_id}
+    return {"session_id": resp.data[0]["id"]}
 
 
 @app.post("/finalize_session")
@@ -218,18 +208,17 @@ def finalize_session(session_id: str = Form(...)):
     if supabase is None:
         return {"error": "Supabase is not configured on server."}
 
-    # Read session row
     s = supabase.table("sessions").select("*").eq("id", session_id).limit(1).execute()
     if not s.data:
         return {"error": "Session not found"}
 
     row = s.data[0]
-    posture = row.get("posture_score")
-    sr = row.get("shoulder_right_score")
-    sl = row.get("shoulder_left_score")
-    squat = row.get("squat_score")
-
-    composite = compute_composite(posture, sr, sl, squat)
+    composite = compute_composite(
+        row.get("posture_score"),
+        row.get("shoulder_right_score"),
+        row.get("shoulder_left_score"),
+        row.get("squat_score"),
+    )
 
     supabase.table("sessions").update({
         "composite_score": composite,
@@ -239,10 +228,10 @@ def finalize_session(session_id: str = Form(...)):
     return {
         "session_id": session_id,
         "status": "completed",
-        "posture_score": posture,
-        "shoulder_right_score": sr,
-        "shoulder_left_score": sl,
-        "squat_score": squat,
+        "posture_score": row.get("posture_score"),
+        "shoulder_right_score": row.get("shoulder_right_score"),
+        "shoulder_left_score": row.get("shoulder_left_score"),
+        "squat_score": row.get("squat_score"),
         "composite_score": composite
     }
 
@@ -257,20 +246,24 @@ async def analyze(
     if supabase is None:
         return {"error": "Supabase is not configured on server."}
 
-    # Decode image
     img_bytes = await image.read()
     nparr = np.frombuffer(img_bytes, np.uint8)
     img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
     if img is None:
         return {"error": "Invalid image"}
 
-    # Run pose
+    # IMPORTANT: resize for Render Free stability
+    h, w = img.shape[:2]
+    max_side = 960  # reduce to 720 if you still hit memory
+    scale = max_side / max(h, w)
+    if scale < 1.0:
+        img = cv2.resize(img, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
+
     res = model(img, conf=0.5, classes=[0])
 
     if res[0].keypoints is None or len(res[0].keypoints.xy) == 0:
         return {"error": "No person detected"}
 
-    # Select largest person
     boxes = res[0].boxes.xyxy.cpu().numpy()
     areas = [(b[2] - b[0]) * (b[3] - b[1]) for b in boxes]
     main_idx = int(np.argmax(areas))
@@ -278,7 +271,6 @@ async def analyze(
     xy = res[0].keypoints.xy[main_idx].cpu().numpy()
     conf = res[0].keypoints.conf[main_idx].cpu().numpy()
 
-    # Route analysis
     if test_type == "posture_side":
         result = analyze_posture(xy, conf)
         session_update = {"posture_score": result["score"]}
@@ -294,21 +286,7 @@ async def analyze(
     else:
         return {"error": "Invalid test_type"}
 
-    # Annotated image upload
-    annotated = res[0].plot()
-    ok, png = cv2.imencode(".png", annotated)
-    if not ok:
-        return {"error": "Failed to encode annotated image"}
-
-    path = f"{user_email}/{session_id}/{test_type}/{uuid.uuid4()}.png"
-    supabase.storage.from_("screening").upload(
-        path,
-        png.tobytes(),
-        {"content-type": "image/png"}
-    )
-    annotated_url = supabase.storage.from_("screening").get_public_url(path)
-
-    # Insert screening row
+    # Insert screening row (scores only)
     supabase.table("screenings").insert({
         "user_email": user_email,
         "session_id": session_id,
@@ -316,7 +294,7 @@ async def analyze(
         "score": result["score"],
         "confidence": result["confidence"],
         "metrics": result["metrics"],
-        "annotated_image_url": annotated_url
+        "annotated_image_url": None
     }).execute()
 
     # Update session partial scores
@@ -329,5 +307,5 @@ async def analyze(
         "score": result["score"],
         "confidence": result["confidence"],
         "metrics": result["metrics"],
-        "annotated_image_url": annotated_url
+        "annotated_image_url": None
     }
