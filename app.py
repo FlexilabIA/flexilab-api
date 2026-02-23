@@ -5,7 +5,7 @@ import cv2
 import math
 import os
 
-# Set env BEFORE importing YOLO (reduces config warnings)
+# Must be set BEFORE importing YOLO (helps reduce Ultralytics warnings)
 os.environ["YOLO_CONFIG_DIR"] = "/tmp/Ultralytics"
 
 from ultralytics import YOLO
@@ -22,7 +22,7 @@ if SUPABASE_URL and SUPABASE_SERVICE_KEY:
 app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # MVP (later restrict to LearnWorlds domain)
+    allow_origins=["*"],  # MVP (later restrict)
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -36,6 +36,40 @@ def health():
     return {"ok": True}
 
 
+# ----------------------------
+# Threshold helpers
+# ----------------------------
+def make_thresholds(unit, scale_min, scale_max, bands, pointer_value):
+    """
+    bands: list of dicts like:
+      [{"label":"Green","min":0,"max":10,"color":"green"}, ...]
+    pointer_value: numeric
+    returns: dict with rating and pointer_value clamped
+    """
+    v = float(pointer_value)
+    v = max(float(scale_min), min(float(scale_max), v))
+
+    rating = "unknown"
+    for b in bands:
+        if v >= float(b["min"]) and v < float(b["max"]):
+            rating = b.get("color", b.get("label", "unknown")).lower()
+            break
+    if v == float(scale_max) and bands:
+        rating = bands[-1].get("color", bands[-1].get("label", "unknown")).lower()
+
+    return {
+        "unit": unit,
+        "scale_min": scale_min,
+        "scale_max": scale_max,
+        "bands": bands,
+        "pointer_value": round(v, 2),
+        "rating": rating
+    }
+
+
+# ----------------------------
+# Geometry helpers
+# ----------------------------
 def angle_to_vertical(p1, p2):
     """Angle (0..90) of segment p1->p2 relative to vertical axis."""
     dx = float(p2[0] - p1[0])
@@ -46,8 +80,11 @@ def angle_to_vertical(p1, p2):
     return ang
 
 
+# ----------------------------
+# Analysis functions
+# ----------------------------
 def analyze_posture(xy, conf):
-    # Keypoints indices (COCO format used by YOLOv8 pose)
+    # COCO indices for YOLOv8 pose
     L_EAR, R_EAR = 3, 4
     L_SH, R_SH = 5, 6
     L_HIP, R_HIP = 11, 12
@@ -68,7 +105,7 @@ def analyze_posture(xy, conf):
     thoracic_angle = angle_to_vertical(hip, shoulder)
     pelvic_proxy_angle = thoracic_angle
 
-    # Smooth penalties (v1)
+    # Smooth penalty score (kept)
     def penalty(angle, optimal, severe, w=1.0):
         if angle <= optimal:
             return 0.0
@@ -77,13 +114,46 @@ def analyze_posture(xy, conf):
         return float(w) * 30.0 * (t ** 2)
 
     total_pen = (
-        penalty(neck_angle, 10, 55, 1.2)
-        + penalty(thoracic_angle, 5, 45, 1.0)
-        + penalty(pelvic_proxy_angle, 5, 40, 0.8)
+        penalty(neck_angle, 10, 55, 1.2) +
+        penalty(thoracic_angle, 5, 45, 1.0) +
+        penalty(pelvic_proxy_angle, 5, 40, 0.8)
     )
-
     score = max(0.0, 100.0 - total_pen)
     conf_out = max(0.6, min(1.0, float(quality)))
+
+    # Thresholds (MVP)
+    neck_thr = make_thresholds(
+        unit="deg",
+        scale_min=0, scale_max=60,
+        bands=[
+            {"label": "Green", "min": 0, "max": 10, "color": "green"},
+            {"label": "Yellow", "min": 10, "max": 20, "color": "yellow"},
+            {"label": "Red", "min": 20, "max": 60, "color": "red"},
+        ],
+        pointer_value=neck_angle
+    )
+
+    thor_thr = make_thresholds(
+        unit="deg",
+        scale_min=0, scale_max=45,
+        bands=[
+            {"label": "Green", "min": 0, "max": 5, "color": "green"},
+            {"label": "Yellow", "min": 5, "max": 15, "color": "yellow"},
+            {"label": "Red", "min": 15, "max": 45, "color": "red"},
+        ],
+        pointer_value=thoracic_angle
+    )
+
+    pelvis_thr = make_thresholds(
+        unit="deg",
+        scale_min=0, scale_max=45,
+        bands=[
+            {"label": "Green", "min": 0, "max": 5, "color": "green"},
+            {"label": "Yellow", "min": 5, "max": 15, "color": "yellow"},
+            {"label": "Red", "min": 15, "max": 45, "color": "red"},
+        ],
+        pointer_value=pelvic_proxy_angle
+    )
 
     return {
         "score": round(score, 1),
@@ -94,18 +164,19 @@ def analyze_posture(xy, conf):
             "pelvic_proxy_angle": round(pelvic_proxy_angle, 2),
             "side_used": side,
         },
+        "thresholds": {
+            "neck_angle": neck_thr,
+            "thoracic_angle": thor_thr,
+            "pelvic_proxy_angle": pelvis_thr
+        }
     }
 
 
 def analyze_shoulder(xy, conf, side="RIGHT"):
     """
-    Shoulder mobility (flexion) computed biomechanically:
-    angle between trunk vector (shoulder->hip) and upper-arm vector (shoulder->elbow).
-    Returns:
-      - shoulder_flexion_angle (deg): ~180 = full overhead flexion, ~90 = arm horizontal, ~0 = arm down along trunk
-      - rating + thresholds for UI (green/yellow/red) + pointer position
+    Biomechanical: angle between trunk vector (shoulder->hip) and upper-arm vector (shoulder->elbow).
+    ~180 = overhead flexion, ~90 = arm horizontal, ~0 = arm down along trunk
     """
-    # COCO keypoints
     L_SH, R_SH = 5, 6
     L_EL, R_EL = 7, 8
     L_HIP, R_HIP = 11, 12
@@ -117,45 +188,33 @@ def analyze_shoulder(xy, conf, side="RIGHT"):
         sh, el, hip = xy[L_SH], xy[L_EL], xy[L_HIP]
         c = float(conf[L_SH] + conf[L_EL] + conf[L_HIP]) / 3.0
 
-    # Vector trunk (shoulder->hip) and upper arm (shoulder->elbow)
     v_trunk = hip - sh
     v_arm = el - sh
 
-    # Angle between two vectors using dot product
     denom = (np.linalg.norm(v_trunk) * np.linalg.norm(v_arm))
     if denom < 1e-6:
-        angle = 0.0
+        shoulder_flexion = 0.0
     else:
         cosang = float(np.dot(v_trunk, v_arm) / denom)
         cosang = max(-1.0, min(1.0, cosang))
-        angle = math.degrees(math.acos(cosang))
+        shoulder_flexion = float(math.degrees(math.acos(cosang)))
 
-    # Convert to "flexion" style where higher = better overhead
-    # Depending on elbow direction, acos gives:
-    # - ~0 when arm aligns with trunk downwards
-    # - ~180 when arm points opposite trunk (overhead)
-    shoulder_flexion = float(angle)
-
-    # --- Thresholds (MVP) ---
-    # Green: >=170 (full overhead)
-    # Yellow: 160-169
-    # Red: <160
-    if shoulder_flexion >= 170:
-        rating = "green"
-    elif shoulder_flexion >= 160:
-        rating = "yellow"
-    else:
-        rating = "red"
-
-    # Score (still /100 for session summary; keep but base on degrees)
-    # Softer slope: 170 -> 100, 130 -> ~50, 90 -> ~0
+    # Score per test (kept /100)
     deficit = max(0.0, 170.0 - shoulder_flexion)
     score = max(0.0, 100.0 - deficit * 2.0)
 
     conf_out = max(0.6, min(1.0, float(c)))
 
-    # UI pointer position on a 0..180 scale (clamped)
-    pointer = max(0.0, min(180.0, shoulder_flexion))
+    shoulder_thr = make_thresholds(
+        unit="deg",
+        scale_min=0, scale_max=180,
+        bands=[
+            {"label": "Red", "min": 0, "max": 160, "color": "red"},
+            {"label": "Yellow", "min": 160, "max": 170, "color": "yellow"},
+            {"label": "Green", "min": 170, "max": 180, "color": "green"},
+        ],
+        pointer_value=shoulder_flexion
+    )
 
     return {
         "score": round(score, 1),
@@ -165,18 +224,10 @@ def analyze_shoulder(xy, conf, side="RIGHT"):
             "side": side
         },
         "thresholds": {
-            "unit": "deg",
-            "scale_min": 0,
-            "scale_max": 180,
-            "bands": [
-                {"label": "Red", "min": 0, "max": 160},
-                {"label": "Yellow", "min": 160, "max": 170},
-                {"label": "Green", "min": 170, "max": 180}
-            ],
-            "pointer_value": round(pointer, 2),
-            "rating": rating
+            "shoulder_flexion": shoulder_thr
         }
     }
+
 
 def analyze_squat(xy, conf):
     L_HIP, R_HIP = 11, 12
@@ -203,7 +254,6 @@ def analyze_squat(xy, conf):
     trunk_angle = abs(math.degrees(math.atan2(trunk_dx, trunk_dy)))
 
     # v1 scoring
-    # knee_angle: depends on geometry; we treat larger as less depth (proxy)
     depth_pen = 0.0
     if knee_angle > 120:
         depth_pen = 35
@@ -223,6 +273,29 @@ def analyze_squat(xy, conf):
     c = float(np.mean(conf))
     conf_out = max(0.6, min(1.0, c))
 
+    trunk_thr = make_thresholds(
+        unit="deg",
+        scale_min=0, scale_max=60,
+        bands=[
+            {"label": "Green", "min": 0, "max": 15, "color": "green"},
+            {"label": "Yellow", "min": 15, "max": 25, "color": "yellow"},
+            {"label": "Red", "min": 25, "max": 60, "color": "red"},
+        ],
+        pointer_value=trunk_angle
+    )
+
+    # NOTE: knee thresholds depend on angle definition; this is MVP and we can tune
+    knee_thr = make_thresholds(
+        unit="deg",
+        scale_min=60, scale_max=180,
+        bands=[
+            {"label": "Green", "min": 60, "max": 95, "color": "green"},
+            {"label": "Yellow", "min": 95, "max": 110, "color": "yellow"},
+            {"label": "Red", "min": 110, "max": 180, "color": "red"},
+        ],
+        pointer_value=knee_angle
+    )
+
     return {
         "score": round(score, 1),
         "confidence": round(conf_out, 3),
@@ -230,18 +303,22 @@ def analyze_squat(xy, conf):
             "knee_angle": round(float(knee_angle), 2),
             "trunk_lean": round(float(trunk_angle), 2),
         },
+        "thresholds": {
+            "knee_angle": knee_thr,
+            "trunk_lean": trunk_thr
+        }
     }
 
 
 def compute_composite(posture, shoulder_r, shoulder_l, squat):
-    # Use worst shoulder side for screening
+    # Use worst shoulder side
     shoulder = None
     if shoulder_r is not None and shoulder_l is not None:
-        shoulder = min(shoulder_r, shoulder_l)
+        shoulder = min(float(shoulder_r), float(shoulder_l))
     elif shoulder_r is not None:
-        shoulder = shoulder_r
+        shoulder = float(shoulder_r)
     elif shoulder_l is not None:
-        shoulder = shoulder_l
+        shoulder = float(shoulder_l)
 
     parts = []
     if posture is not None:
@@ -259,6 +336,9 @@ def compute_composite(posture, shoulder_r, shoulder_l, squat):
     return round(float(composite), 1)
 
 
+# ----------------------------
+# API endpoints
+# ----------------------------
 @app.post("/start_session")
 def start_session(user_email: str = Form(...)):
     if supabase is None:
@@ -324,7 +404,7 @@ async def analyze(
 
     # Resize for Render Free stability
     h, w = img.shape[:2]
-    max_side = 960  # reduce to 720 if needed
+    max_side = 960  # reduce to 720 if you still see memory issues
     scale = max_side / max(h, w)
     if scale < 1.0:
         img = cv2.resize(
@@ -332,7 +412,7 @@ async def analyze(
             interpolation=cv2.INTER_AREA
         )
 
-    # Run pose
+    # Inference
     res = model(img, conf=0.5, classes=[0])
     if res[0].keypoints is None or len(res[0].keypoints.xy) == 0:
         return {"error": "No person detected"}
@@ -361,7 +441,7 @@ async def analyze(
     else:
         return {"error": "Invalid test_type"}
 
-    # Build row for Supabase screenings (angles in columns + full metrics JSON)
+    # Build DB row (angles in columns + JSON metrics + JSON thresholds)
     row = {
         "user_email": user_email,
         "session_id": session_id,
@@ -369,10 +449,11 @@ async def analyze(
         "score": float(result["score"]),
         "confidence": float(result["confidence"]),
         "metrics": result["metrics"],
-        "annotated_image_url": None,  # Free mode (no image)
+        "thresholds": result.get("thresholds"),  # <- saved to DB
+        "annotated_image_url": None  # Free mode
     }
 
-    # Map metrics -> dedicated columns (degrees)
+    # Map metrics -> dedicated columns
     if test_type == "posture_side":
         row["neck_angle_deg"] = result["metrics"].get("neck_angle")
         row["thoracic_angle_deg"] = result["metrics"].get("thoracic_angle")
@@ -393,7 +474,7 @@ async def analyze(
     # Update session partial score
     supabase.table("sessions").update(session_update).eq("id", session_id).execute()
 
-    # Return response (angles always in metrics; score summary included)
+    # Return response (with thresholds)
     return {
         "user_email": user_email,
         "session_id": session_id,
@@ -401,5 +482,6 @@ async def analyze(
         "score": result["score"],
         "confidence": result["confidence"],
         "metrics": result["metrics"],
+        "thresholds": result.get("thresholds"),
         "annotated_image_url": None
     }
