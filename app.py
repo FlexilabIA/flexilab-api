@@ -485,3 +485,333 @@ async def analyze(
         "thresholds": result.get("thresholds"),
         "annotated_image_url": None
     }
+@app.get("/report")
+def report(session_id: str):
+    """
+    Build a 'product-ready' report JSON for a given session_id.
+    Option B: works even if finalize_session wasn't called.
+    It reads screenings, computes flexilab_score if missing, and returns a structured FR report.
+    """
+    if supabase is None:
+        return {"error": "Supabase not configured"}
+
+    # 1) Load session
+    s_resp = supabase.table("sessions").select("*").eq("id", session_id).limit(1).execute()
+    if not s_resp.data:
+        return {"error": "Session not found"}
+    session = s_resp.data[0]
+
+    # 2) Load screenings for that session
+    scr_resp = supabase.table("screenings").select("*").eq("session_id", session_id).execute()
+    screenings = scr_resp.data or []
+
+    tests_found = [x.get("test_type") for x in screenings if x.get("test_type")]
+
+    # Helper to find a screening by test_type
+    def get_test(tt):
+        for r in screenings:
+            if r.get("test_type") == tt:
+                return r
+        return None
+
+    posture = get_test("posture_side")
+    sh_r = get_test("shoulder_right")
+    sh_l = get_test("shoulder_left")
+    squat = get_test("squat")
+
+    # 3) Compute flexilab_score if not already computed
+    flexilab_score = session.get("composite_score", None)
+    if flexilab_score is None:
+        # Use per-test scores saved in sessions if present, otherwise fallback to screenings
+        posture_score = session.get("posture_score", None) or (posture.get("score") if posture else None)
+        sh_r_score = session.get("shoulder_right_score", None) or (sh_r.get("score") if sh_r else None)
+        sh_l_score = session.get("shoulder_left_score", None) or (sh_l.get("score") if sh_l else None)
+        squat_score = session.get("squat_score", None) or (squat.get("score") if squat else None)
+
+        # Mimic compute_composite logic (worst shoulder)
+        shoulder = None
+        if sh_r_score is not None and sh_l_score is not None:
+            shoulder = min(float(sh_r_score), float(sh_l_score))
+        elif sh_r_score is not None:
+            shoulder = float(sh_r_score)
+        elif sh_l_score is not None:
+            shoulder = float(sh_l_score)
+
+        parts = []
+        if posture_score is not None:
+            parts.append((float(posture_score), 0.4))
+        if shoulder is not None:
+            parts.append((float(shoulder), 0.3))
+        if squat_score is not None:
+            parts.append((float(squat_score), 0.3))
+
+        if parts:
+            wsum = sum(w for _, w in parts)
+            flexilab_score = round(sum(v * w for v, w in parts) / wsum, 1)
+        else:
+            flexilab_score = None
+
+    # 4) Risk category
+    def risk_from_score(score):
+        if score is None:
+            return {
+                "label": "Unknown",
+                "color": "grey",
+                "description_fr": "Session incomplète : termine tous les tests pour un score global."
+            }
+        score = float(score)
+        if score >= 85:
+            return {"label": "Low", "color": "green", "description_fr": "Bon équilibre global. Quelques ajustements possibles."}
+        if score >= 70:
+            return {"label": "Moderate", "color": "yellow", "description_fr": "Profil intermédiaire : plusieurs axes d’amélioration."}
+        return {"label": "High", "color": "red", "description_fr": "Priorité d’amélioration : plusieurs indicateurs hors zone cible."}
+
+    risk_category = risk_from_score(flexilab_score)
+
+    # 5) Utility: extract item from a screening thresholds dict
+    def thr_item(thresholds, key):
+        if not thresholds:
+            return None
+        v = thresholds.get(key)
+        return v if isinstance(v, dict) else None
+
+    # 6) Build sections with FR labels + short insights
+    sections = []
+
+    # --- Posture section ---
+    if posture:
+        m = posture.get("metrics") or {}
+        t = posture.get("thresholds") or {}
+        neck_val = m.get("neck_angle")
+        thor_val = m.get("thoracic_angle")
+        pelv_val = m.get("pelvic_proxy_angle")
+
+        neck_thr = thr_item(t, "neck_angle")
+        thor_thr = thr_item(t, "thoracic_angle")
+        pelv_thr = thr_item(t, "pelvic_proxy_angle")
+
+        def insight_posture(label, rating):
+            if rating == "green":
+                return f"{label} satisfaisant."
+            if rating == "yellow":
+                return f"{label} à améliorer légèrement."
+            if rating == "red":
+                return f"{label} prioritaire à corriger."
+            return f"{label} : données insuffisantes."
+
+        sections.append({
+            "id": "posture",
+            "title_fr": "Posture (vue de profil)",
+            "items": [
+                {
+                    "id": "neck_angle",
+                    "label_fr": "Angle cervical",
+                    "value": neck_val,
+                    "unit": "°",
+                    "rating": (neck_thr or {}).get("rating"),
+                    "thresholds": neck_thr,
+                    "short_insight_fr": insight_posture("Alignement cervical", (neck_thr or {}).get("rating")),
+                },
+                {
+                    "id": "thoracic_angle",
+                    "label_fr": "Angle thoracique",
+                    "value": thor_val,
+                    "unit": "°",
+                    "rating": (thor_thr or {}).get("rating"),
+                    "thresholds": thor_thr,
+                    "short_insight_fr": insight_posture("Alignement thoracique", (thor_thr or {}).get("rating")),
+                },
+                {
+                    "id": "pelvic_proxy_angle",
+                    "label_fr": "Bassin (proxy)",
+                    "value": pelv_val,
+                    "unit": "°",
+                    "rating": (pelv_thr or {}).get("rating"),
+                    "thresholds": pelv_thr,
+                    "short_insight_fr": insight_posture("Position du bassin", (pelv_thr or {}).get("rating")),
+                },
+            ]
+        })
+
+    # --- Shoulders section ---
+    if sh_r or sh_l:
+        items = []
+        asym = None
+
+        def insight_shoulder(rating):
+            if rating == "green":
+                return "Mobilité overhead très bonne."
+            if rating == "yellow":
+                return "Légère limitation par rapport à l'objectif."
+            if rating == "red":
+                return "Limitation marquée : priorité mobilité."
+            return "Données insuffisantes."
+
+        # right
+        if sh_r:
+            mr = sh_r.get("metrics") or {}
+            tr = sh_r.get("thresholds") or {}
+            thr = thr_item(tr, "shoulder_flexion")
+            val = mr.get("shoulder_flexion_angle")
+            items.append({
+                "id": "shoulder_right_flexion",
+                "label_fr": "Flexion épaule droite",
+                "value": val,
+                "unit": "°",
+                "rating": (thr or {}).get("rating"),
+                "thresholds": thr,
+                "short_insight_fr": insight_shoulder((thr or {}).get("rating")),
+            })
+
+        # left
+        if sh_l:
+            ml = sh_l.get("metrics") or {}
+            tl = sh_l.get("thresholds") or {}
+            thr = thr_item(tl, "shoulder_flexion")
+            val = ml.get("shoulder_flexion_angle")
+            items.append({
+                "id": "shoulder_left_flexion",
+                "label_fr": "Flexion épaule gauche",
+                "value": val,
+                "unit": "°",
+                "rating": (thr or {}).get("rating"),
+                "thresholds": thr,
+                "short_insight_fr": insight_shoulder((thr or {}).get("rating")),
+            })
+
+        # asymmetry (if both present)
+        if sh_r and sh_l:
+            vr = (sh_r.get("metrics") or {}).get("shoulder_flexion_angle")
+            vl = (sh_l.get("metrics") or {}).get("shoulder_flexion_angle")
+            if vr is not None and vl is not None:
+                asym_deg = abs(float(vr) - float(vl))
+                # simple asymmetry rating
+                if asym_deg <= 5:
+                    a_rating = "green"
+                    a_txt = "Symétrie satisfaisante."
+                elif asym_deg <= 12:
+                    a_rating = "yellow"
+                    a_txt = "Asymétrie légère entre droite et gauche."
+                else:
+                    a_rating = "red"
+                    a_txt = "Asymétrie importante : priorité équilibre D/G."
+                asym = {"value_deg": round(asym_deg, 2), "rating": a_rating, "short_insight_fr": a_txt}
+
+        sections.append({
+            "id": "shoulders",
+            "title_fr": "Mobilité des épaules",
+            "items": items,
+            "asymmetry": asym
+        })
+
+    # --- Squat section ---
+    if squat:
+        ms = squat.get("metrics") or {}
+        ts = squat.get("thresholds") or {}
+
+        knee_val = ms.get("knee_angle")
+        trunk_val = ms.get("trunk_lean")
+
+        knee_thr = thr_item(ts, "knee_angle")
+        trunk_thr = thr_item(ts, "trunk_lean")
+
+        def insight_squat(label, rating):
+            if rating == "green":
+                return f"{label} satisfaisant."
+            if rating == "yellow":
+                return f"{label} à améliorer."
+            if rating == "red":
+                return f"{label} prioritaire à améliorer."
+            return f"{label} : données insuffisantes."
+
+        sections.append({
+            "id": "squat",
+            "title_fr": "Squat (contrôle et mobilité)",
+            "items": [
+                {
+                    "id": "squat_knee_angle",
+                    "label_fr": "Angle du genou",
+                    "value": knee_val,
+                    "unit": "°",
+                    "rating": (knee_thr or {}).get("rating"),
+                    "thresholds": knee_thr,
+                    "short_insight_fr": insight_squat("Profondeur", (knee_thr or {}).get("rating")),
+                },
+                {
+                    "id": "squat_trunk_lean",
+                    "label_fr": "Inclinaison du tronc",
+                    "value": trunk_val,
+                    "unit": "°",
+                    "rating": (trunk_thr or {}).get("rating"),
+                    "thresholds": trunk_thr,
+                    "short_insight_fr": insight_squat("Contrôle du tronc", (trunk_thr or {}).get("rating")),
+                }
+            ]
+        })
+
+    # 7) Priorities (max 3): collect red then yellow across key measures
+    candidates = []
+
+    def add_candidate(sev, title_fr, why_fr):
+        candidates.append({"severity": sev, "title_fr": title_fr, "why_fr": why_fr})
+
+    # posture
+    if posture:
+        t = posture.get("thresholds") or {}
+        na = thr_item(t, "neck_angle")
+        ta = thr_item(t, "thoracic_angle")
+        if (na or {}).get("rating") in ["red", "yellow"]:
+            add_candidate((na or {}).get("rating"), "Alignement cervical", "L’angle cervical est hors de la zone optimale.")
+        if (ta or {}).get("rating") in ["red", "yellow"]:
+            add_candidate((ta or {}).get("rating"), "Alignement thoracique", "L’angle thoracique est hors de la zone optimale.")
+
+    # shoulders
+    if sh_r:
+        thr = thr_item((sh_r.get("thresholds") or {}), "shoulder_flexion")
+        if (thr or {}).get("rating") in ["red", "yellow"]:
+            add_candidate((thr or {}).get("rating"), "Mobilité épaule droite", "Flexion overhead sous l’objectif.")
+    if sh_l:
+        thr = thr_item((sh_l.get("thresholds") or {}), "shoulder_flexion")
+        if (thr or {}).get("rating") in ["red", "yellow"]:
+            add_candidate((thr or {}).get("rating"), "Mobilité épaule gauche", "Flexion overhead sous l’objectif.")
+
+    # squat
+    if squat:
+        ts = squat.get("thresholds") or {}
+        tr = thr_item(ts, "trunk_lean")
+        kn = thr_item(ts, "knee_angle")
+        if (tr or {}).get("rating") in ["red", "yellow"]:
+            add_candidate((tr or {}).get("rating"), "Inclinaison du tronc en squat", "Inclinaison du tronc hors zone cible.")
+        if (kn or {}).get("rating") in ["red", "yellow"]:
+            add_candidate((kn or {}).get("rating"), "Profondeur du squat", "Angle du genou hors zone cible.")
+
+    # Sort: red first then yellow, limit 3
+    sev_order = {"red": 0, "yellow": 1, "green": 2, "unknown": 3, None: 4}
+    candidates.sort(key=lambda x: sev_order.get(x["severity"], 9))
+
+    top_priorities = []
+    for i, c in enumerate(candidates[:3], start=1):
+        top_priorities.append({
+            "id": f"priority_{i}",
+            "title_fr": c["title_fr"],
+            "severity": c["severity"],
+            "why_fr": c["why_fr"]
+        })
+
+    # 8) Created_at
+    created_at = session.get("created_at")
+
+    # 9) Final report object
+    return {
+        "session_id": session_id,
+        "user_email": session.get("user_email"),
+        "created_at": created_at,
+
+        "flexilab_score": flexilab_score,
+        "risk_category": risk_category,
+
+        "sections": sections,
+        "top_priorities": top_priorities,
+        "next_step_fr": "Refais le screening dans 14 jours pour vérifier l'évolution.",
+        "debug": {"tests_found": tests_found}
+    }
