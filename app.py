@@ -5,10 +5,13 @@ import cv2
 import math
 import os
 
+# Set env BEFORE importing YOLO (reduces config warnings)
 os.environ["YOLO_CONFIG_DIR"] = "/tmp/Ultralytics"
+
 from ultralytics import YOLO
 from supabase import create_client
 
+# Supabase connection (backend only)
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY")
 
@@ -19,11 +22,12 @@ if SUPABASE_URL and SUPABASE_SERVICE_KEY:
 app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"],  # MVP (later restrict to LearnWorlds domain)
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# Load model once
 model = YOLO("yolov8n-pose.pt")
 
 
@@ -33,6 +37,7 @@ def health():
 
 
 def angle_to_vertical(p1, p2):
+    """Angle (0..90) of segment p1->p2 relative to vertical axis."""
     dx = float(p2[0] - p1[0])
     dy = float(p1[1] - p2[1])
     ang = abs(math.degrees(math.atan2(dx, dy)))
@@ -42,26 +47,28 @@ def angle_to_vertical(p1, p2):
 
 
 def analyze_posture(xy, conf):
+    # Keypoints indices (COCO format used by YOLOv8 pose)
     L_EAR, R_EAR = 3, 4
     L_SH, R_SH = 5, 6
     L_HIP, R_HIP = 11, 12
 
-    left_score = conf[L_EAR] + conf[L_SH] + conf[L_HIP]
-    right_score = conf[R_EAR] + conf[R_SH] + conf[R_HIP]
+    left_score = float(conf[L_EAR] + conf[L_SH] + conf[L_HIP])
+    right_score = float(conf[R_EAR] + conf[R_SH] + conf[R_HIP])
 
     if right_score >= left_score:
         ear, shoulder, hip = xy[R_EAR], xy[R_SH], xy[R_HIP]
         side = "RIGHT"
-        quality = right_score / 3
+        quality = right_score / 3.0
     else:
         ear, shoulder, hip = xy[L_EAR], xy[L_SH], xy[L_HIP]
         side = "LEFT"
-        quality = left_score / 3
+        quality = left_score / 3.0
 
     neck_angle = angle_to_vertical(shoulder, ear)
     thoracic_angle = angle_to_vertical(hip, shoulder)
     pelvic_proxy_angle = thoracic_angle
 
+    # Smooth penalties (v1)
     def penalty(angle, optimal, severe, w=1.0):
         if angle <= optimal:
             return 0.0
@@ -97,22 +104,30 @@ def analyze_shoulder(xy, conf, side="RIGHT"):
 
     if side == "RIGHT":
         sh, el, wr = xy[R_SH], xy[R_EL], xy[R_WR]
-        c = (conf[R_SH] + conf[R_EL] + conf[R_WR]) / 3
+        c = float(conf[R_SH] + conf[R_EL] + conf[R_WR]) / 3.0
     else:
         sh, el, wr = xy[L_SH], xy[L_EL], xy[L_WR]
-        c = (conf[L_SH] + conf[L_EL] + conf[L_WR]) / 3
+        c = float(conf[L_SH] + conf[L_EL] + conf[L_WR]) / 3.0
 
-    dx = wr[0] - sh[0]
-    dy = sh[1] - wr[1]
-    angle = abs(math.degrees(math.atan2(dx, dy)))
+    # Shoulder flexion proxy: wrist above shoulder (vertical reference)
+    dx = float(wr[0] - sh[0])
+    dy = float(sh[1] - wr[1])
+    angle = abs(math.degrees(math.atan2(dx, dy)))  # 0..180-ish
 
+    # Softer scoring (less brutal than before)
+    # Great >=170, Normal 160-169, Below 160 reduces gradually
     deficit = max(0.0, 170.0 - float(angle))
-    score = max(0.0, 100.0 - deficit * 2.0)
+    score = max(0.0, 100.0 - deficit * 1.25)  # softer slope than 2.0
+
+    conf_out = max(0.6, min(1.0, float(c)))
 
     return {
         "score": round(score, 1),
-        "confidence": round(max(0.6, min(1.0, float(c))), 3),
-        "metrics": {"shoulder_flexion_angle": round(angle, 2), "side": side},
+        "confidence": round(conf_out, 3),
+        "metrics": {
+            "shoulder_flexion_angle": round(angle, 2),
+            "side": side
+        },
     }
 
 
@@ -136,10 +151,12 @@ def analyze_squat(xy, conf):
     if knee_angle > 180:
         knee_angle = 360 - knee_angle
 
-    trunk_dx = shoulder[0] - hip[0]
-    trunk_dy = hip[1] - shoulder[1]
+    trunk_dx = float(shoulder[0] - hip[0])
+    trunk_dy = float(hip[1] - shoulder[1])
     trunk_angle = abs(math.degrees(math.atan2(trunk_dx, trunk_dy)))
 
+    # v1 scoring
+    # knee_angle: depends on geometry; we treat larger as less depth (proxy)
     depth_pen = 0.0
     if knee_angle > 120:
         depth_pen = 35
@@ -155,17 +172,22 @@ def analyze_squat(xy, conf):
         trunk_pen = 10
 
     score = max(0.0, 100.0 - depth_pen - trunk_pen)
+
     c = float(np.mean(conf))
     conf_out = max(0.6, min(1.0, c))
 
     return {
         "score": round(score, 1),
         "confidence": round(conf_out, 3),
-        "metrics": {"knee_angle": round(knee_angle, 2), "trunk_lean": round(trunk_angle, 2)},
+        "metrics": {
+            "knee_angle": round(float(knee_angle), 2),
+            "trunk_lean": round(float(trunk_angle), 2),
+        },
     }
 
 
 def compute_composite(posture, shoulder_r, shoulder_l, squat):
+    # Use worst shoulder side for screening
     shoulder = None
     if shoulder_r is not None and shoulder_l is not None:
         shoulder = min(shoulder_r, shoulder_l)
@@ -176,11 +198,11 @@ def compute_composite(posture, shoulder_r, shoulder_l, squat):
 
     parts = []
     if posture is not None:
-        parts.append((posture, 0.4))
+        parts.append((float(posture), 0.4))
     if shoulder is not None:
-        parts.append((shoulder, 0.3))
+        parts.append((float(shoulder), 0.3))
     if squat is not None:
-        parts.append((squat, 0.3))
+        parts.append((float(squat), 0.3))
 
     if not parts:
         return None
@@ -246,24 +268,29 @@ async def analyze(
     if supabase is None:
         return {"error": "Supabase is not configured on server."}
 
+    # Decode image
     img_bytes = await image.read()
     nparr = np.frombuffer(img_bytes, np.uint8)
     img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
     if img is None:
         return {"error": "Invalid image"}
 
-    # IMPORTANT: resize for Render Free stability
+    # Resize for Render Free stability
     h, w = img.shape[:2]
-    max_side = 960  # reduce to 720 if you still hit memory
+    max_side = 960  # reduce to 720 if needed
     scale = max_side / max(h, w)
     if scale < 1.0:
-        img = cv2.resize(img, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
+        img = cv2.resize(
+            img, (int(w * scale), int(h * scale)),
+            interpolation=cv2.INTER_AREA
+        )
 
+    # Run pose
     res = model(img, conf=0.5, classes=[0])
-
     if res[0].keypoints is None or len(res[0].keypoints.xy) == 0:
         return {"error": "No person detected"}
 
+    # Select largest person
     boxes = res[0].boxes.xyxy.cpu().numpy()
     areas = [(b[2] - b[0]) * (b[3] - b[1]) for b in boxes]
     main_idx = int(np.argmax(areas))
@@ -271,6 +298,7 @@ async def analyze(
     xy = res[0].keypoints.xy[main_idx].cpu().numpy()
     conf = res[0].keypoints.conf[main_idx].cpu().numpy()
 
+    # Route analysis
     if test_type == "posture_side":
         result = analyze_posture(xy, conf)
         session_update = {"posture_score": result["score"]}
@@ -286,20 +314,39 @@ async def analyze(
     else:
         return {"error": "Invalid test_type"}
 
-    # Insert screening row (scores only)
-    supabase.table("screenings").insert({
+    # Build row for Supabase screenings (angles in columns + full metrics JSON)
+    row = {
         "user_email": user_email,
         "session_id": session_id,
         "test_type": test_type,
-        "score": result["score"],
-        "confidence": result["confidence"],
+        "score": float(result["score"]),
+        "confidence": float(result["confidence"]),
         "metrics": result["metrics"],
-        "annotated_image_url": None
-    }).execute()
+        "annotated_image_url": None,  # Free mode (no image)
+    }
 
-    # Update session partial scores
+    # Map metrics -> dedicated columns (degrees)
+    if test_type == "posture_side":
+        row["neck_angle_deg"] = result["metrics"].get("neck_angle")
+        row["thoracic_angle_deg"] = result["metrics"].get("thoracic_angle")
+        row["pelvic_proxy_angle_deg"] = result["metrics"].get("pelvic_proxy_angle")
+        row["side_used"] = result["metrics"].get("side_used")
+
+    elif test_type in ["shoulder_right", "shoulder_left"]:
+        row["shoulder_flexion_angle_deg"] = result["metrics"].get("shoulder_flexion_angle")
+        row["shoulder_side"] = result["metrics"].get("side")
+
+    elif test_type == "squat":
+        row["squat_knee_angle_deg"] = result["metrics"].get("knee_angle")
+        row["squat_trunk_lean_deg"] = result["metrics"].get("trunk_lean")
+
+    # Insert screening row
+    supabase.table("screenings").insert(row).execute()
+
+    # Update session partial score
     supabase.table("sessions").update(session_update).eq("id", session_id).execute()
 
+    # Return response (angles always in metrics; score summary included)
     return {
         "user_email": user_email,
         "session_id": session_id,
