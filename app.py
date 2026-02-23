@@ -98,38 +98,85 @@ def analyze_posture(xy, conf):
 
 
 def analyze_shoulder(xy, conf, side="RIGHT"):
+    """
+    Shoulder mobility (flexion) computed biomechanically:
+    angle between trunk vector (shoulder->hip) and upper-arm vector (shoulder->elbow).
+    Returns:
+      - shoulder_flexion_angle (deg): ~180 = full overhead flexion, ~90 = arm horizontal, ~0 = arm down along trunk
+      - rating + thresholds for UI (green/yellow/red) + pointer position
+    """
+    # COCO keypoints
     L_SH, R_SH = 5, 6
     L_EL, R_EL = 7, 8
-    L_WR, R_WR = 9, 10
+    L_HIP, R_HIP = 11, 12
 
     if side == "RIGHT":
-        sh, el, wr = xy[R_SH], xy[R_EL], xy[R_WR]
-        c = float(conf[R_SH] + conf[R_EL] + conf[R_WR]) / 3.0
+        sh, el, hip = xy[R_SH], xy[R_EL], xy[R_HIP]
+        c = float(conf[R_SH] + conf[R_EL] + conf[R_HIP]) / 3.0
     else:
-        sh, el, wr = xy[L_SH], xy[L_EL], xy[L_WR]
-        c = float(conf[L_SH] + conf[L_EL] + conf[L_WR]) / 3.0
+        sh, el, hip = xy[L_SH], xy[L_EL], xy[L_HIP]
+        c = float(conf[L_SH] + conf[L_EL] + conf[L_HIP]) / 3.0
 
-    # Shoulder flexion proxy: wrist above shoulder (vertical reference)
-    dx = float(wr[0] - sh[0])
-    dy = float(sh[1] - wr[1])
-    angle = abs(math.degrees(math.atan2(dx, dy)))  # 0..180-ish
+    # Vector trunk (shoulder->hip) and upper arm (shoulder->elbow)
+    v_trunk = hip - sh
+    v_arm = el - sh
 
-    # Softer scoring (less brutal than before)
-    # Great >=170, Normal 160-169, Below 160 reduces gradually
-    deficit = max(0.0, 170.0 - float(angle))
-    score = max(0.0, 100.0 - deficit * 1.25)  # softer slope than 2.0
+    # Angle between two vectors using dot product
+    denom = (np.linalg.norm(v_trunk) * np.linalg.norm(v_arm))
+    if denom < 1e-6:
+        angle = 0.0
+    else:
+        cosang = float(np.dot(v_trunk, v_arm) / denom)
+        cosang = max(-1.0, min(1.0, cosang))
+        angle = math.degrees(math.acos(cosang))
+
+    # Convert to "flexion" style where higher = better overhead
+    # Depending on elbow direction, acos gives:
+    # - ~0 when arm aligns with trunk downwards
+    # - ~180 when arm points opposite trunk (overhead)
+    shoulder_flexion = float(angle)
+
+    # --- Thresholds (MVP) ---
+    # Green: >=170 (full overhead)
+    # Yellow: 160-169
+    # Red: <160
+    if shoulder_flexion >= 170:
+        rating = "green"
+    elif shoulder_flexion >= 160:
+        rating = "yellow"
+    else:
+        rating = "red"
+
+    # Score (still /100 for session summary; keep but base on degrees)
+    # Softer slope: 170 -> 100, 130 -> ~50, 90 -> ~0
+    deficit = max(0.0, 170.0 - shoulder_flexion)
+    score = max(0.0, 100.0 - deficit * 2.0)
 
     conf_out = max(0.6, min(1.0, float(c)))
+
+    # UI pointer position on a 0..180 scale (clamped)
+    pointer = max(0.0, min(180.0, shoulder_flexion))
 
     return {
         "score": round(score, 1),
         "confidence": round(conf_out, 3),
         "metrics": {
-            "shoulder_flexion_angle": round(angle, 2),
+            "shoulder_flexion_angle": round(shoulder_flexion, 2),
             "side": side
         },
+        "thresholds": {
+            "unit": "deg",
+            "scale_min": 0,
+            "scale_max": 180,
+            "bands": [
+                {"label": "Red", "min": 0, "max": 160},
+                {"label": "Yellow", "min": 160, "max": 170},
+                {"label": "Green", "min": 170, "max": 180}
+            ],
+            "pointer_value": round(pointer, 2),
+            "rating": rating
+        }
     }
-
 
 def analyze_squat(xy, conf):
     L_HIP, R_HIP = 11, 12
