@@ -16,7 +16,7 @@ print("FlexiLab worker started...")
 
 while True:
 
-try:
+    try:
 
     jobs = (
         supabase.table("analysis_jobs")
@@ -108,9 +108,9 @@ try:
 
     print(f"Completed job {job_id}")
 
-except Exception as e:
+    except Exception as e:
 
-    print("Worker error:", str(e))
+        print("Worker error:", str(e))
 
-time.sleep(1)
+    time.sleep(1)
 ```
