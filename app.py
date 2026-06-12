@@ -5,6 +5,7 @@ import cv2
 import math
 import os
 import json
+import base64
 
 os.environ["YOLO_CONFIG_DIR"] = "/tmp/Ultralytics"
 
@@ -459,6 +460,68 @@ async def analyze(
         "thresholds": result.get("thresholds"),
         "intake_json": intake_data,
         "annotated_image_url": None
+    }
+
+
+@app.post("/submit_analysis")
+async def submit_analysis(
+    image: UploadFile = File(...),
+    user_email: str = Form(...),
+    test_type: str = Form(...),
+    session_id: str = Form(...),
+    intake_json: str = Form(None)
+):
+    if supabase is None:
+        return {"error": "Supabase is not configured on server."}
+
+    img_bytes = await image.read()
+
+    job = {
+        "session_id": session_id,
+        "user_email": user_email,
+        "test_type": test_type,
+        "status": "queued",
+        "image_base64": base64.b64encode(img_bytes).decode("utf-8"),
+        "intake_json": safe_json_loads(intake_json)
+    }
+
+    resp = supabase.table("analysis_jobs").insert(job).execute()
+
+    return {
+        "job_id": resp.data[0]["id"],
+        "status": "queued"
+    }
+
+
+@app.get("/job_status/{job_id}")
+def job_status(job_id: str):
+    if supabase is None:
+        return {"error": "Supabase is not configured on server."}
+
+    resp = (
+        supabase.table("analysis_jobs")
+        .select("*")
+        .eq("id", job_id)
+        .limit(1)
+        .execute()
+    )
+
+    if not resp.data:
+        return {"error": "Job not found"}
+
+    job = resp.data[0]
+
+    return {
+        "job_id": job.get("id"),
+        "session_id": job.get("session_id"),
+        "user_email": job.get("user_email"),
+        "test_type": job.get("test_type"),
+        "status": job.get("status"),
+        "result": job.get("result_json"),
+        "error_message": job.get("error_message"),
+        "created_at": job.get("created_at"),
+        "started_at": job.get("started_at"),
+        "completed_at": job.get("completed_at")
     }
 
 
