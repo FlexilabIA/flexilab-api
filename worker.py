@@ -1,3 +1,4 @@
+```python
 import time
 from datetime import datetime
 import base64
@@ -57,6 +58,18 @@ while True:
             ).eq("id", job_id).execute()
             continue
 
+        # Resize large images to avoid memory crashes
+        h, w = img.shape[:2]
+        max_side = 720
+        scale = max_side / max(h, w)
+
+        if scale < 1.0:
+            img = cv2.resize(
+                img,
+                (int(w * scale), int(h * scale)),
+                interpolation=cv2.INTER_AREA
+            )
+
         res = model(img, conf=0.5, classes=[0])
 
         if res[0].keypoints is None or len(res[0].keypoints.xy) == 0:
@@ -113,3 +126,4 @@ while True:
         print("Worker error:", str(e))
 
     time.sleep(1)
+```
