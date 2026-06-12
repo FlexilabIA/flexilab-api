@@ -4,14 +4,13 @@ import numpy as np
 import cv2
 import math
 import os
+import json
 
-# Must be set BEFORE importing YOLO (helps reduce Ultralytics warnings)
 os.environ["YOLO_CONFIG_DIR"] = "/tmp/Ultralytics"
 
 from ultralytics import YOLO
 from supabase import create_client
 
-# Supabase connection (backend only)
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY")
 
@@ -22,12 +21,11 @@ if SUPABASE_URL and SUPABASE_SERVICE_KEY:
 app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # MVP (later restrict)
+    allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Load model once
 model = YOLO("yolov8n-pose.pt")
 
 
@@ -36,16 +34,14 @@ def health():
     return {"ok": True}
 
 
-# ----------------------------
-# Threshold helpers
-# ----------------------------
+def safe_json_loads(raw):
+    try:
+        return json.loads(raw) if raw else None
+    except Exception:
+        return None
+
+
 def make_thresholds(unit, scale_min, scale_max, bands, pointer_value):
-    """
-    bands: list of dicts like:
-      [{"label":"Green","min":0,"max":10,"color":"green"}, ...]
-    pointer_value: numeric
-    returns: dict with rating and pointer_value clamped
-    """
     v = float(pointer_value)
     v = max(float(scale_min), min(float(scale_max), v))
 
@@ -54,6 +50,7 @@ def make_thresholds(unit, scale_min, scale_max, bands, pointer_value):
         if v >= float(b["min"]) and v < float(b["max"]):
             rating = b.get("color", b.get("label", "unknown")).lower()
             break
+
     if v == float(scale_max) and bands:
         rating = bands[-1].get("color", bands[-1].get("label", "unknown")).lower()
 
@@ -67,11 +64,7 @@ def make_thresholds(unit, scale_min, scale_max, bands, pointer_value):
     }
 
 
-# ----------------------------
-# Geometry helpers
-# ----------------------------
 def angle_to_vertical(p1, p2):
-    """Angle (0..90) of segment p1->p2 relative to vertical axis."""
     dx = float(p2[0] - p1[0])
     dy = float(p1[1] - p2[1])
     ang = abs(math.degrees(math.atan2(dx, dy)))
@@ -80,11 +73,7 @@ def angle_to_vertical(p1, p2):
     return ang
 
 
-# ----------------------------
-# Analysis functions
-# ----------------------------
 def analyze_posture(xy, conf):
-    # COCO indices for YOLOv8 pose
     L_EAR, R_EAR = 3, 4
     L_SH, R_SH = 5, 6
     L_HIP, R_HIP = 11, 12
@@ -105,7 +94,6 @@ def analyze_posture(xy, conf):
     thoracic_angle = angle_to_vertical(hip, shoulder)
     pelvic_proxy_angle = thoracic_angle
 
-    # Smooth penalty score (kept)
     def penalty(angle, optimal, severe, w=1.0):
         if angle <= optimal:
             return 0.0
@@ -118,41 +106,38 @@ def analyze_posture(xy, conf):
         penalty(thoracic_angle, 5, 45, 1.0) +
         penalty(pelvic_proxy_angle, 5, 40, 0.8)
     )
+
     score = max(0.0, 100.0 - total_pen)
     conf_out = max(0.6, min(1.0, float(quality)))
 
-    # Thresholds (MVP)
     neck_thr = make_thresholds(
-        unit="deg",
-        scale_min=0, scale_max=60,
-        bands=[
+        "deg", 0, 60,
+        [
             {"label": "Green", "min": 0, "max": 10, "color": "green"},
             {"label": "Yellow", "min": 10, "max": 20, "color": "yellow"},
             {"label": "Red", "min": 20, "max": 60, "color": "red"},
         ],
-        pointer_value=neck_angle
+        neck_angle
     )
 
     thor_thr = make_thresholds(
-        unit="deg",
-        scale_min=0, scale_max=45,
-        bands=[
+        "deg", 0, 45,
+        [
             {"label": "Green", "min": 0, "max": 5, "color": "green"},
             {"label": "Yellow", "min": 5, "max": 15, "color": "yellow"},
             {"label": "Red", "min": 15, "max": 45, "color": "red"},
         ],
-        pointer_value=thoracic_angle
+        thoracic_angle
     )
 
     pelvis_thr = make_thresholds(
-        unit="deg",
-        scale_min=0, scale_max=45,
-        bands=[
+        "deg", 0, 45,
+        [
             {"label": "Green", "min": 0, "max": 5, "color": "green"},
             {"label": "Yellow", "min": 5, "max": 15, "color": "yellow"},
             {"label": "Red", "min": 15, "max": 45, "color": "red"},
         ],
-        pointer_value=pelvic_proxy_angle
+        pelvic_proxy_angle
     )
 
     return {
@@ -173,10 +158,6 @@ def analyze_posture(xy, conf):
 
 
 def analyze_shoulder(xy, conf, side="RIGHT"):
-    """
-    Biomechanical: angle between trunk vector (shoulder->hip) and upper-arm vector (shoulder->elbow).
-    ~180 = overhead flexion, ~90 = arm horizontal, ~0 = arm down along trunk
-    """
     L_SH, R_SH = 5, 6
     L_EL, R_EL = 7, 8
     L_HIP, R_HIP = 11, 12
@@ -191,7 +172,7 @@ def analyze_shoulder(xy, conf, side="RIGHT"):
     v_trunk = hip - sh
     v_arm = el - sh
 
-    denom = (np.linalg.norm(v_trunk) * np.linalg.norm(v_arm))
+    denom = np.linalg.norm(v_trunk) * np.linalg.norm(v_arm)
     if denom < 1e-6:
         shoulder_flexion = 0.0
     else:
@@ -199,21 +180,18 @@ def analyze_shoulder(xy, conf, side="RIGHT"):
         cosang = max(-1.0, min(1.0, cosang))
         shoulder_flexion = float(math.degrees(math.acos(cosang)))
 
-    # Score per test (kept /100)
     deficit = max(0.0, 170.0 - shoulder_flexion)
     score = max(0.0, 100.0 - deficit * 2.0)
-
     conf_out = max(0.6, min(1.0, float(c)))
 
     shoulder_thr = make_thresholds(
-        unit="deg",
-        scale_min=0, scale_max=180,
-        bands=[
+        "deg", 0, 180,
+        [
             {"label": "Red", "min": 0, "max": 160, "color": "red"},
             {"label": "Yellow", "min": 160, "max": 170, "color": "yellow"},
             {"label": "Green", "min": 170, "max": 180, "color": "green"},
         ],
-        pointer_value=shoulder_flexion
+        shoulder_flexion
     )
 
     return {
@@ -253,7 +231,6 @@ def analyze_squat(xy, conf):
     trunk_dy = float(hip[1] - shoulder[1])
     trunk_angle = abs(math.degrees(math.atan2(trunk_dx, trunk_dy)))
 
-    # v1 scoring
     depth_pen = 0.0
     if knee_angle > 120:
         depth_pen = 35
@@ -269,31 +246,27 @@ def analyze_squat(xy, conf):
         trunk_pen = 10
 
     score = max(0.0, 100.0 - depth_pen - trunk_pen)
-
     c = float(np.mean(conf))
     conf_out = max(0.6, min(1.0, c))
 
     trunk_thr = make_thresholds(
-        unit="deg",
-        scale_min=0, scale_max=60,
-        bands=[
+        "deg", 0, 60,
+        [
             {"label": "Green", "min": 0, "max": 15, "color": "green"},
             {"label": "Yellow", "min": 15, "max": 25, "color": "yellow"},
             {"label": "Red", "min": 25, "max": 60, "color": "red"},
         ],
-        pointer_value=trunk_angle
+        trunk_angle
     )
 
-    # NOTE: knee thresholds depend on angle definition; this is MVP and we can tune
     knee_thr = make_thresholds(
-        unit="deg",
-        scale_min=60, scale_max=180,
-        bands=[
+        "deg", 60, 180,
+        [
             {"label": "Green", "min": 60, "max": 95, "color": "green"},
             {"label": "Yellow", "min": 95, "max": 110, "color": "yellow"},
             {"label": "Red", "min": 110, "max": 180, "color": "red"},
         ],
-        pointer_value=knee_angle
+        knee_angle
     )
 
     return {
@@ -311,7 +284,6 @@ def analyze_squat(xy, conf):
 
 
 def compute_composite(posture, shoulder_r, shoulder_l, squat):
-    # Use worst shoulder side
     shoulder = None
     if shoulder_r is not None and shoulder_l is not None:
         shoulder = min(float(shoulder_r), float(shoulder_l))
@@ -336,20 +308,28 @@ def compute_composite(posture, shoulder_r, shoulder_l, squat):
     return round(float(composite), 1)
 
 
-# ----------------------------
-# API endpoints
-# ----------------------------
 @app.post("/start_session")
-def start_session(user_email: str = Form(...)):
+def start_session(user_email: str = Form(...), intake_json: str = Form(None)):
     if supabase is None:
         return {"error": "Supabase is not configured on server."}
 
-    resp = supabase.table("sessions").insert({
+    intake_data = safe_json_loads(intake_json)
+
+    session_row = {
         "user_email": user_email,
         "status": "in_progress"
-    }).execute()
+    }
 
-    return {"session_id": resp.data[0]["id"]}
+    # Only saved in screenings for now.
+    # If you add intake_json to sessions later, uncomment this:
+    # session_row["intake_json"] = intake_data
+
+    resp = supabase.table("sessions").insert(session_row).execute()
+
+    return {
+        "session_id": resp.data[0]["id"],
+        "intake_json": intake_data
+    }
 
 
 @app.post("/finalize_session")
@@ -390,34 +370,34 @@ async def analyze(
     image: UploadFile = File(...),
     user_email: str = Form(...),
     test_type: str = Form(...),
-    session_id: str = Form(...)
+    session_id: str = Form(...),
+    intake_json: str = Form(None)
 ):
     if supabase is None:
         return {"error": "Supabase is not configured on server."}
 
-    # Decode image
+    intake_data = safe_json_loads(intake_json)
+
     img_bytes = await image.read()
     nparr = np.frombuffer(img_bytes, np.uint8)
     img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
     if img is None:
         return {"error": "Invalid image"}
 
-    # Resize for Render Free stability
     h, w = img.shape[:2]
-    max_side = 960  # reduce to 720 if you still see memory issues
+    max_side = 960
     scale = max_side / max(h, w)
     if scale < 1.0:
         img = cv2.resize(
-            img, (int(w * scale), int(h * scale)),
+            img,
+            (int(w * scale), int(h * scale)),
             interpolation=cv2.INTER_AREA
         )
 
-    # Inference
     res = model(img, conf=0.5, classes=[0])
     if res[0].keypoints is None or len(res[0].keypoints.xy) == 0:
         return {"error": "No person detected"}
 
-    # Select largest person
     boxes = res[0].boxes.xyxy.cpu().numpy()
     areas = [(b[2] - b[0]) * (b[3] - b[1]) for b in boxes]
     main_idx = int(np.argmax(areas))
@@ -425,7 +405,6 @@ async def analyze(
     xy = res[0].keypoints.xy[main_idx].cpu().numpy()
     conf = res[0].keypoints.conf[main_idx].cpu().numpy()
 
-    # Route analysis
     if test_type == "posture_side":
         result = analyze_posture(xy, conf)
         session_update = {"posture_score": result["score"]}
@@ -441,7 +420,6 @@ async def analyze(
     else:
         return {"error": "Invalid test_type"}
 
-    # Build DB row (angles in columns + JSON metrics + JSON thresholds)
     row = {
         "user_email": user_email,
         "session_id": session_id,
@@ -449,11 +427,11 @@ async def analyze(
         "score": float(result["score"]),
         "confidence": float(result["confidence"]),
         "metrics": result["metrics"],
-        "thresholds": result.get("thresholds"),  # <- saved to DB
-        "annotated_image_url": None  # Free mode
+        "thresholds": result.get("thresholds"),
+        "intake_json": intake_data,
+        "annotated_image_url": None
     }
 
-    # Map metrics -> dedicated columns
     if test_type == "posture_side":
         row["neck_angle_deg"] = result["metrics"].get("neck_angle")
         row["thoracic_angle_deg"] = result["metrics"].get("thoracic_angle")
@@ -468,13 +446,9 @@ async def analyze(
         row["squat_knee_angle_deg"] = result["metrics"].get("knee_angle")
         row["squat_trunk_lean_deg"] = result["metrics"].get("trunk_lean")
 
-    # Insert screening row
     supabase.table("screenings").insert(row).execute()
-
-    # Update session partial score
     supabase.table("sessions").update(session_update).eq("id", session_id).execute()
 
-    # Return response (with thresholds)
     return {
         "user_email": user_email,
         "session_id": session_id,
@@ -483,31 +457,33 @@ async def analyze(
         "confidence": result["confidence"],
         "metrics": result["metrics"],
         "thresholds": result.get("thresholds"),
+        "intake_json": intake_data,
         "annotated_image_url": None
     }
+
+
 @app.get("/report")
 def report(session_id: str):
-    """
-    Build a 'product-ready' report JSON for a given session_id.
-    Option B: works even if finalize_session wasn't called.
-    It reads screenings, computes flexilab_score if missing, and returns a structured FR report.
-    """
     if supabase is None:
         return {"error": "Supabase not configured"}
 
-    # 1) Load session
     s_resp = supabase.table("sessions").select("*").eq("id", session_id).limit(1).execute()
     if not s_resp.data:
         return {"error": "Session not found"}
+
     session = s_resp.data[0]
 
-    # 2) Load screenings for that session
     scr_resp = supabase.table("screenings").select("*").eq("session_id", session_id).execute()
     screenings = scr_resp.data or []
 
     tests_found = [x.get("test_type") for x in screenings if x.get("test_type")]
 
-    # Helper to find a screening by test_type
+    intake_context = None
+    for r in screenings:
+        if r.get("intake_json"):
+            intake_context = r.get("intake_json")
+            break
+
     def get_test(tt):
         for r in screenings:
             if r.get("test_type") == tt:
@@ -519,16 +495,14 @@ def report(session_id: str):
     sh_l = get_test("shoulder_left")
     squat = get_test("squat")
 
-    # 3) Compute flexilab_score if not already computed
     flexilab_score = session.get("composite_score", None)
+
     if flexilab_score is None:
-        # Use per-test scores saved in sessions if present, otherwise fallback to screenings
         posture_score = session.get("posture_score", None) or (posture.get("score") if posture else None)
         sh_r_score = session.get("shoulder_right_score", None) or (sh_r.get("score") if sh_r else None)
         sh_l_score = session.get("shoulder_left_score", None) or (sh_l.get("score") if sh_l else None)
         squat_score = session.get("squat_score", None) or (squat.get("score") if squat else None)
 
-        # Mimic compute_composite logic (worst shoulder)
         shoulder = None
         if sh_r_score is not None and sh_l_score is not None:
             shoulder = min(float(sh_r_score), float(sh_l_score))
@@ -551,7 +525,6 @@ def report(session_id: str):
         else:
             flexilab_score = None
 
-    # 4) Risk category
     def risk_from_score(score):
         if score is None:
             return {
@@ -559,36 +532,41 @@ def report(session_id: str):
                 "color": "grey",
                 "description_fr": "Session incomplète : termine tous les tests pour un score global."
             }
+
         score = float(score)
         if score >= 85:
-            return {"label": "Low", "color": "green", "description_fr": "Bon équilibre global. Quelques ajustements possibles."}
+            return {
+                "label": "Low",
+                "color": "green",
+                "description_fr": "Bon équilibre global. Quelques ajustements possibles."
+            }
+
         if score >= 70:
-            return {"label": "Moderate", "color": "yellow", "description_fr": "Profil intermédiaire : plusieurs axes d’amélioration."}
-        return {"label": "High", "color": "red", "description_fr": "Priorité d’amélioration : plusieurs indicateurs hors zone cible."}
+            return {
+                "label": "Moderate",
+                "color": "yellow",
+                "description_fr": "Profil intermédiaire : plusieurs axes d’amélioration."
+            }
+
+        return {
+            "label": "High",
+            "color": "red",
+            "description_fr": "Priorité d’amélioration : plusieurs indicateurs hors zone cible."
+        }
 
     risk_category = risk_from_score(flexilab_score)
 
-    # 5) Utility: extract item from a screening thresholds dict
     def thr_item(thresholds, key):
         if not thresholds:
             return None
         v = thresholds.get(key)
         return v if isinstance(v, dict) else None
 
-    # 6) Build sections with FR labels + short insights
     sections = []
 
-    # --- Posture section ---
     if posture:
         m = posture.get("metrics") or {}
         t = posture.get("thresholds") or {}
-        neck_val = m.get("neck_angle")
-        thor_val = m.get("thoracic_angle")
-        pelv_val = m.get("pelvic_proxy_angle")
-
-        neck_thr = thr_item(t, "neck_angle")
-        thor_thr = thr_item(t, "thoracic_angle")
-        pelv_thr = thr_item(t, "pelvic_proxy_angle")
 
         def insight_posture(label, rating):
             if rating == "green":
@@ -599,6 +577,10 @@ def report(session_id: str):
                 return f"{label} prioritaire à corriger."
             return f"{label} : données insuffisantes."
 
+        neck_thr = thr_item(t, "neck_angle")
+        thor_thr = thr_item(t, "thoracic_angle")
+        pelv_thr = thr_item(t, "pelvic_proxy_angle")
+
         sections.append({
             "id": "posture",
             "title_fr": "Posture (vue de profil)",
@@ -606,7 +588,7 @@ def report(session_id: str):
                 {
                     "id": "neck_angle",
                     "label_fr": "Angle cervical",
-                    "value": neck_val,
+                    "value": m.get("neck_angle"),
                     "unit": "°",
                     "rating": (neck_thr or {}).get("rating"),
                     "thresholds": neck_thr,
@@ -615,7 +597,7 @@ def report(session_id: str):
                 {
                     "id": "thoracic_angle",
                     "label_fr": "Angle thoracique",
-                    "value": thor_val,
+                    "value": m.get("thoracic_angle"),
                     "unit": "°",
                     "rating": (thor_thr or {}).get("rating"),
                     "thresholds": thor_thr,
@@ -624,7 +606,7 @@ def report(session_id: str):
                 {
                     "id": "pelvic_proxy_angle",
                     "label_fr": "Bassin (proxy)",
-                    "value": pelv_val,
+                    "value": m.get("pelvic_proxy_angle"),
                     "unit": "°",
                     "rating": (pelv_thr or {}).get("rating"),
                     "thresholds": pelv_thr,
@@ -633,7 +615,6 @@ def report(session_id: str):
             ]
         })
 
-    # --- Shoulders section ---
     if sh_r or sh_l:
         items = []
         asym = None
@@ -647,45 +628,41 @@ def report(session_id: str):
                 return "Limitation marquée : priorité mobilité."
             return "Données insuffisantes."
 
-        # right
         if sh_r:
             mr = sh_r.get("metrics") or {}
             tr = sh_r.get("thresholds") or {}
             thr = thr_item(tr, "shoulder_flexion")
-            val = mr.get("shoulder_flexion_angle")
             items.append({
                 "id": "shoulder_right_flexion",
                 "label_fr": "Flexion épaule droite",
-                "value": val,
+                "value": mr.get("shoulder_flexion_angle"),
                 "unit": "°",
                 "rating": (thr or {}).get("rating"),
                 "thresholds": thr,
                 "short_insight_fr": insight_shoulder((thr or {}).get("rating")),
             })
 
-        # left
         if sh_l:
             ml = sh_l.get("metrics") or {}
             tl = sh_l.get("thresholds") or {}
             thr = thr_item(tl, "shoulder_flexion")
-            val = ml.get("shoulder_flexion_angle")
             items.append({
                 "id": "shoulder_left_flexion",
                 "label_fr": "Flexion épaule gauche",
-                "value": val,
+                "value": ml.get("shoulder_flexion_angle"),
                 "unit": "°",
                 "rating": (thr or {}).get("rating"),
                 "thresholds": thr,
                 "short_insight_fr": insight_shoulder((thr or {}).get("rating")),
             })
 
-        # asymmetry (if both present)
         if sh_r and sh_l:
             vr = (sh_r.get("metrics") or {}).get("shoulder_flexion_angle")
             vl = (sh_l.get("metrics") or {}).get("shoulder_flexion_angle")
+
             if vr is not None and vl is not None:
                 asym_deg = abs(float(vr) - float(vl))
-                # simple asymmetry rating
+
                 if asym_deg <= 5:
                     a_rating = "green"
                     a_txt = "Symétrie satisfaisante."
@@ -695,7 +672,12 @@ def report(session_id: str):
                 else:
                     a_rating = "red"
                     a_txt = "Asymétrie importante : priorité équilibre D/G."
-                asym = {"value_deg": round(asym_deg, 2), "rating": a_rating, "short_insight_fr": a_txt}
+
+                asym = {
+                    "value_deg": round(asym_deg, 2),
+                    "rating": a_rating,
+                    "short_insight_fr": a_txt
+                }
 
         sections.append({
             "id": "shoulders",
@@ -704,16 +686,9 @@ def report(session_id: str):
             "asymmetry": asym
         })
 
-    # --- Squat section ---
     if squat:
         ms = squat.get("metrics") or {}
         ts = squat.get("thresholds") or {}
-
-        knee_val = ms.get("knee_angle")
-        trunk_val = ms.get("trunk_lean")
-
-        knee_thr = thr_item(ts, "knee_angle")
-        trunk_thr = thr_item(ts, "trunk_lean")
 
         def insight_squat(label, rating):
             if rating == "green":
@@ -724,6 +699,9 @@ def report(session_id: str):
                 return f"{label} prioritaire à améliorer."
             return f"{label} : données insuffisantes."
 
+        knee_thr = thr_item(ts, "knee_angle")
+        trunk_thr = thr_item(ts, "trunk_lean")
+
         sections.append({
             "id": "squat",
             "title_fr": "Squat (contrôle et mobilité)",
@@ -731,7 +709,7 @@ def report(session_id: str):
                 {
                     "id": "squat_knee_angle",
                     "label_fr": "Angle du genou",
-                    "value": knee_val,
+                    "value": ms.get("knee_angle"),
                     "unit": "°",
                     "rating": (knee_thr or {}).get("rating"),
                     "thresholds": knee_thr,
@@ -740,7 +718,7 @@ def report(session_id: str):
                 {
                     "id": "squat_trunk_lean",
                     "label_fr": "Inclinaison du tronc",
-                    "value": trunk_val,
+                    "value": ms.get("trunk_lean"),
                     "unit": "°",
                     "rating": (trunk_thr or {}).get("rating"),
                     "thresholds": trunk_thr,
@@ -749,44 +727,55 @@ def report(session_id: str):
             ]
         })
 
-    # 7) Priorities (max 3): collect red then yellow across key measures
     candidates = []
 
     def add_candidate(sev, title_fr, why_fr):
-        candidates.append({"severity": sev, "title_fr": title_fr, "why_fr": why_fr})
+        candidates.append({
+            "severity": sev,
+            "title_fr": title_fr,
+            "why_fr": why_fr
+        })
 
-    # posture
     if posture:
         t = posture.get("thresholds") or {}
         na = thr_item(t, "neck_angle")
         ta = thr_item(t, "thoracic_angle")
+
         if (na or {}).get("rating") in ["red", "yellow"]:
             add_candidate((na or {}).get("rating"), "Alignement cervical", "L’angle cervical est hors de la zone optimale.")
+
         if (ta or {}).get("rating") in ["red", "yellow"]:
             add_candidate((ta or {}).get("rating"), "Alignement thoracique", "L’angle thoracique est hors de la zone optimale.")
 
-    # shoulders
     if sh_r:
         thr = thr_item((sh_r.get("thresholds") or {}), "shoulder_flexion")
         if (thr or {}).get("rating") in ["red", "yellow"]:
             add_candidate((thr or {}).get("rating"), "Mobilité épaule droite", "Flexion overhead sous l’objectif.")
+
     if sh_l:
         thr = thr_item((sh_l.get("thresholds") or {}), "shoulder_flexion")
         if (thr or {}).get("rating") in ["red", "yellow"]:
             add_candidate((thr or {}).get("rating"), "Mobilité épaule gauche", "Flexion overhead sous l’objectif.")
 
-    # squat
     if squat:
         ts = squat.get("thresholds") or {}
         tr = thr_item(ts, "trunk_lean")
         kn = thr_item(ts, "knee_angle")
+
         if (tr or {}).get("rating") in ["red", "yellow"]:
             add_candidate((tr or {}).get("rating"), "Inclinaison du tronc en squat", "Inclinaison du tronc hors zone cible.")
+
         if (kn or {}).get("rating") in ["red", "yellow"]:
             add_candidate((kn or {}).get("rating"), "Profondeur du squat", "Angle du genou hors zone cible.")
 
-    # Sort: red first then yellow, limit 3
-    sev_order = {"red": 0, "yellow": 1, "green": 2, "unknown": 3, None: 4}
+    sev_order = {
+        "red": 0,
+        "yellow": 1,
+        "green": 2,
+        "unknown": 3,
+        None: 4
+    }
+
     candidates.sort(key=lambda x: sev_order.get(x["severity"], 9))
 
     top_priorities = []
@@ -798,20 +787,17 @@ def report(session_id: str):
             "why_fr": c["why_fr"]
         })
 
-    # 8) Created_at
-    created_at = session.get("created_at")
-
-    # 9) Final report object
     return {
         "session_id": session_id,
         "user_email": session.get("user_email"),
-        "created_at": created_at,
-
+        "created_at": session.get("created_at"),
+        "intake_context": intake_context,
         "flexilab_score": flexilab_score,
         "risk_category": risk_category,
-
         "sections": sections,
         "top_priorities": top_priorities,
         "next_step_fr": "Refais le screening dans 14 jours pour vérifier l'évolution.",
-        "debug": {"tests_found": tests_found}
+        "debug": {
+            "tests_found": tests_found
+        }
     }
