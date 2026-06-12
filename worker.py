@@ -1,4 +1,3 @@
-```python
 import time
 from datetime import datetime
 import base64
