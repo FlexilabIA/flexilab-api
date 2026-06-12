@@ -16,7 +16,6 @@ print("FlexiLab worker started...")
 
 while True:
 
-```
 try:
 
     jobs = (
@@ -37,10 +36,12 @@ try:
 
     print(f"Processing job {job_id}")
 
-    supabase.table("analysis_jobs").update({
-        "status": "processing",
-        "started_at": datetime.utcnow().isoformat()
-    }).eq("id", job_id).execute()
+    supabase.table("analysis_jobs").update(
+        {
+            "status": "processing",
+            "started_at": datetime.utcnow().isoformat()
+        }
+    ).eq("id", job_id).execute()
 
     img_bytes = base64.b64decode(job["image_base64"])
 
@@ -48,21 +49,23 @@ try:
     img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
     if img is None:
-        supabase.table("analysis_jobs").update({
-            "status": "failed",
-            "error_message": "Invalid image"
-        }).eq("id", job_id).execute()
+        supabase.table("analysis_jobs").update(
+            {
+                "status": "failed",
+                "error_message": "Invalid image"
+            }
+        ).eq("id", job_id).execute()
         continue
 
     res = model(img, conf=0.5, classes=[0])
 
     if res[0].keypoints is None or len(res[0].keypoints.xy) == 0:
-
-        supabase.table("analysis_jobs").update({
-            "status": "failed",
-            "error_message": "No person detected"
-        }).eq("id", job_id).execute()
-
+        supabase.table("analysis_jobs").update(
+            {
+                "status": "failed",
+                "error_message": "No person detected"
+            }
+        ).eq("id", job_id).execute()
         continue
 
     boxes = res[0].boxes.xyxy.cpu().numpy()
@@ -87,25 +90,27 @@ try:
         result = analyze_squat(xy, conf)
 
     else:
-
-        supabase.table("analysis_jobs").update({
-            "status": "failed",
-            "error_message": "Invalid test_type"
-        }).eq("id", job_id).execute()
-
+        supabase.table("analysis_jobs").update(
+            {
+                "status": "failed",
+                "error_message": "Invalid test_type"
+            }
+        ).eq("id", job_id).execute()
         continue
 
-    supabase.table("analysis_jobs").update({
-        "status": "completed",
-        "completed_at": datetime.utcnow().isoformat(),
-        "result_json": result
-    }).eq("id", job_id).execute()
+    supabase.table("analysis_jobs").update(
+        {
+            "status": "completed",
+            "completed_at": datetime.utcnow().isoformat(),
+            "result_json": result
+        }
+    ).eq("id", job_id).execute()
 
     print(f"Completed job {job_id}")
 
 except Exception as e:
 
-    print("Worker error:", e)
+    print("Worker error:", str(e))
 
 time.sleep(1)
 ```
