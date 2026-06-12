@@ -59,7 +59,7 @@ while True:
 
         # Resize large images to avoid memory crashes
         h, w = img.shape[:2]
-        max_side = 720
+        max_side = 480
         scale = max_side / max(h, w)
 
         if scale < 1.0:
