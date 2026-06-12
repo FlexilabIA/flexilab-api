@@ -15,9 +15,10 @@ model
 print("FlexiLab worker started...")
 
 while True:
-try:
 
 ```
+try:
+
     jobs = (
         supabase.table("analysis_jobs")
         .select("*")
@@ -51,7 +52,6 @@ try:
             "status": "failed",
             "error_message": "Invalid image"
         }).eq("id", job_id).execute()
-
         continue
 
     res = model(img, conf=0.5, classes=[0])
@@ -87,6 +87,7 @@ try:
         result = analyze_squat(xy, conf)
 
     else:
+
         supabase.table("analysis_jobs").update({
             "status": "failed",
             "error_message": "Invalid test_type"
