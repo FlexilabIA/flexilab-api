@@ -125,4 +125,3 @@ while True:
         print("Worker error:", str(e))
 
     time.sleep(1)
-```
