@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File, Form
+from fastapi import FastAPI, UploadFile, File, Form, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 import numpy as np
 import cv2
@@ -6,6 +6,7 @@ import math
 import os
 import json
 import base64
+from datetime import datetime, timezone
 
 os.environ["YOLO_CONFIG_DIR"] = "/tmp/Ultralytics"
 
@@ -463,8 +464,172 @@ async def analyze(
     }
 
 
+
+def utc_now_iso():
+    return datetime.now(timezone.utc).isoformat()
+
+
+def build_screening_row(user_email, session_id, test_type, result, intake_data):
+    row = {
+        "user_email": user_email,
+        "session_id": session_id,
+        "test_type": test_type,
+        "score": float(result["score"]),
+        "confidence": float(result["confidence"]),
+        "metrics": result["metrics"],
+        "thresholds": result.get("thresholds"),
+        "intake_json": intake_data,
+        "annotated_image_url": None
+    }
+
+    if test_type == "posture_side":
+        row["neck_angle_deg"] = result["metrics"].get("neck_angle")
+        row["thoracic_angle_deg"] = result["metrics"].get("thoracic_angle")
+        row["pelvic_proxy_angle_deg"] = result["metrics"].get("pelvic_proxy_angle")
+        row["side_used"] = result["metrics"].get("side_used")
+
+    elif test_type in ["shoulder_right", "shoulder_left"]:
+        row["shoulder_flexion_angle_deg"] = result["metrics"].get("shoulder_flexion_angle")
+        row["shoulder_side"] = result["metrics"].get("side")
+
+    elif test_type == "squat":
+        row["squat_knee_angle_deg"] = result["metrics"].get("knee_angle")
+        row["squat_trunk_lean_deg"] = result["metrics"].get("trunk_lean")
+
+    return row
+
+
+def run_yolo_analysis_from_bytes(img_bytes, test_type):
+    nparr = np.frombuffer(img_bytes, np.uint8)
+    img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+
+    if img is None:
+        raise ValueError("Invalid image")
+
+    h, w = img.shape[:2]
+    max_side = 960
+    scale = max_side / max(h, w)
+
+    if scale < 1.0:
+        img = cv2.resize(
+            img,
+            (int(w * scale), int(h * scale)),
+            interpolation=cv2.INTER_AREA
+        )
+
+    res = model(img, conf=0.5, classes=[0])
+
+    if res[0].keypoints is None or len(res[0].keypoints.xy) == 0:
+        raise ValueError("No person detected")
+
+    boxes = res[0].boxes.xyxy.cpu().numpy()
+    areas = [(b[2] - b[0]) * (b[3] - b[1]) for b in boxes]
+    main_idx = int(np.argmax(areas))
+
+    xy = res[0].keypoints.xy[main_idx].cpu().numpy()
+    conf = res[0].keypoints.conf[main_idx].cpu().numpy()
+
+    if test_type == "posture_side":
+        result = analyze_posture(xy, conf)
+        session_update = {"posture_score": result["score"]}
+
+    elif test_type == "shoulder_right":
+        result = analyze_shoulder(xy, conf, "RIGHT")
+        session_update = {"shoulder_right_score": result["score"]}
+
+    elif test_type == "shoulder_left":
+        result = analyze_shoulder(xy, conf, "LEFT")
+        session_update = {"shoulder_left_score": result["score"]}
+
+    elif test_type == "squat":
+        result = analyze_squat(xy, conf)
+        session_update = {"squat_score": result["score"]}
+
+    else:
+        raise ValueError("Invalid test_type")
+
+    return result, session_update
+
+
+def process_analysis_job(job_id: str):
+    if supabase is None:
+        return
+
+    try:
+        resp = (
+            supabase.table("analysis_jobs")
+            .select("*")
+            .eq("id", job_id)
+            .limit(1)
+            .execute()
+        )
+
+        if not resp.data:
+            return
+
+        job = resp.data[0]
+
+        if job.get("status") == "completed":
+            return
+
+        supabase.table("analysis_jobs").update({
+            "status": "processing",
+            "started_at": utc_now_iso(),
+            "error_message": None
+        }).eq("id", job_id).execute()
+
+        img_b64 = job.get("image_base64")
+        if not img_b64:
+            raise ValueError("Missing image_base64")
+
+        img_bytes = base64.b64decode(img_b64)
+
+        test_type = job.get("test_type")
+        user_email = job.get("user_email")
+        session_id = job.get("session_id")
+        intake_data = job.get("intake_json")
+
+        result, session_update = run_yolo_analysis_from_bytes(img_bytes, test_type)
+
+        screening_row = build_screening_row(
+            user_email=user_email,
+            session_id=session_id,
+            test_type=test_type,
+            result=result,
+            intake_data=intake_data
+        )
+
+        supabase.table("screenings").insert(screening_row).execute()
+        supabase.table("sessions").update(session_update).eq("id", session_id).execute()
+
+        supabase.table("analysis_jobs").update({
+            "status": "completed",
+            "completed_at": utc_now_iso(),
+            "result_json": {
+                "user_email": user_email,
+                "session_id": session_id,
+                "test_type": test_type,
+                "score": result["score"],
+                "confidence": result["confidence"],
+                "metrics": result["metrics"],
+                "thresholds": result.get("thresholds"),
+                "intake_json": intake_data,
+                "annotated_image_url": None
+            },
+            "error_message": None
+        }).eq("id", job_id).execute()
+
+    except Exception as e:
+        supabase.table("analysis_jobs").update({
+            "status": "failed",
+            "completed_at": utc_now_iso(),
+            "error_message": str(e)
+        }).eq("id", job_id).execute()
+
+
 @app.post("/submit_analysis")
 async def submit_analysis(
+    background_tasks: BackgroundTasks,
     image: UploadFile = File(...),
     user_email: str = Form(...),
     test_type: str = Form(...),
@@ -486,15 +651,18 @@ async def submit_analysis(
     }
 
     resp = supabase.table("analysis_jobs").insert(job).execute()
+    job_id = resp.data[0]["id"]
+
+    background_tasks.add_task(process_analysis_job, job_id)
 
     return {
-        "job_id": resp.data[0]["id"],
+        "job_id": job_id,
         "status": "queued"
     }
 
 
 @app.get("/job_status/{job_id}")
-def job_status(job_id: str):
+def job_status(job_id: str, background_tasks: BackgroundTasks):
     if supabase is None:
         return {"error": "Supabase is not configured on server."}
 
@@ -510,6 +678,9 @@ def job_status(job_id: str):
         return {"error": "Job not found"}
 
     job = resp.data[0]
+
+    if job.get("status") == "queued":
+        background_tasks.add_task(process_analysis_job, job_id)
 
     return {
         "job_id": job.get("id"),
