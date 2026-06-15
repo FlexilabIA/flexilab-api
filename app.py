@@ -161,7 +161,7 @@ def analyze_posture(xy, conf):
 
 def analyze_shoulder(xy, conf, side="RIGHT"):
     """
-    Robust overhead shoulder mobility analysis.
+    Robust overhead shoulder mobility analysis — V16 complementary angle fix.
 
     Main change vs previous version:
     - Uses shoulder -> wrist as the primary arm vector instead of shoulder -> elbow.
@@ -223,9 +223,10 @@ def analyze_shoulder(xy, conf, side="RIGHT"):
         cosang = max(-1.0, min(1.0, cosang))
         raw_angle = float(math.degrees(math.acos(cosang)))
 
-        # raw_angle is the angle between trunk direction and arm direction.
-        # In overhead flexion, this maps naturally toward 180° when the arm is overhead.
-        shoulder_flexion = raw_angle
+        # raw_angle is the small geometric angle between trunk direction and arm direction.
+        # For overhead mobility we need the complementary value:
+        # example raw_angle 10° => shoulder flexion 170°.
+        shoulder_flexion = 180.0 - raw_angle
 
     shoulder_flexion = max(0.0, min(180.0, shoulder_flexion))
 
