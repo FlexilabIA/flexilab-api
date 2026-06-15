@@ -160,31 +160,78 @@ def analyze_posture(xy, conf):
 
 
 def analyze_shoulder(xy, conf, side="RIGHT"):
+    """
+    Robust overhead shoulder mobility analysis.
+
+    Main change vs previous version:
+    - Uses shoulder -> wrist as the primary arm vector instead of shoulder -> elbow.
+      This is more stable for overhead mobility, because a slightly bent elbow can
+      artificially reduce the angle if we only use the elbow.
+    - Falls back to shoulder -> elbow only if wrist confidence is poor.
+    - Uses hip -> shoulder as trunk reference and arm direction shoulder -> wrist/elbow.
+    - Keeps the same FlexiLab thresholds:
+        <160° = red
+        160–170° = yellow
+        >=170° = green
+    """
+
     L_SH, R_SH = 5, 6
     L_EL, R_EL = 7, 8
+    L_WR, R_WR = 9, 10
     L_HIP, R_HIP = 11, 12
 
-    if side == "RIGHT":
-        sh, el, hip = xy[R_SH], xy[R_EL], xy[R_HIP]
-        c = float(conf[R_SH] + conf[R_EL] + conf[R_HIP]) / 3.0
-    else:
-        sh, el, hip = xy[L_SH], xy[L_EL], xy[L_HIP]
-        c = float(conf[L_SH] + conf[L_EL] + conf[L_HIP]) / 3.0
+    MIN_KP_CONF = 0.25
 
-    v_trunk = hip - sh
-    v_arm = el - sh
+    if side == "RIGHT":
+        sh_i, el_i, wr_i, hip_i = R_SH, R_EL, R_WR, R_HIP
+    else:
+        sh_i, el_i, wr_i, hip_i = L_SH, L_EL, L_WR, L_HIP
+
+    sh = xy[sh_i]
+    el = xy[el_i]
+    wr = xy[wr_i]
+    hip = xy[hip_i]
+
+    sh_c = float(conf[sh_i])
+    el_c = float(conf[el_i])
+    wr_c = float(conf[wr_i])
+    hip_c = float(conf[hip_i])
+
+    # Use wrist when possible. If wrist is unreliable, fallback to elbow.
+    if wr_c >= MIN_KP_CONF:
+        arm_point = wr
+        arm_point_used = "WRIST"
+        arm_c = wr_c
+    else:
+        arm_point = el
+        arm_point_used = "ELBOW_FALLBACK"
+        arm_c = el_c
+
+    c = float(sh_c + arm_c + hip_c) / 3.0
+
+    # If shoulder or hip are not detected well, keep output but mark lower confidence.
+    # The frontend can later display "photo quality low" if confidence is low.
+    v_trunk = sh - hip          # hip -> shoulder
+    v_arm = arm_point - sh      # shoulder -> wrist/elbow
 
     denom = np.linalg.norm(v_trunk) * np.linalg.norm(v_arm)
+
     if denom < 1e-6:
         shoulder_flexion = 0.0
     else:
         cosang = float(np.dot(v_trunk, v_arm) / denom)
         cosang = max(-1.0, min(1.0, cosang))
-        shoulder_flexion = float(math.degrees(math.acos(cosang)))
+        raw_angle = float(math.degrees(math.acos(cosang)))
+
+        # raw_angle is the angle between trunk direction and arm direction.
+        # In overhead flexion, this maps naturally toward 180° when the arm is overhead.
+        shoulder_flexion = raw_angle
+
+    shoulder_flexion = max(0.0, min(180.0, shoulder_flexion))
 
     deficit = max(0.0, 170.0 - shoulder_flexion)
     score = max(0.0, 100.0 - deficit * 2.0)
-    conf_out = max(0.6, min(1.0, float(c)))
+    conf_out = max(0.0, min(1.0, float(c)))
 
     shoulder_thr = make_thresholds(
         "deg", 0, 180,
@@ -201,7 +248,14 @@ def analyze_shoulder(xy, conf, side="RIGHT"):
         "confidence": round(conf_out, 3),
         "metrics": {
             "shoulder_flexion_angle": round(shoulder_flexion, 2),
-            "side": side
+            "side": side,
+            "arm_point_used": arm_point_used,
+            "keypoint_confidence": {
+                "shoulder": round(sh_c, 3),
+                "elbow": round(el_c, 3),
+                "wrist": round(wr_c, 3),
+                "hip": round(hip_c, 3)
+            }
         },
         "thresholds": {
             "shoulder_flexion": shoulder_thr
