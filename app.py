@@ -696,8 +696,16 @@ def job_status(job_id: str, background_tasks: BackgroundTasks):
     }
 
 
+
 @app.get("/report")
-def report(session_id: str):
+def report(session_id: str, lang: str = "fr"):
+    """
+    Bilingual report endpoint.
+    Use /report?session_id=...&lang=fr or /report?session_id=...&lang=en
+    Keeps FR keys for backward compatibility and adds EN equivalents.
+    """
+    lang = "en" if str(lang).lower().startswith("en") else "fr"
+
     if supabase is None:
         return {"error": "Supabase not configured"}
 
@@ -717,6 +725,26 @@ def report(session_id: str):
         if r.get("intake_json"):
             intake_context = r.get("intake_json")
             break
+
+    def txt(fr, en):
+        return en if lang == "en" else fr
+
+    LABELS = {
+        "neck_angle": ("Angle cervical", "Cervical alignment"),
+        "thoracic_angle": ("Angle thoracique", "Thoracic alignment"),
+        "pelvic_proxy_angle": ("Alignement tronc-bassin", "Trunk-pelvis alignment"),
+        "shoulder_right_flexion": ("Flexion épaule droite", "Right shoulder flexion"),
+        "shoulder_left_flexion": ("Flexion épaule gauche", "Left shoulder flexion"),
+        "squat_knee_angle": ("Angle du genou", "Knee angle"),
+        "squat_trunk_lean": ("Inclinaison du tronc", "Trunk lean"),
+        "posture_title": ("Posture (vue de profil)", "Posture (side view)"),
+        "shoulders_title": ("Mobilité des épaules", "Shoulder mobility"),
+        "squat_title": ("Squat (contrôle et mobilité)", "Squat (control and mobility)"),
+    }
+
+    def label_pair(key):
+        fr, en = LABELS.get(key, (key, key))
+        return fr, en, txt(fr, en)
 
     def get_test(tt):
         for r in screenings:
@@ -764,7 +792,9 @@ def report(session_id: str):
             return {
                 "label": "Unknown",
                 "color": "grey",
-                "description_fr": "Session incomplète : termine tous les tests pour un score global."
+                "description_fr": "Session incomplète : termine tous les tests pour un score global.",
+                "description_en": "Incomplete session: complete all tests to obtain a global score.",
+                "description": txt("Session incomplète : termine tous les tests pour un score global.", "Incomplete session: complete all tests to obtain a global score.")
             }
 
         score = float(score)
@@ -772,20 +802,26 @@ def report(session_id: str):
             return {
                 "label": "Low",
                 "color": "green",
-                "description_fr": "Bon équilibre global. Quelques ajustements possibles."
+                "description_fr": "Bon équilibre global. Quelques ajustements possibles.",
+                "description_en": "Good overall balance. Minor adjustments may be useful.",
+                "description": txt("Bon équilibre global. Quelques ajustements possibles.", "Good overall balance. Minor adjustments may be useful.")
             }
 
         if score >= 70:
             return {
                 "label": "Moderate",
                 "color": "yellow",
-                "description_fr": "Profil intermédiaire : plusieurs axes d’amélioration."
+                "description_fr": "Profil intermédiaire : plusieurs axes d’amélioration.",
+                "description_en": "Intermediate profile: several areas can be improved.",
+                "description": txt("Profil intermédiaire : plusieurs axes d’amélioration.", "Intermediate profile: several areas can be improved.")
             }
 
         return {
             "label": "High",
             "color": "red",
-            "description_fr": "Priorité d’amélioration : plusieurs indicateurs hors zone cible."
+            "description_fr": "Priorité d’amélioration : plusieurs indicateurs hors zone cible.",
+            "description_en": "Improvement priority: several indicators are outside the target zone.",
+            "description": txt("Priorité d’amélioration : plusieurs indicateurs hors zone cible.", "Improvement priority: several indicators are outside the target zone.")
         }
 
     risk_category = risk_from_score(flexilab_score)
@@ -796,220 +832,204 @@ def report(session_id: str):
         v = thresholds.get(key)
         return v if isinstance(v, dict) else None
 
+    def rating_word(rating):
+        if rating == "green":
+            return txt("Bon", "Good")
+        if rating == "yellow":
+            return txt("À améliorer", "Improve")
+        if rating == "red":
+            return txt("Priorité", "Priority")
+        return txt("Info", "Info")
+
+    def insight_posture(label_fr, label_en, rating):
+        if rating == "green":
+            fr = f"{label_fr} satisfaisant."
+            en = f"{label_en} is satisfactory."
+        elif rating == "yellow":
+            fr = f"{label_fr} à améliorer légèrement."
+            en = f"{label_en} can be slightly improved."
+        elif rating == "red":
+            fr = f"{label_fr} prioritaire à corriger."
+            en = f"{label_en} is a priority to correct."
+        else:
+            fr = f"{label_fr} : données insuffisantes."
+            en = f"{label_en}: insufficient data."
+        return fr, en, txt(fr, en)
+
+    def insight_shoulder(rating):
+        pairs = {
+            "green": ("Mobilité au-dessus de la tête très bonne.", "Overhead mobility is very good."),
+            "yellow": ("Légère limitation par rapport à l'objectif.", "Slight limitation compared with the target."),
+            "red": ("Limitation marquée : priorité mobilité.", "Marked limitation: mobility is a priority."),
+        }
+        fr, en = pairs.get(rating, ("Données insuffisantes.", "Insufficient data."))
+        return fr, en, txt(fr, en)
+
+    def insight_squat(label_fr, label_en, rating):
+        if rating == "green":
+            fr = f"{label_fr} satisfaisant."
+            en = f"{label_en} is satisfactory."
+        elif rating == "yellow":
+            fr = f"{label_fr} à améliorer."
+            en = f"{label_en} can be improved."
+        elif rating == "red":
+            fr = f"{label_fr} prioritaire à améliorer."
+            en = f"{label_en} is a priority to improve."
+        else:
+            fr = f"{label_fr} : données insuffisantes."
+            en = f"{label_en}: insufficient data."
+        return fr, en, txt(fr, en)
+
+    def item_obj(item_id, value, unit, rating, thresholds):
+        label_fr, label_en, label = label_pair(item_id)
+        if item_id in ["neck_angle", "thoracic_angle", "pelvic_proxy_angle"]:
+            ins_fr, ins_en, ins = insight_posture(label_fr, label_en, rating)
+        elif item_id in ["shoulder_right_flexion", "shoulder_left_flexion"]:
+            ins_fr, ins_en, ins = insight_shoulder(rating)
+        elif item_id == "squat_knee_angle":
+            ins_fr, ins_en, ins = insight_squat("Profondeur", "Depth", rating)
+        elif item_id == "squat_trunk_lean":
+            ins_fr, ins_en, ins = insight_squat("Contrôle du tronc", "Trunk control", rating)
+        else:
+            ins_fr, ins_en, ins = ("", "", "")
+        return {
+            "id": item_id,
+            "label_fr": label_fr,
+            "label_en": label_en,
+            "label": label,
+            "value": value,
+            "unit": unit,
+            "rating": rating,
+            "rating_label": rating_word(rating),
+            "thresholds": thresholds,
+            "short_insight_fr": ins_fr,
+            "short_insight_en": ins_en,
+            "short_insight": ins,
+        }
+
     sections = []
 
     if posture:
         m = posture.get("metrics") or {}
         t = posture.get("thresholds") or {}
-
-        def insight_posture(label, rating):
-            if rating == "green":
-                return f"{label} satisfaisant."
-            if rating == "yellow":
-                return f"{label} à améliorer légèrement."
-            if rating == "red":
-                return f"{label} prioritaire à corriger."
-            return f"{label} : données insuffisantes."
-
         neck_thr = thr_item(t, "neck_angle")
         thor_thr = thr_item(t, "thoracic_angle")
         pelv_thr = thr_item(t, "pelvic_proxy_angle")
-
+        fr, en, title = label_pair("posture_title")
         sections.append({
             "id": "posture",
-            "title_fr": "Posture (vue de profil)",
+            "title_fr": fr,
+            "title_en": en,
+            "title": title,
             "items": [
-                {
-                    "id": "neck_angle",
-                    "label_fr": "Angle cervical",
-                    "value": m.get("neck_angle"),
-                    "unit": "°",
-                    "rating": (neck_thr or {}).get("rating"),
-                    "thresholds": neck_thr,
-                    "short_insight_fr": insight_posture("Alignement cervical", (neck_thr or {}).get("rating")),
-                },
-                {
-                    "id": "thoracic_angle",
-                    "label_fr": "Angle thoracique",
-                    "value": m.get("thoracic_angle"),
-                    "unit": "°",
-                    "rating": (thor_thr or {}).get("rating"),
-                    "thresholds": thor_thr,
-                    "short_insight_fr": insight_posture("Alignement thoracique", (thor_thr or {}).get("rating")),
-                },
-                {
-                    "id": "pelvic_proxy_angle",
-                    "label_fr": "Bassin (proxy)",
-                    "value": m.get("pelvic_proxy_angle"),
-                    "unit": "°",
-                    "rating": (pelv_thr or {}).get("rating"),
-                    "thresholds": pelv_thr,
-                    "short_insight_fr": insight_posture("Position du bassin", (pelv_thr or {}).get("rating")),
-                },
+                item_obj("neck_angle", m.get("neck_angle"), "°", (neck_thr or {}).get("rating"), neck_thr),
+                item_obj("thoracic_angle", m.get("thoracic_angle"), "°", (thor_thr or {}).get("rating"), thor_thr),
+                item_obj("pelvic_proxy_angle", m.get("pelvic_proxy_angle"), "°", (pelv_thr or {}).get("rating"), pelv_thr),
             ]
         })
 
     if sh_r or sh_l:
         items = []
         asym = None
-
-        def insight_shoulder(rating):
-            if rating == "green":
-                return "Mobilité overhead très bonne."
-            if rating == "yellow":
-                return "Légère limitation par rapport à l'objectif."
-            if rating == "red":
-                return "Limitation marquée : priorité mobilité."
-            return "Données insuffisantes."
-
         if sh_r:
             mr = sh_r.get("metrics") or {}
             tr = sh_r.get("thresholds") or {}
             thr = thr_item(tr, "shoulder_flexion")
-            items.append({
-                "id": "shoulder_right_flexion",
-                "label_fr": "Flexion épaule droite",
-                "value": mr.get("shoulder_flexion_angle"),
-                "unit": "°",
-                "rating": (thr or {}).get("rating"),
-                "thresholds": thr,
-                "short_insight_fr": insight_shoulder((thr or {}).get("rating")),
-            })
-
+            items.append(item_obj("shoulder_right_flexion", mr.get("shoulder_flexion_angle"), "°", (thr or {}).get("rating"), thr))
         if sh_l:
             ml = sh_l.get("metrics") or {}
             tl = sh_l.get("thresholds") or {}
             thr = thr_item(tl, "shoulder_flexion")
-            items.append({
-                "id": "shoulder_left_flexion",
-                "label_fr": "Flexion épaule gauche",
-                "value": ml.get("shoulder_flexion_angle"),
-                "unit": "°",
-                "rating": (thr or {}).get("rating"),
-                "thresholds": thr,
-                "short_insight_fr": insight_shoulder((thr or {}).get("rating")),
-            })
-
+            items.append(item_obj("shoulder_left_flexion", ml.get("shoulder_flexion_angle"), "°", (thr or {}).get("rating"), thr))
         if sh_r and sh_l:
             vr = (sh_r.get("metrics") or {}).get("shoulder_flexion_angle")
             vl = (sh_l.get("metrics") or {}).get("shoulder_flexion_angle")
-
             if vr is not None and vl is not None:
                 asym_deg = abs(float(vr) - float(vl))
-
                 if asym_deg <= 5:
                     a_rating = "green"
-                    a_txt = "Symétrie satisfaisante."
+                    fr_txt = "Symétrie satisfaisante."
+                    en_txt = "Satisfactory symmetry."
                 elif asym_deg <= 12:
                     a_rating = "yellow"
-                    a_txt = "Asymétrie légère entre droite et gauche."
+                    fr_txt = "Asymétrie légère entre droite et gauche."
+                    en_txt = "Slight asymmetry between right and left."
                 else:
                     a_rating = "red"
-                    a_txt = "Asymétrie importante : priorité équilibre D/G."
-
+                    fr_txt = "Asymétrie importante : priorité équilibre D/G."
+                    en_txt = "Important asymmetry: right/left balance is a priority."
                 asym = {
                     "value_deg": round(asym_deg, 2),
                     "rating": a_rating,
-                    "short_insight_fr": a_txt
+                    "short_insight_fr": fr_txt,
+                    "short_insight_en": en_txt,
+                    "short_insight": txt(fr_txt, en_txt)
                 }
-
-        sections.append({
-            "id": "shoulders",
-            "title_fr": "Mobilité des épaules",
-            "items": items,
-            "asymmetry": asym
-        })
+        fr, en, title = label_pair("shoulders_title")
+        sections.append({"id": "shoulders", "title_fr": fr, "title_en": en, "title": title, "items": items, "asymmetry": asym})
 
     if squat:
         ms = squat.get("metrics") or {}
         ts = squat.get("thresholds") or {}
-
-        def insight_squat(label, rating):
-            if rating == "green":
-                return f"{label} satisfaisant."
-            if rating == "yellow":
-                return f"{label} à améliorer."
-            if rating == "red":
-                return f"{label} prioritaire à améliorer."
-            return f"{label} : données insuffisantes."
-
         knee_thr = thr_item(ts, "knee_angle")
         trunk_thr = thr_item(ts, "trunk_lean")
-
+        fr, en, title = label_pair("squat_title")
         sections.append({
             "id": "squat",
-            "title_fr": "Squat (contrôle et mobilité)",
+            "title_fr": fr,
+            "title_en": en,
+            "title": title,
             "items": [
-                {
-                    "id": "squat_knee_angle",
-                    "label_fr": "Angle du genou",
-                    "value": ms.get("knee_angle"),
-                    "unit": "°",
-                    "rating": (knee_thr or {}).get("rating"),
-                    "thresholds": knee_thr,
-                    "short_insight_fr": insight_squat("Profondeur", (knee_thr or {}).get("rating")),
-                },
-                {
-                    "id": "squat_trunk_lean",
-                    "label_fr": "Inclinaison du tronc",
-                    "value": ms.get("trunk_lean"),
-                    "unit": "°",
-                    "rating": (trunk_thr or {}).get("rating"),
-                    "thresholds": trunk_thr,
-                    "short_insight_fr": insight_squat("Contrôle du tronc", (trunk_thr or {}).get("rating")),
-                }
+                item_obj("squat_knee_angle", ms.get("knee_angle"), "°", (knee_thr or {}).get("rating"), knee_thr),
+                item_obj("squat_trunk_lean", ms.get("trunk_lean"), "°", (trunk_thr or {}).get("rating"), trunk_thr),
             ]
         })
 
     candidates = []
 
-    def add_candidate(sev, title_fr, why_fr):
+    def add_candidate(sev, title_fr, title_en, why_fr, why_en):
         candidates.append({
             "severity": sev,
             "title_fr": title_fr,
-            "why_fr": why_fr
+            "title_en": title_en,
+            "title": txt(title_fr, title_en),
+            "why_fr": why_fr,
+            "why_en": why_en,
+            "why": txt(why_fr, why_en),
         })
 
     if posture:
         t = posture.get("thresholds") or {}
         na = thr_item(t, "neck_angle")
         ta = thr_item(t, "thoracic_angle")
-
+        pa = thr_item(t, "pelvic_proxy_angle")
         if (na or {}).get("rating") in ["red", "yellow"]:
-            add_candidate((na or {}).get("rating"), "Alignement cervical", "L’angle cervical est hors de la zone optimale.")
-
+            add_candidate((na or {}).get("rating"), "Alignement cervical", "Cervical alignment", "L’angle cervical est hors de la zone optimale.", "Cervical alignment is outside the optimal zone.")
         if (ta or {}).get("rating") in ["red", "yellow"]:
-            add_candidate((ta or {}).get("rating"), "Alignement thoracique", "L’angle thoracique est hors de la zone optimale.")
+            add_candidate((ta or {}).get("rating"), "Alignement thoracique", "Thoracic alignment", "L’angle thoracique est hors de la zone optimale.", "Thoracic alignment is outside the optimal zone.")
+        if (pa or {}).get("rating") in ["red", "yellow"]:
+            add_candidate((pa or {}).get("rating"), "Alignement tronc-bassin", "Trunk-pelvis alignment", "Le contrôle tronc-bassin est hors de la zone optimale.", "Trunk-pelvis control is outside the optimal zone.")
 
     if sh_r:
         thr = thr_item((sh_r.get("thresholds") or {}), "shoulder_flexion")
         if (thr or {}).get("rating") in ["red", "yellow"]:
-            add_candidate((thr or {}).get("rating"), "Mobilité épaule droite", "Flexion overhead sous l’objectif.")
+            add_candidate((thr or {}).get("rating"), "Mobilité épaule droite", "Right shoulder mobility", "La flexion de l’épaule droite est sous l’objectif.", "Right shoulder flexion is below the target.")
 
     if sh_l:
         thr = thr_item((sh_l.get("thresholds") or {}), "shoulder_flexion")
         if (thr or {}).get("rating") in ["red", "yellow"]:
-            add_candidate((thr or {}).get("rating"), "Mobilité épaule gauche", "Flexion overhead sous l’objectif.")
+            add_candidate((thr or {}).get("rating"), "Mobilité épaule gauche", "Left shoulder mobility", "La flexion de l’épaule gauche est sous l’objectif.", "Left shoulder flexion is below the target.")
 
     if squat:
         ts = squat.get("thresholds") or {}
         tr = thr_item(ts, "trunk_lean")
         kn = thr_item(ts, "knee_angle")
-
         if (tr or {}).get("rating") in ["red", "yellow"]:
-            add_candidate((tr or {}).get("rating"), "Inclinaison du tronc en squat", "Inclinaison du tronc hors zone cible.")
-
+            add_candidate((tr or {}).get("rating"), "Inclinaison du tronc en squat", "Trunk lean during squat", "L’inclinaison du tronc est hors zone cible.", "Trunk lean is outside the target zone.")
         if (kn or {}).get("rating") in ["red", "yellow"]:
-            add_candidate((kn or {}).get("rating"), "Profondeur du squat", "Angle du genou hors zone cible.")
+            add_candidate((kn or {}).get("rating"), "Profondeur du squat", "Squat depth", "L’angle du genou est hors zone cible.", "Knee angle is outside the target zone.")
 
-    sev_order = {
-        "red": 0,
-        "yellow": 1,
-        "green": 2,
-        "unknown": 3,
-        None: 4
-    }
-
+    sev_order = {"red": 0, "yellow": 1, "green": 2, "unknown": 3, None: 4}
     candidates.sort(key=lambda x: sev_order.get(x["severity"], 9))
 
     top_priorities = []
@@ -1017,12 +1037,17 @@ def report(session_id: str):
         top_priorities.append({
             "id": f"priority_{i}",
             "title_fr": c["title_fr"],
+            "title_en": c["title_en"],
+            "title": c["title"],
             "severity": c["severity"],
-            "why_fr": c["why_fr"]
+            "why_fr": c["why_fr"],
+            "why_en": c["why_en"],
+            "why": c["why"],
         })
 
     return {
         "session_id": session_id,
+        "language": lang,
         "user_email": session.get("user_email"),
         "created_at": session.get("created_at"),
         "intake_context": intake_context,
@@ -1031,7 +1056,7 @@ def report(session_id: str):
         "sections": sections,
         "top_priorities": top_priorities,
         "next_step_fr": "Refais le screening dans 14 jours pour vérifier l'évolution.",
-        "debug": {
-            "tests_found": tests_found
-        }
+        "next_step_en": "Repeat the screening in 14 days to check progress.",
+        "next_step": txt("Refais le screening dans 14 jours pour vérifier l'évolution.", "Repeat the screening in 14 days to check progress."),
+        "debug": {"tests_found": tests_found}
     }
