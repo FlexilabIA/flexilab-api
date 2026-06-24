@@ -340,7 +340,85 @@ def analyze_squat(xy, conf):
     }
 
 
-def compute_composite(posture, shoulder_r, shoulder_l, squat):
+
+def analyze_aslr(xy, conf, side="RIGHT"):
+    """
+    Active Straight Leg Raise (ASLR) analysis.
+
+    Angle-based V13:
+    - 0° = leg horizontal / close to the floor
+    - 90° = leg vertical
+    - <45° red, 45–70° yellow, >=70° green
+    """
+
+    L_HIP, R_HIP = 11, 12
+    L_KNEE, R_KNEE = 13, 14
+    L_ANK, R_ANK = 15, 16
+
+    if side == "RIGHT":
+        hip_i, knee_i, ankle_i = R_HIP, R_KNEE, R_ANK
+    else:
+        hip_i, knee_i, ankle_i = L_HIP, L_KNEE, L_ANK
+
+    hip = xy[hip_i]
+    knee = xy[knee_i]
+    ankle = xy[ankle_i]
+
+    hip_c = float(conf[hip_i])
+    knee_c = float(conf[knee_i])
+    ankle_c = float(conf[ankle_i])
+
+    # Raised leg vector: hip -> ankle.
+    # Image y-axis points downward, so invert dy for anatomical upward direction.
+    dx = float(ankle[0] - hip[0])
+    dy = float(hip[1] - ankle[1])
+
+    # Angle of raised leg relative to horizontal.
+    aslr_angle = abs(math.degrees(math.atan2(dy, abs(dx) + 1e-6)))
+    aslr_angle = max(0.0, min(180.0, aslr_angle))
+
+    if aslr_angle < 45:
+        score = 40.0
+    elif aslr_angle < 70:
+        score = 60.0 + ((aslr_angle - 45.0) / 25.0) * 19.0
+    else:
+        score = 85.0 + (min(aslr_angle, 110.0) - 70.0) / 40.0 * 15.0
+
+    score = max(0.0, min(100.0, score))
+
+    aslr_thr = make_thresholds(
+        "deg",
+        0,
+        180,
+        [
+            {"label": "Red", "min": 0, "max": 45, "color": "red"},
+            {"label": "Yellow", "min": 45, "max": 70, "color": "yellow"},
+            {"label": "Green", "min": 70, "max": 180, "color": "green"},
+        ],
+        aslr_angle
+    )
+
+    conf_out = max(0.0, min(1.0, float(hip_c + knee_c + ankle_c) / 3.0))
+
+    return {
+        "score": round(float(score), 1),
+        "confidence": round(conf_out, 3),
+        "metrics": {
+            "aslr_angle": round(float(aslr_angle), 2),
+            "side": side,
+            "keypoint_confidence": {
+                "hip": round(hip_c, 3),
+                "knee": round(knee_c, 3),
+                "ankle": round(ankle_c, 3)
+            }
+        },
+        "thresholds": {
+            "aslr_angle": aslr_thr
+        }
+    }
+
+
+def compute_composite(posture, shoulder_r, shoulder_l, squat, aslr_r=None, aslr_l=None):
     shoulder = None
     if shoulder_r is not None and shoulder_l is not None:
         shoulder = min(float(shoulder_r), float(shoulder_l))
@@ -349,13 +427,23 @@ def compute_composite(posture, shoulder_r, shoulder_l, squat):
     elif shoulder_l is not None:
         shoulder = float(shoulder_l)
 
+    aslr = None
+    if aslr_r is not None and aslr_l is not None:
+        aslr = min(float(aslr_r), float(aslr_l))
+    elif aslr_r is not None:
+        aslr = float(aslr_r)
+    elif aslr_l is not None:
+        aslr = float(aslr_l)
+
     parts = []
     if posture is not None:
-        parts.append((float(posture), 0.4))
+        parts.append((float(posture), 0.30))
     if shoulder is not None:
-        parts.append((float(shoulder), 0.3))
+        parts.append((float(shoulder), 0.25))
     if squat is not None:
-        parts.append((float(squat), 0.3))
+        parts.append((float(squat), 0.25))
+    if aslr is not None:
+        parts.append((float(aslr), 0.20))
 
     if not parts:
         return None
@@ -404,6 +492,8 @@ def finalize_session(session_id: str = Form(...)):
         row.get("shoulder_right_score"),
         row.get("shoulder_left_score"),
         row.get("squat_score"),
+        row.get("aslr_right_score"),
+        row.get("aslr_left_score"),
     )
 
     supabase.table("sessions").update({
@@ -418,6 +508,8 @@ def finalize_session(session_id: str = Form(...)):
         "shoulder_right_score": row.get("shoulder_right_score"),
         "shoulder_left_score": row.get("shoulder_left_score"),
         "squat_score": row.get("squat_score"),
+        "aslr_right_score": row.get("aslr_right_score"),
+        "aslr_left_score": row.get("aslr_left_score"),
         "composite_score": composite
     }
 
@@ -474,6 +566,12 @@ async def analyze(
     elif test_type == "squat":
         result = analyze_squat(xy, conf)
         session_update = {"squat_score": result["score"]}
+    elif test_type == "aslr_right":
+        result = analyze_aslr(xy, conf, "RIGHT")
+        session_update = {"aslr_right_score": result["score"]}
+    elif test_type == "aslr_left":
+        result = analyze_aslr(xy, conf, "LEFT")
+        session_update = {"aslr_left_score": result["score"]}
     else:
         return {"error": "Invalid test_type"}
 
@@ -599,6 +697,14 @@ def run_yolo_analysis_from_bytes(img_bytes, test_type):
     elif test_type == "squat":
         result = analyze_squat(xy, conf)
         session_update = {"squat_score": result["score"]}
+
+    elif test_type == "aslr_right":
+        result = analyze_aslr(xy, conf, "RIGHT")
+        session_update = {"aslr_right_score": result["score"]}
+
+    elif test_type == "aslr_left":
+        result = analyze_aslr(xy, conf, "LEFT")
+        session_update = {"aslr_left_score": result["score"]}
 
     else:
         raise ValueError("Invalid test_type")
@@ -792,6 +898,9 @@ def report(session_id: str, lang: str = "fr"):
         "shoulder_left_flexion": ("Flexion épaule gauche", "Left shoulder flexion"),
         "squat_knee_angle": ("Angle du genou", "Knee angle"),
         "squat_trunk_lean": ("Inclinaison du tronc", "Trunk lean"),
+        "aslr_right_angle": ("ASLR jambe droite", "Right ASLR"),
+        "aslr_left_angle": ("ASLR jambe gauche", "Left ASLR"),
+        "aslr_title": ("Active Straight Leg Raise", "Active Straight Leg Raise"),
         "posture_title": ("Posture (vue de profil)", "Posture (side view)"),
         "shoulders_title": ("Mobilité des épaules", "Shoulder mobility"),
         "squat_title": ("Squat (contrôle et mobilité)", "Squat (control and mobility)"),
@@ -811,6 +920,8 @@ def report(session_id: str, lang: str = "fr"):
     sh_r = get_test("shoulder_right")
     sh_l = get_test("shoulder_left")
     squat = get_test("squat")
+    aslr_r = get_test("aslr_right")
+    aslr_l = get_test("aslr_left")
 
     flexilab_score = session.get("composite_score", None)
 
@@ -819,6 +930,8 @@ def report(session_id: str, lang: str = "fr"):
         sh_r_score = session.get("shoulder_right_score", None) or (sh_r.get("score") if sh_r else None)
         sh_l_score = session.get("shoulder_left_score", None) or (sh_l.get("score") if sh_l else None)
         squat_score = session.get("squat_score", None) or (squat.get("score") if squat else None)
+        aslr_r_score = session.get("aslr_right_score", None) or (aslr_r.get("score") if aslr_r else None)
+        aslr_l_score = session.get("aslr_left_score", None) or (aslr_l.get("score") if aslr_l else None)
 
         shoulder = None
         if sh_r_score is not None and sh_l_score is not None:
@@ -828,19 +941,14 @@ def report(session_id: str, lang: str = "fr"):
         elif sh_l_score is not None:
             shoulder = float(sh_l_score)
 
-        parts = []
-        if posture_score is not None:
-            parts.append((float(posture_score), 0.4))
-        if shoulder is not None:
-            parts.append((float(shoulder), 0.3))
-        if squat_score is not None:
-            parts.append((float(squat_score), 0.3))
-
-        if parts:
-            wsum = sum(w for _, w in parts)
-            flexilab_score = round(sum(v * w for v, w in parts) / wsum, 1)
-        else:
-            flexilab_score = None
+        flexilab_score = compute_composite(
+            posture_score,
+            sh_r_score,
+            sh_l_score,
+            squat_score,
+            aslr_r_score,
+            aslr_l_score
+        )
 
     def risk_from_score(score):
         if score is None:
@@ -945,6 +1053,16 @@ def report(session_id: str, lang: str = "fr"):
             ins_fr, ins_en, ins = insight_squat("Profondeur", "Depth", rating)
         elif item_id == "squat_trunk_lean":
             ins_fr, ins_en, ins = insight_squat("Contrôle du tronc", "Trunk control", rating)
+        elif item_id in ["aslr_right_angle", "aslr_left_angle"]:
+            if rating == "green":
+                ins_fr, ins_en = "Mobilité active de hanche satisfaisante.", "Active hip mobility is satisfactory."
+            elif rating == "yellow":
+                ins_fr, ins_en = "Mobilité active de hanche à améliorer.", "Active hip mobility can be improved."
+            elif rating == "red":
+                ins_fr, ins_en = "Restriction importante : priorité mobilité hanche/ischio-jambiers.", "Important restriction: hip/hamstring mobility is a priority."
+            else:
+                ins_fr, ins_en = "Données insuffisantes.", "Insufficient data."
+            ins = txt(ins_fr, ins_en)
         else:
             ins_fr, ins_en, ins = ("", "", "")
         return {
@@ -1040,6 +1158,58 @@ def report(session_id: str, lang: str = "fr"):
             ]
         })
 
+
+    if aslr_r or aslr_l:
+        items = []
+        asym = None
+
+        if aslr_r:
+            mr = aslr_r.get("metrics") or {}
+            tr = aslr_r.get("thresholds") or {}
+            thr = thr_item(tr, "aslr_angle")
+            items.append(item_obj("aslr_right_angle", mr.get("aslr_angle"), "°", (thr or {}).get("rating"), thr))
+
+        if aslr_l:
+            ml = aslr_l.get("metrics") or {}
+            tl = aslr_l.get("thresholds") or {}
+            thr = thr_item(tl, "aslr_angle")
+            items.append(item_obj("aslr_left_angle", ml.get("aslr_angle"), "°", (thr or {}).get("rating"), thr))
+
+        if aslr_r and aslr_l:
+            vr = (aslr_r.get("metrics") or {}).get("aslr_angle")
+            vl = (aslr_l.get("metrics") or {}).get("aslr_angle")
+            if vr is not None and vl is not None:
+                asym_deg = abs(float(vr) - float(vl))
+                if asym_deg <= 5:
+                    a_rating = "green"
+                    fr_txt = "Symétrie ASLR satisfaisante."
+                    en_txt = "Satisfactory ASLR symmetry."
+                elif asym_deg <= 12:
+                    a_rating = "yellow"
+                    fr_txt = "Asymétrie ASLR légère entre droite et gauche."
+                    en_txt = "Slight ASLR asymmetry between right and left."
+                else:
+                    a_rating = "red"
+                    fr_txt = "Asymétrie ASLR importante : priorité mobilité D/G."
+                    en_txt = "Important ASLR asymmetry: right/left mobility is a priority."
+                asym = {
+                    "value_deg": round(asym_deg, 2),
+                    "rating": a_rating,
+                    "short_insight_fr": fr_txt,
+                    "short_insight_en": en_txt,
+                    "short_insight": txt(fr_txt, en_txt)
+                }
+
+        fr, en, title = label_pair("aslr_title")
+        sections.append({
+            "id": "aslr",
+            "title_fr": fr,
+            "title_en": en,
+            "title": title,
+            "items": items,
+            "asymmetry": asym
+        })
+
     candidates = []
 
     def add_candidate(sev, title_fr, title_en, why_fr, why_en):
@@ -1074,6 +1244,16 @@ def report(session_id: str, lang: str = "fr"):
         thr = thr_item((sh_l.get("thresholds") or {}), "shoulder_flexion")
         if (thr or {}).get("rating") in ["red", "yellow"]:
             add_candidate((thr or {}).get("rating"), "Mobilité épaule gauche", "Left shoulder mobility", "La flexion de l’épaule gauche est sous l’objectif.", "Left shoulder flexion is below the target.")
+
+    if aslr_r:
+        thr = thr_item((aslr_r.get("thresholds") or {}), "aslr_angle")
+        if (thr or {}).get("rating") in ["red", "yellow"]:
+            add_candidate((thr or {}).get("rating"), "Mobilité ASLR droite", "Right ASLR mobility", "L’élévation active de la jambe droite est sous l’objectif.", "Right active straight leg raise is below the target.")
+
+    if aslr_l:
+        thr = thr_item((aslr_l.get("thresholds") or {}), "aslr_angle")
+        if (thr or {}).get("rating") in ["red", "yellow"]:
+            add_candidate((thr or {}).get("rating"), "Mobilité ASLR gauche", "Left ASLR mobility", "L’élévation active de la jambe gauche est sous l’objectif.", "Left active straight leg raise is below the target.")
 
     if squat:
         ts = squat.get("thresholds") or {}
