@@ -1,36 +1,33 @@
 """
-FlexiLab Program Engine V2
+FlexiLab Program Engine V3
 
-Upgrades vs V1
+Upgrades vs V2
 --------------
-1. Avoids duplicate exercises inside the same week.
-2. Builds balanced weekly sessions instead of separate repeated blocks.
-3. Caps total exercises per week.
-4. Adds session order, purpose, estimated duration, and prescription fields.
-5. Adds pain-clearance logic:
-   - pain => release/recovery + gentle mobility only
-   - discomfort => no high difficulty / no strength loading
-6. Uses the exercise_library.json file as the knowledge base.
-
-This module stays independent from app.py.
+1. Prescribes from movement faults and root-cause contributors, not only body systems.
+2. Builds each week as a professional session:
+   reset -> mobility -> motor control -> stability -> integration.
+3. Adds root_cause_analysis to the JSON output.
+4. Avoids duplicates inside the same week.
+5. Improves Week 1: less aggressive, more reset/mobility first.
+6. Improves progression:
+   Week 1 = restore motion and breathing
+   Week 2 = control motion
+   Week 3 = stabilize motion
+   Week 4 = integrate motion
+7. Keeps pain clearance logic:
+   pain = only reset/mobility + safety note.
 """
 
 from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set
 
 
 LIBRARY_PATH = Path(__file__).with_name("exercise_library.json")
 
-SEVERITY_POINTS = {
-    "red": 3,
-    "yellow": 2,
-    "green": 0,
-    "unknown": 0,
-    None: 0,
-}
+SEVERITY_POINTS = {"red": 3, "yellow": 2, "green": 0, "unknown": 0, None: 0}
 
 PHASE_ORDER = [
     "1_release_recovery",
@@ -65,24 +62,51 @@ SYSTEM_LABELS = {
     "REC": {"fr": "Reset / récupération", "en": "Reset / recovery"},
 }
 
-# How many total exercises per week.
-WEEK_CAPS = {
-    1: 6,
-    2: 6,
-    3: 6,
-    4: 6,
+FAULT_LABELS = {
+    "forward_head": {"fr": "Projection cervicale / tête en avant", "en": "Forward head posture"},
+    "thoracic_posture": {"fr": "Mobilité / posture thoracique", "en": "Thoracic mobility/posture"},
+    "overhead_limitation": {"fr": "Limitation overhead", "en": "Overhead limitation"},
+    "squat_trunk_lean": {"fr": "Inclinaison du tronc en squat", "en": "Squat trunk lean"},
+    "squat_depth_control": {"fr": "Contrôle / profondeur du squat", "en": "Squat depth/control"},
+    "aslr_limitation": {"fr": "Limitation ASLR / chaîne postérieure", "en": "ASLR/posterior-chain limitation"},
+    "asymmetry": {"fr": "Asymétrie droite/gauche", "en": "Right-left asymmetry"},
 }
 
-# Desired session structure by week.
-WEEK_PHASE_PLAN = {
-    1: ["1_release_recovery", "2_mobility", "2_mobility", "3_motor_control", "3_motor_control", "6_integration"],
-    2: ["2_mobility", "2_mobility", "3_motor_control", "3_motor_control", "4_stability", "6_integration"],
-    3: ["2_mobility", "3_motor_control", "4_stability", "4_stability", "5_strength", "6_integration"],
-    4: ["2_mobility", "4_stability", "5_strength", "5_strength", "6_integration", "6_integration"],
+# Session blueprint by week: purpose and preferred systems.
+# The engine will select the best matching exercise for each slot.
+WEEK_BLUEPRINTS = {
+    1: [
+        {"slot": "reset_breathing", "phase": "1_release_recovery", "systems": ["REC", "CORE", "THOR"]},
+        {"slot": "soft_tissue_or_reset", "phase": "1_release_recovery", "systems": ["REC", "THOR", "HIP", "POST"]},
+        {"slot": "mobility_primary", "phase": "2_mobility", "systems": []},
+        {"slot": "mobility_secondary", "phase": "2_mobility", "systems": []},
+        {"slot": "easy_control", "phase": "3_motor_control", "systems": []},
+    ],
+    2: [
+        {"slot": "mobility_primary", "phase": "2_mobility", "systems": []},
+        {"slot": "mobility_secondary", "phase": "2_mobility", "systems": []},
+        {"slot": "control_primary", "phase": "3_motor_control", "systems": []},
+        {"slot": "control_secondary", "phase": "3_motor_control", "systems": []},
+        {"slot": "easy_stability", "phase": "4_stability", "systems": []},
+        {"slot": "pattern_rebuild", "phase": "6_integration", "systems": ["FUNC", "CORE", "HIP"]},
+    ],
+    3: [
+        {"slot": "mobility_maintenance", "phase": "2_mobility", "systems": []},
+        {"slot": "control_primary", "phase": "3_motor_control", "systems": []},
+        {"slot": "stability_primary", "phase": "4_stability", "systems": []},
+        {"slot": "stability_secondary", "phase": "4_stability", "systems": []},
+        {"slot": "strength_intro", "phase": "5_strength", "systems": ["CORE", "HIP", "FUNC"]},
+        {"slot": "integration", "phase": "6_integration", "systems": ["FUNC", "THOR", "HIP", "CORE"]},
+    ],
+    4: [
+        {"slot": "mobility_maintenance", "phase": "2_mobility", "systems": []},
+        {"slot": "stability_primary", "phase": "4_stability", "systems": []},
+        {"slot": "strength_primary", "phase": "5_strength", "systems": ["CORE", "HIP", "FUNC"]},
+        {"slot": "integration_primary", "phase": "6_integration", "systems": ["FUNC", "CORE", "HIP"]},
+        {"slot": "integration_secondary", "phase": "6_integration", "systems": ["THOR", "SHLD", "SCAP", "CORE"]},
+        {"slot": "retest_prep", "phase": "3_motor_control", "systems": []},
+    ],
 }
-
-PAIN_ALLOWED_PHASES = ["1_release_recovery", "2_mobility"]
-DISCOMFORT_BLOCKED_PHASES = ["5_strength"]
 
 
 def load_exercise_library(path: Optional[Path] = None) -> Dict[str, Any]:
@@ -103,6 +127,11 @@ def label_system(system_code: str, lang: str = "fr") -> str:
 def label_phase(phase: str, lang: str = "fr") -> str:
     lang = normalize_lang(lang)
     return PHASE_LABELS.get(phase, {}).get(lang, phase)
+
+
+def label_fault(fault: str, lang: str = "fr") -> str:
+    lang = normalize_lang(lang)
+    return FAULT_LABELS.get(fault, {}).get(lang, fault)
 
 
 def extract_rating_map(report: Dict[str, Any]) -> Dict[str, str]:
@@ -127,85 +156,159 @@ def extract_rating_map(report: Dict[str, Any]) -> Dict[str, str]:
     return rating_map
 
 
-def compute_movement_system_scores(rating_map: Dict[str, str]) -> Dict[str, Dict[str, Any]]:
-    scores: Dict[str, float] = {
-        "CERV": 0, "THOR": 0, "SHLD": 0, "SCAP": 0, "CORE": 0, "PELV": 0,
-        "HIP": 0, "POST": 0, "ANKL": 0, "KNEE": 0, "FUNC": 0, "REC": 0,
-    }
-    reasons: Dict[str, List[str]] = {k: [] for k in scores}
+def points(rating_map: Dict[str, str], key: str) -> int:
+    return SEVERITY_POINTS.get(rating_map.get(key), 0)
 
-    def add(system: str, points: float, reason: str) -> None:
-        if points <= 0:
+
+def add_score(scores: Dict[str, float], reasons: Dict[str, List[str]], system: str, pts: float, reason: str) -> None:
+    if pts <= 0:
+        return
+    scores[system] = scores.get(system, 0) + pts
+    if reason not in reasons.setdefault(system, []):
+        reasons[system].append(reason)
+
+
+def compute_root_cause_analysis(rating_map: Dict[str, str], lang: str = "fr") -> List[Dict[str, Any]]:
+    """
+    Produces fault/root-cause hypotheses that drive the program.
+    This is the layer that makes FlexiLab more clinically meaningful.
+    """
+    lang = normalize_lang(lang)
+    faults: Dict[str, Dict[str, Any]] = {}
+
+    def add_fault(fault: str, severity_points: int, contributors: Dict[str, float], evidence: str) -> None:
+        if severity_points <= 0:
             return
-        scores[system] += points
-        if reason not in reasons[system]:
-            reasons[system].append(reason)
+        if fault not in faults:
+            faults[fault] = {
+                "fault": fault,
+                "label": label_fault(fault, lang),
+                "raw_score": 0.0,
+                "contributors": {},
+                "evidence": [],
+            }
+        faults[fault]["raw_score"] += severity_points * 10
+        faults[fault]["evidence"].append(evidence)
+        for system, weight in contributors.items():
+            faults[fault]["contributors"][system] = faults[fault]["contributors"].get(system, 0) + severity_points * weight
 
-    def pts(key: str) -> int:
-        return SEVERITY_POINTS.get(rating_map.get(key), 0)
+    # Forward head / cervical posture
+    add_fault(
+        "forward_head",
+        points(rating_map, "neck_angle"),
+        {"CERV": 12, "THOR": 5, "SCAP": 2},
+        "neck_angle outside target zone",
+    )
 
-    # Posture
-    p = pts("neck_angle")
-    add("CERV", p * 12, "Cervical alignment finding")
-    add("THOR", p * 4, "Cervical alignment may be influenced by thoracic posture")
+    # Thoracic posture
+    add_fault(
+        "thoracic_posture",
+        points(rating_map, "thoracic_angle"),
+        {"THOR": 14, "CERV": 3, "SHLD": 4},
+        "thoracic_angle outside target zone",
+    )
 
-    p = pts("thoracic_angle")
-    add("THOR", p * 14, "Thoracic alignment finding")
-    add("SHLD", p * 5, "Thoracic posture can influence overhead mobility")
+    # Overhead limitation
+    shoulder_sev = max(points(rating_map, "shoulder_right_flexion"), points(rating_map, "shoulder_left_flexion"))
+    add_fault(
+        "overhead_limitation",
+        shoulder_sev,
+        {"SHLD": 12, "THOR": 8, "SCAP": 8, "CERV": 2},
+        "shoulder flexion below target",
+    )
 
-    p = pts("pelvic_proxy_angle")
-    add("PELV", p * 10, "Trunk-pelvis alignment finding")
-    add("CORE", p * 6, "Trunk-pelvis alignment can reflect core control")
+    # Squat trunk lean
+    add_fault(
+        "squat_trunk_lean",
+        points(rating_map, "squat_trunk_lean"),
+        {"CORE": 12, "HIP": 8, "ANKL": 6, "THOR": 4, "FUNC": 5},
+        "trunk lean during squat outside target zone",
+    )
 
-    # Shoulders
-    p = max(pts("shoulder_right_flexion"), pts("shoulder_left_flexion"))
-    add("SHLD", p * 14, "Shoulder flexion limitation")
-    add("THOR", p * 8, "Overhead limitation may involve thoracic mobility")
-    add("SCAP", p * 8, "Overhead limitation may involve scapular control")
-    add("CERV", p * 2, "Shoulder limitation can increase neck compensation")
-
-    p = pts("shoulders_asymmetry")
-    add("SHLD", p * 8, "Right-left shoulder asymmetry")
-    add("SCAP", p * 5, "Right-left shoulder asymmetry may involve scapular control")
-
-    # Squat
-    p = pts("squat_trunk_lean")
-    add("CORE", p * 12, "Trunk lean during squat")
-    add("HIP", p * 8, "Trunk lean may reflect hip mobility limitation")
-    add("ANKL", p * 6, "Trunk lean may reflect ankle mobility limitation")
-    add("THOR", p * 4, "Trunk lean may include thoracic contribution")
-    add("FUNC", p * 5, "Squat pattern integration finding")
-
-    p = pts("squat_knee_angle")
-    add("KNEE", p * 8, "Squat depth / knee angle finding")
-    add("HIP", p * 8, "Squat depth may reflect hip mobility")
-    add("ANKL", p * 8, "Squat depth may reflect ankle dorsiflexion")
-    add("FUNC", p * 5, "Squat pattern integration finding")
+    # Squat depth/control
+    add_fault(
+        "squat_depth_control",
+        points(rating_map, "squat_knee_angle"),
+        {"KNEE": 8, "HIP": 8, "ANKL": 8, "FUNC": 5},
+        "squat knee angle/depth outside target zone",
+    )
 
     # ASLR
-    p = max(pts("aslr_right_angle"), pts("aslr_left_angle"))
-    add("POST", p * 14, "Active Straight Leg Raise limitation")
-    add("HIP", p * 8, "ASLR limitation may reflect hip mobility")
-    add("PELV", p * 8, "ASLR limitation may reflect pelvic control")
-    add("CORE", p * 5, "ASLR requires trunk-pelvis control")
+    aslr_sev = max(points(rating_map, "aslr_right_angle"), points(rating_map, "aslr_left_angle"))
+    add_fault(
+        "aslr_limitation",
+        aslr_sev,
+        {"POST": 14, "HIP": 8, "PELV": 8, "CORE": 5},
+        "ASLR below target zone",
+    )
 
-    p = pts("aslr_asymmetry")
-    add("POST", p * 8, "Right-left ASLR asymmetry")
-    add("HIP", p * 5, "Right-left ASLR asymmetry may involve hip mobility")
-    add("PELV", p * 5, "Right-left ASLR asymmetry may involve pelvic control")
+    # Asymmetry
+    asym_sev = max(points(rating_map, "shoulders_asymmetry"), points(rating_map, "aslr_asymmetry"))
+    add_fault(
+        "asymmetry",
+        asym_sev,
+        {"SHLD": 5, "SCAP": 4, "POST": 5, "HIP": 4, "PELV": 4},
+        "right-left asymmetry detected",
+    )
 
-    max_score = max(scores.values()) if scores else 0
-    output: Dict[str, Dict[str, Any]] = {}
+    if not faults:
+        return []
 
+    max_raw = max(v["raw_score"] for v in faults.values())
+    output = []
+    for fault, obj in faults.items():
+        contributors = obj["contributors"]
+        total = sum(contributors.values()) or 1
+        contributor_list = [
+            {
+                "system": system,
+                "system_label": label_system(system, lang),
+                "confidence": round((value / total) * 100, 1),
+            }
+            for system, value in sorted(contributors.items(), key=lambda kv: kv[1], reverse=True)
+        ]
+
+        output.append({
+            "fault": fault,
+            "label": obj["label"],
+            "priority_score": round((obj["raw_score"] / max_raw) * 100, 1),
+            "contributors": contributor_list,
+            "evidence": obj["evidence"],
+        })
+
+    return sorted(output, key=lambda x: x["priority_score"], reverse=True)
+
+
+def compute_movement_system_scores(rating_map: Dict[str, str]) -> Dict[str, Dict[str, Any]]:
+    root_causes = compute_root_cause_analysis(rating_map, lang="en")
+
+    scores: Dict[str, float] = {}
+    reasons: Dict[str, List[str]] = {}
+
+    for fault in root_causes:
+        fault_weight = fault["priority_score"] / 100.0
+        for contributor in fault["contributors"]:
+            system = contributor["system"]
+            confidence = contributor["confidence"] / 100.0
+            add_score(
+                scores,
+                reasons,
+                system,
+                fault_weight * confidence * 100,
+                f"{fault['fault']}: {', '.join(fault.get('evidence', []))}",
+            )
+
+    if not scores:
+        return {}
+
+    max_score = max(scores.values())
+    output = {}
     for system, raw in scores.items():
-        if raw <= 0:
-            continue
-        priority = round((raw / max_score) * 100, 1) if max_score > 0 else 0.0
         output[system] = {
             "system": system,
             "raw_score": round(raw, 2),
-            "priority_score": priority,
-            "reasons": reasons[system],
+            "priority_score": round((raw / max_score) * 100, 1),
+            "reasons": reasons.get(system, []),
         }
 
     return dict(sorted(output.items(), key=lambda kv: kv[1]["priority_score"], reverse=True))
@@ -250,7 +353,6 @@ def system_related_tests(system: str) -> Set[str]:
 def system_pain_status(system: str, pain: Dict[str, str]) -> str:
     tests = system_related_tests(system)
     statuses = [pain.get(t) for t in tests if pain.get(t)]
-
     if "pain" in statuses:
         return "pain"
     if "discomfort" in statuses:
@@ -259,47 +361,11 @@ def system_pain_status(system: str, pain: Dict[str, str]) -> str:
 
 
 def exercise_matches_system(exercise: Dict[str, Any], system: str) -> bool:
-    if exercise.get("primary_system") == system:
-        return True
-    return system in (exercise.get("secondary_systems") or [])
+    return exercise.get("primary_system") == system or system in (exercise.get("secondary_systems") or [])
 
 
 def phase_rank(phase: str) -> int:
     return PHASE_ORDER.index(phase) if phase in PHASE_ORDER else 99
-
-
-def exercise_score(
-    ex: Dict[str, Any],
-    target_system: str,
-    desired_phase: str,
-    week: int,
-) -> float:
-    score = 0.0
-
-    if ex.get("primary_system") == target_system:
-        score += 100
-    elif target_system in (ex.get("secondary_systems") or []):
-        score += 65
-
-    if ex.get("phase") == desired_phase:
-        score += 40
-    else:
-        diff = abs(phase_rank(ex.get("phase")) - phase_rank(desired_phase))
-        score += max(0, 25 - diff * 8)
-
-    difficulty = int(ex.get("difficulty", 3))
-    # prefer easier in early weeks, more moderate in later weeks
-    ideal_difficulty = 1 if week == 1 else 2 if week == 2 else 3
-    score += max(0, 20 - abs(difficulty - ideal_difficulty) * 7)
-
-    if int(ex.get("week_start", 1)) <= week <= int(ex.get("week_end", 4)):
-        score += 20
-
-    # Encourage exercises with clear prescription
-    if ex.get("reps") or ex.get("hold"):
-        score += 5
-
-    return score
 
 
 def is_exercise_safe_for_status(ex: Dict[str, Any], pain_status: str) -> bool:
@@ -307,58 +373,110 @@ def is_exercise_safe_for_status(ex: Dict[str, Any], pain_status: str) -> bool:
     difficulty = int(ex.get("difficulty", 3))
 
     if pain_status == "pain":
-        return phase in PAIN_ALLOWED_PHASES and difficulty <= 2
-
+        return phase in ["1_release_recovery", "2_mobility"] and difficulty <= 2
     if pain_status == "discomfort":
-        if phase in DISCOMFORT_BLOCKED_PHASES:
-            return False
-        if difficulty >= 4:
-            return False
-
+        return phase != "5_strength" and difficulty <= 3
     return True
+
+
+def exercise_score(ex: Dict[str, Any], target_system: str, desired_phase: str, week: int) -> float:
+    score = 0.0
+
+    if ex.get("primary_system") == target_system:
+        score += 100
+    elif target_system in (ex.get("secondary_systems") or []):
+        score += 65
+
+    phase = ex.get("phase")
+    if phase == desired_phase:
+        score += 50
+    else:
+        score += max(0, 25 - abs(phase_rank(phase) - phase_rank(desired_phase)) * 10)
+
+    difficulty = int(ex.get("difficulty", 3))
+    ideal_difficulty = 1 if week == 1 else 2 if week == 2 else 3
+    score += max(0, 20 - abs(difficulty - ideal_difficulty) * 8)
+
+    if int(ex.get("week_start", 1)) <= week <= int(ex.get("week_end", 4)):
+        score += 20
+
+    if ex.get("reps") or ex.get("hold"):
+        score += 5
+
+    # Prefer recovery in week 1
+    if week == 1 and phase == "1_release_recovery":
+        score += 18
+
+    # Avoid too much advanced integration in week 1
+    if week == 1 and phase in ["5_strength", "6_integration"]:
+        score -= 30
+
+    return score
 
 
 def find_best_exercise(
     exercises: List[Dict[str, Any]],
-    target_system: str,
+    target_systems: List[str],
     desired_phase: str,
     week: int,
-    pain_status: str,
+    pain: Dict[str, str],
     used_ids: Set[str],
     used_names: Set[str],
 ) -> Optional[Dict[str, Any]]:
     candidates = []
 
     for ex in exercises:
-        if ex.get("id") in used_ids:
+        if ex.get("id") in used_ids or ex.get("name") in used_names:
             continue
-        if ex.get("name") in used_names:
-            continue
-        if not exercise_matches_system(ex, target_system):
-            continue
-        if not is_exercise_safe_for_status(ex, pain_status):
-            continue
-        if int(ex.get("week_start", 1)) > week:
-            continue
-        if int(ex.get("week_end", 4)) < week:
+        if int(ex.get("week_start", 1)) > week or int(ex.get("week_end", 4)) < week:
             continue
 
-        score = exercise_score(ex, target_system, desired_phase, week)
-        candidates.append((score, ex.get("id", ""), ex))
+        matching_systems = [s for s in target_systems if exercise_matches_system(ex, s)]
+        if not matching_systems:
+            continue
+
+        worst_status = "no_pain"
+        for s in matching_systems:
+            status = system_pain_status(s, pain)
+            if status == "pain":
+                worst_status = "pain"
+                break
+            if status == "discomfort":
+                worst_status = "discomfort"
+
+        if not is_exercise_safe_for_status(ex, worst_status):
+            continue
+
+        best_system_score = max(exercise_score(ex, s, desired_phase, week) for s in matching_systems)
+        candidates.append((best_system_score, ex.get("id", ""), ex, matching_systems[0]))
 
     if not candidates:
         return None
 
     candidates.sort(key=lambda x: (-x[0], x[1]))
-    return candidates[0][2]
+    chosen = candidates[0][2].copy()
+    chosen["_selected_for_system"] = candidates[0][3]
+    return chosen
 
 
-def format_exercise_for_program(ex: Dict[str, Any], order: int, system: str, lang: str) -> Dict[str, Any]:
+def slot_systems_from_priorities(slot: Dict[str, Any], top_systems: List[str]) -> List[str]:
+    explicit = slot.get("systems") or []
+    if explicit:
+        # Combine explicit intent with priorities
+        return list(dict.fromkeys(explicit + top_systems))
+
+    # Otherwise use priority-driven selection.
+    return top_systems
+
+
+def format_exercise_for_program(ex: Dict[str, Any], order: int, lang: str) -> Dict[str, Any]:
+    selected_system = ex.get("_selected_for_system") or ex.get("primary_system")
     return {
         "order": order,
         "id": ex.get("id"),
         "name": ex.get("name"),
-        "purpose": label_system(system, lang),
+        "purpose": label_system(selected_system, lang),
+        "selected_for_system": selected_system,
         "phase": ex.get("phase"),
         "phase_label": label_phase(ex.get("phase"), lang),
         "primary_system": ex.get("primary_system"),
@@ -382,84 +500,47 @@ def format_exercise_for_program(ex: Dict[str, Any], order: int, system: str, lan
 def build_week_session(
     week: int,
     top_systems: List[str],
-    movement_scores: Dict[str, Dict[str, Any]],
     exercises: List[Dict[str, Any]],
     pain: Dict[str, str],
     lang: str,
 ) -> Dict[str, Any]:
-    cap = WEEK_CAPS.get(week, 6)
-    desired_phases = WEEK_PHASE_PLAN[week]
-
+    blueprint = WEEK_BLUEPRINTS[week]
     used_ids: Set[str] = set()
     used_names: Set[str] = set()
     selected: List[Dict[str, Any]] = []
 
-    # Weighted system rotation: highest priority gets more chances.
-    system_rotation: List[str] = []
-    if top_systems:
-        system_rotation.append(top_systems[0])
-    if len(top_systems) > 1:
-        system_rotation.append(top_systems[1])
-    if len(top_systems) > 2:
-        system_rotation.append(top_systems[2])
-    if top_systems:
-        system_rotation.append(top_systems[0])
-    if len(top_systems) > 3:
-        system_rotation.append(top_systems[3])
-    if len(top_systems) > 1:
-        system_rotation.append(top_systems[1])
-
-    # Ensure length matches phases
-    while len(system_rotation) < len(desired_phases):
-        system_rotation.append(top_systems[0] if top_systems else "FUNC")
-
-    for desired_phase, system in zip(desired_phases, system_rotation):
-        if len(selected) >= cap:
-            break
-
-        pain_status = system_pain_status(system, pain)
+    for slot in blueprint:
+        target_systems = slot_systems_from_priorities(slot, top_systems)
         chosen = find_best_exercise(
             exercises=exercises,
-            target_system=system,
-            desired_phase=desired_phase,
+            target_systems=target_systems,
+            desired_phase=slot["phase"],
             week=week,
-            pain_status=pain_status,
+            pain=pain,
             used_ids=used_ids,
             used_names=used_names,
         )
-
-        # Fallback: if target system has no exercise, try functional integration.
-        if chosen is None and system != "FUNC":
-            chosen = find_best_exercise(
-                exercises=exercises,
-                target_system="FUNC",
-                desired_phase=desired_phase,
-                week=week,
-                pain_status=pain_status,
-                used_ids=used_ids,
-                used_names=used_names,
-            )
 
         if chosen is None:
             continue
 
         used_ids.add(chosen["id"])
         used_names.add(chosen["name"])
-        selected.append(format_exercise_for_program(chosen, len(selected) + 1, system, lang))
+        selected.append(format_exercise_for_program(chosen, len(selected) + 1, lang))
 
     estimated_duration = sum(int(x.get("duration_minutes") or 2) for x in selected)
 
     theme_fr = [
-        "Reset + mobilité",
-        "Mobilité + contrôle moteur",
-        "Contrôle + stabilité",
-        "Stabilité + intégration fonctionnelle",
+        "Restaurer la respiration, la mobilité et les amplitudes de base",
+        "Contrôler la mobilité et stabiliser les positions",
+        "Renforcer le contrôle et stabiliser sous contrainte légère",
+        "Intégrer les acquis dans des mouvements fonctionnels",
     ][week - 1]
     theme_en = [
-        "Reset + mobility",
-        "Mobility + motor control",
-        "Control + stability",
-        "Stability + functional integration",
+        "Restore breathing, mobility and basic ranges",
+        "Control mobility and stabilize positions",
+        "Strengthen control and stabilize under light demand",
+        "Integrate gains into functional movement",
     ][week - 1]
 
     return {
@@ -468,7 +549,7 @@ def build_week_session(
         "theme_en": theme_en,
         "theme": theme_en if lang == "en" else theme_fr,
         "estimated_duration_minutes": estimated_duration,
-        "recommended_frequency_per_week": 3 if week >= 2 else 4,
+        "recommended_frequency_per_week": 4 if week == 1 else 3,
         "session_structure": [
             {
                 "order": x["order"],
@@ -489,13 +570,14 @@ def generate_program_from_report(
     exercise_library: Optional[Dict[str, Any]] = None,
     lang: str = "fr",
     pain_clearance: Optional[Dict[str, str]] = None,
-    max_priority_systems: int = 4,
+    max_priority_systems: int = 5,
 ) -> Dict[str, Any]:
     lang = normalize_lang(lang)
     library = exercise_library or load_exercise_library()
     exercises = library.get("exercises", [])
 
     rating_map = extract_rating_map(report)
+    root_causes = compute_root_cause_analysis(rating_map, lang=lang)
     movement_scores = compute_movement_system_scores(rating_map)
     pain = normalize_pain_clearance(pain_clearance)
 
@@ -515,7 +597,6 @@ def generate_program_from_report(
         build_week_session(
             week=week,
             top_systems=top_systems,
-            movement_scores=movement_scores,
             exercises=exercises,
             pain=pain,
             lang=lang,
@@ -537,9 +618,10 @@ def generate_program_from_report(
     ]
 
     return {
-        "engine_version": "FlexiLab Program Engine V2",
+        "engine_version": "FlexiLab Program Engine V3",
         "library_version": library.get("version"),
         "language": lang,
+        "root_cause_analysis": root_causes,
         "movement_system_scores": movement_scores,
         "top_priority_systems": [
             {
@@ -557,12 +639,12 @@ def generate_program_from_report(
         "safety_notes_fr": safety_notes_fr,
         "safety_notes_en": safety_notes_en,
         "safety_notes": safety_notes_en if lang == "en" else safety_notes_fr,
-        "progression_rule_fr": "Semaine 1 mobilité/reset, semaine 2 contrôle, semaine 3 stabilité, semaine 4 intégration. Re-tester après 4 semaines.",
-        "progression_rule_en": "Week 1 mobility/reset, week 2 control, week 3 stability, week 4 integration. Re-test after 4 weeks.",
+        "progression_rule_fr": "S1 restaurer, S2 contrôler, S3 stabiliser, S4 intégrer. Re-tester après 4 semaines.",
+        "progression_rule_en": "W1 restore, W2 control, W3 stabilize, W4 integrate. Re-test after 4 weeks.",
         "progression_rule": (
-            "Week 1 mobility/reset, week 2 control, week 3 stability, week 4 integration. Re-test after 4 weeks."
+            "W1 restore, W2 control, W3 stabilize, W4 integrate. Re-test after 4 weeks."
             if lang == "en"
-            else "Semaine 1 mobilité/reset, semaine 2 contrôle, semaine 3 stabilité, semaine 4 intégration. Re-tester après 4 semaines."
+            else "S1 restaurer, S2 contrôler, S3 stabiliser, S4 intégrer. Re-tester après 4 semaines."
         )
     }
 
@@ -576,10 +658,7 @@ def generate_program_from_ratings(
         "sections": [
             {
                 "id": "manual",
-                "items": [
-                    {"id": k, "rating": v}
-                    for k, v in ratings.items()
-                ]
+                "items": [{"id": k, "rating": v} for k, v in ratings.items()],
             }
         ]
     }
