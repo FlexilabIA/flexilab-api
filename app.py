@@ -342,7 +342,130 @@ def analyze_squat(xy, conf):
 
 
 
-def analyze_aslr(xy, conf, side="RIGHT"):
+
+def estimate_aslr_from_image_skin(img, xy, conf):
+    """
+    Computer-vision fallback for ASLR when YOLO keypoints fail in lying position.
+
+    It estimates the raised leg angle by looking for the highest visible skin region
+    above the pelvis, close to the pelvis x-axis. This is designed specifically for
+    ASLR photos where the raised leg is visible and near-vertical.
+    """
+    try:
+        if img is None:
+            return None
+
+        h, w = img.shape[:2]
+        L_HIP, R_HIP = 11, 12
+
+        # Prefer YOLO pelvis if available.
+        if float(conf[L_HIP]) > 0.05 and float(conf[R_HIP]) > 0.05:
+            pelvis = (xy[L_HIP] + xy[R_HIP]) / 2.0
+            pelvis_x, pelvis_y = float(pelvis[0]), float(pelvis[1])
+        else:
+            pelvis_x, pelvis_y = w * 0.50, h * 0.63
+
+        # Skin segmentation in YCrCb + HSV for indoor lighting.
+        ycrcb = cv2.cvtColor(img, cv2.COLOR_BGR2YCrCb)
+        lower_y = np.array([0, 133, 77], dtype=np.uint8)
+        upper_y = np.array([255, 183, 135], dtype=np.uint8)
+        mask_y = cv2.inRange(ycrcb, lower_y, upper_y)
+
+        hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+        lower_h = np.array([0, 20, 45], dtype=np.uint8)
+        upper_h = np.array([35, 255, 255], dtype=np.uint8)
+        mask_h1 = cv2.inRange(hsv, lower_h, upper_h)
+        lower_h2 = np.array([160, 20, 45], dtype=np.uint8)
+        upper_h2 = np.array([180, 255, 255], dtype=np.uint8)
+        mask_h2 = cv2.inRange(hsv, lower_h2, upper_h2)
+
+        mask = cv2.bitwise_and(mask_y, cv2.bitwise_or(mask_h1, mask_h2))
+
+        # Focus on likely raised-leg zone:
+        # above pelvis and not too far horizontally from pelvis.
+        x_margin = int(w * 0.30)
+        x1 = max(0, int(pelvis_x - x_margin))
+        x2 = min(w, int(pelvis_x + x_margin))
+        y1 = max(0, int(h * 0.05))
+        y2 = max(0, int(pelvis_y + h * 0.03))
+
+        roi = np.zeros_like(mask)
+        roi[y1:y2, x1:x2] = mask[y1:y2, x1:x2]
+
+        kernel = np.ones((7, 7), np.uint8)
+        roi = cv2.morphologyEx(roi, cv2.MORPH_OPEN, kernel, iterations=1)
+        roi = cv2.morphologyEx(roi, cv2.MORPH_CLOSE, kernel, iterations=2)
+
+        num, labels, stats, cent = cv2.connectedComponentsWithStats(roi, 8)
+        best = None
+
+        for i in range(1, num):
+            x, y, bw, bh, area = stats[i]
+            if area < max(150, h * w * 0.00015):
+                continue
+
+            cx, cy = cent[i]
+            if cy >= pelvis_y:
+                continue
+
+            # Prefer tall components above the pelvis and near pelvis x.
+            vertical_gain = pelvis_y - y
+            dist_x = abs(cx - pelvis_x)
+            elongation = bh / max(1, bw)
+            score = vertical_gain * 1.4 + area * 0.003 + elongation * 15 - dist_x * 0.45
+
+            if best is None or score > best["score"]:
+                best = {
+                    "score": score,
+                    "x": x, "y": y, "w": bw, "h": bh, "area": area,
+                    "cx": float(cx), "cy": float(cy)
+                }
+
+        if best is None:
+            return None
+
+        # Use the top-most skin point in the selected component as endpoint.
+        component_mask = (labels == np.argmax([
+            0 if i == 0 else (
+                (pelvis_y - stats[i][1]) * 1.4 + stats[i][4] * 0.003 + (stats[i][3] / max(1, stats[i][2])) * 15 - abs(cent[i][0] - pelvis_x) * 0.45
+                if stats[i][4] >= max(150, h*w*0.00015) and cent[i][1] < pelvis_y else -1e9
+            )
+            for i in range(num)
+        ])).astype(np.uint8)
+
+        ys, xs = np.where(component_mask > 0)
+        if len(xs) == 0:
+            return None
+
+        top_idx = int(np.argmin(ys))
+        end_x = float(xs[top_idx])
+        end_y = float(ys[top_idx])
+
+        dx = abs(end_x - pelvis_x)
+        dy_up = max(0.0, pelvis_y - end_y)
+        angle = math.degrees(math.atan2(dy_up, dx + 1e-6))
+        angle = max(0.0, min(90.0, float(angle)))
+
+        return {
+            "angle": round(angle, 2),
+            "method": "skin_fallback_highest_component",
+            "pelvis_x": round(pelvis_x, 1),
+            "pelvis_y": round(pelvis_y, 1),
+            "endpoint_x": round(end_x, 1),
+            "endpoint_y": round(end_y, 1),
+            "component_area": int(best["area"]),
+            "component_height": int(best["h"]),
+            "component_width": int(best["w"])
+        }
+
+    except Exception as e:
+        return {
+            "angle": None,
+            "method": "skin_fallback_failed",
+            "error": str(e)
+        }
+
+def analyze_aslr(xy, conf, side="RIGHT", img=None):
     """
     Active Straight Leg Raise (ASLR) analysis — V15.2 endpoint-elevation fix.
 
@@ -464,6 +587,16 @@ def analyze_aslr(xy, conf, side="RIGHT"):
 
     aslr_angle = max(0.0, min(90.0, float(aslr_angle)))
 
+    # V15.3 fallback: if YOLO endpoint logic gives a low angle but the image clearly
+    # contains a raised leg, use a skin/shape-based estimate as rescue.
+    image_fallback = None
+    if img is not None and aslr_angle < 55:
+        image_fallback = estimate_aslr_from_image_skin(img, xy, conf)
+        if isinstance(image_fallback, dict) and image_fallback.get("angle") is not None:
+            if float(image_fallback["angle"]) > aslr_angle + 12:
+                diagnostic_flags.append("image_skin_fallback_used")
+                aslr_angle = float(image_fallback["angle"])
+
     if aslr_angle < 45:
         score = 40.0
     elif aslr_angle < 70:
@@ -509,6 +642,7 @@ def analyze_aslr(xy, conf, side="RIGHT"):
             "diagnostic_flags": diagnostic_flags,
             "selected_endpoint": selected["label"] if selected is not None else None,
             "selected_endpoint_confidence": round(selected_conf, 3),
+            "image_fallback": image_fallback,
             "candidate_angles": [
                 {
                     "label": c["label"],
@@ -688,10 +822,10 @@ async def analyze(
         result = analyze_squat(xy, conf)
         session_update = {"squat_score": result["score"]}
     elif test_type == "aslr_right":
-        result = analyze_aslr(xy, conf, "RIGHT")
+        result = analyze_aslr(xy, conf, "RIGHT", img)
         session_update = {"aslr_right_score": result["score"]}
     elif test_type == "aslr_left":
-        result = analyze_aslr(xy, conf, "LEFT")
+        result = analyze_aslr(xy, conf, "LEFT", img)
         session_update = {"aslr_left_score": result["score"]}
     else:
         return {"error": "Invalid test_type"}
@@ -821,11 +955,11 @@ def run_yolo_analysis_from_bytes(img_bytes, test_type):
         session_update = {"squat_score": result["score"]}
 
     elif test_type == "aslr_right":
-        result = analyze_aslr(xy, conf, "RIGHT")
+        result = analyze_aslr(xy, conf, "RIGHT", img)
         session_update = {"aslr_right_score": result["score"]}
 
     elif test_type == "aslr_left":
-        result = analyze_aslr(xy, conf, "LEFT")
+        result = analyze_aslr(xy, conf, "LEFT", img)
         session_update = {"aslr_left_score": result["score"]}
 
     else:
