@@ -8,7 +8,10 @@ import json
 import base64
 from datetime import datetime, timezone
 from program_engine import generate_program_from_report
-from engines.prescription_engine import generate_prescription
+try:
+    from engines.prescription_engine import generate_prescription
+except ModuleNotFoundError:
+    from prescription_engine import generate_prescription
 
 os.environ["YOLO_CONFIG_DIR"] = "/tmp/Ultralytics"
 
@@ -21,6 +24,20 @@ SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY")
 supabase = None
 if SUPABASE_URL and SUPABASE_SERVICE_KEY:
     supabase = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+
+
+def prescription_library_path():
+    """Return the first valid location for the prescription exercise library."""
+    candidates = [
+        "data/exercise_knowledge_base_v1.json",
+        "exercise_knowledge_base_v1.json",
+        "./data/exercise_knowledge_base_v1.json",
+        "./exercise_knowledge_base_v1.json",
+    ]
+    for p in candidates:
+        if os.path.exists(p):
+            return p
+    return "data/exercise_knowledge_base_v1.json"
 
 app = FastAPI()
 app.add_middleware(
@@ -1597,7 +1614,7 @@ def program(session_id: str, lang: str = "fr"):
         prescription_data = generate_prescription(
             findings=program_data.get("root_cause_analysis", []),
             pain_clearance=None,
-            library_path="data/exercise_knowledge_base_v1.json",
+            library_path=prescription_library_path(),
             client_name="",
             score=report_data.get("flexilab_score")
         )
