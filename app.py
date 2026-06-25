@@ -7,6 +7,7 @@ import os
 import json
 import base64
 from datetime import datetime, timezone
+from program_engine import generate_program_from_report
 
 os.environ["YOLO_CONFIG_DIR"] = "/tmp/Ultralytics"
 
@@ -1295,3 +1296,32 @@ def report(session_id: str, lang: str = "fr"):
         "next_step": txt("Refais le screening dans 14 jours pour vérifier l'évolution.", "Repeat the screening in 14 days to check progress."),
         "debug": {"tests_found": tests_found}
     }
+
+@app.get("/program")
+def program(session_id: str, lang: str = "fr"):
+    """
+    Generate a FlexiLab 4-week corrective program from an existing screening session.
+
+    Flow:
+    1. Reuse the existing /report logic.
+    2. Convert screening findings into movement-system priorities.
+    3. Read exercise_library.json through program_engine.py.
+    4. Return a structured 4-week corrective program.
+    """
+    report_data = report(session_id=session_id, lang=lang)
+
+    if isinstance(report_data, dict) and report_data.get("error"):
+        return report_data
+
+    program_data = generate_program_from_report(
+        report=report_data,
+        lang=lang
+    )
+
+    return {
+        "session_id": session_id,
+        "language": lang,
+        "report": report_data,
+        "program": program_data
+    }
+
