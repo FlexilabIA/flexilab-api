@@ -1,7 +1,7 @@
 {
   "library_name": "FlexiLab Exercise Knowledge Base",
-  "version": "V1.0-core-60",
-  "scope": "Corrective exercise prescription for FlexiLab AI Screening: posture, shoulder mobility, deep squat, ASLR, and related movement-system priorities.",
+  "version": "V2.0-knowledge-base-140",
+  "scope": "Corrective exercise prescription for FlexiLab AI Screening and future movement tests.",
   "safety_note": "Educational movement-quality support only. Stop and refer to a qualified clinician if pain, neurological symptoms, recent trauma, unexplained weakness, dizziness, numbness, or medical red flags are present.",
   "taxonomy": {
     "systems": {
@@ -33,36 +33,120 @@
       "4": "Advanced",
       "5": "Athlete"
     },
-    "equipment": [
-      "none",
-      "foam_roller",
-      "massage_ball",
-      "elastic_band",
-      "mini_band",
-      "wall",
-      "chair",
-      "stick",
-      "dumbbell",
-      "kettlebell"
+    "movement_goal_examples": [
+      "active_hip_flexion",
+      "active_hip_rotation",
+      "adductor_mobility",
+      "ankle_dorsiflexion",
+      "anti_extension_control",
+      "anti_lateral_flexion",
+      "anti_rotation_control",
+      "aslr_control",
+      "balance",
+      "breathing",
+      "calf_mobility",
+      "calf_relaxation",
+      "cervical_alignment",
+      "cervical_retraction",
+      "cervical_rotation_control",
+      "cross_body_control",
+      "cross_body_integration",
+      "deep_neck_extensor_control",
+      "deep_neck_flexor_activation",
+      "desk_posture",
+      "diaphragmatic_breathing",
+      "gait_control",
+      "hamstring_mobility",
+      "hip_abduction",
+      "hip_abductor_control",
+      "hip_abductor_strength",
+      "hip_ankle_mobility",
+      "hip_extension",
+      "hip_external_rotation",
+      "hip_flexion",
+      "hip_flexion_control",
+      "hip_hinge",
+      "hip_hinge_strength",
+      "hip_internal_rotation",
+      "hip_mobility",
+      "hip_relaxation",
+      "hip_stability",
+      "knee_tracking",
+      "lat_mobility",
+      "lat_relaxation",
+      "lateral_core_stability",
+      "lateral_core_strength",
+      "lower_trap_activation",
+      "lumbo_pelvic_control",
+      "lunge_control",
+      "overhead_pattern",
+      "overhead_readiness",
+      "pec_mobility",
+      "pec_relaxation",
+      "pelvic_awareness",
+      "pelvic_control",
+      "pelvic_stability",
+      "posterior_chain_control",
+      "posterior_chain_integration",
+      "posterior_chain_length",
+      "posterior_chain_mobility",
+      "posterior_pelvic_control",
+      "posterior_shoulder_mobility",
+      "postural_control",
+      "postural_endurance",
+      "rib_cage_control",
+      "rib_cage_mobility",
+      "rotator_cuff_control",
+      "scapular_control",
+      "scapular_protraction",
+      "scapular_retraction",
+      "scapular_upward_rotation",
+      "serratus_activation",
+      "shoulder_extension",
+      "shoulder_flexion",
+      "shoulder_internal_rotation",
+      "shoulder_opening",
+      "shoulder_stability",
+      "single_leg_control",
+      "single_leg_hinge",
+      "single_leg_strength",
+      "spinal_alignment",
+      "spinal_control",
+      "spinal_segmentation",
+      "split_stance_control",
+      "squat_depth",
+      "squat_pattern",
+      "squat_strength",
+      "suboccipital_relaxation",
+      "thoracic_control",
+      "thoracic_expansion",
+      "thoracic_extension",
+      "thoracic_extension_endurance",
+      "thoracic_relaxation",
+      "thoracic_rotation",
+      "trunk_control",
+      "trunk_stability"
     ],
     "pain_rule": {
       "no_pain": "Normal corrective progression allowed.",
       "discomfort": "Keep low intensity, use mobility/control only, monitor response.",
-      "pain": "Do not prescribe progressive/loading exercises for that pattern; provide gentle reset only and referral message."
+      "pain": "Do not prescribe progressive/loading exercises; provide gentle reset/mobility only and referral message."
     }
   },
   "exercise_fields": [
     "id",
     "name",
+    "description",
     "primary_system",
     "secondary_systems",
     "phase",
     "difficulty",
     "equipment",
+    "movement_goals",
+    "movement_pattern",
+    "movement_plane",
     "corrects",
     "screening_triggers",
-    "instructions",
-    "common_errors",
     "sets",
     "reps",
     "hold",
@@ -74,6 +158,10 @@
     "regression_id",
     "progression_id",
     "contraindications",
+    "pain_rules",
+    "coaching_cues",
+    "common_errors",
+    "expected_improvement",
     "video_url",
     "thumbnail_url",
     "tags"
@@ -82,6 +170,7 @@
     {
       "id": "REC001",
       "name": "90/90 Breathing Feet on Wall",
+      "description": "Supine breathing reset with feet on wall.",
       "primary_system": "REC",
       "secondary_systems": [
         "CORE",
@@ -92,17 +181,22 @@
       "equipment": [
         "wall"
       ],
+      "movement_goals": [
+        "diaphragmatic_breathing",
+        "rib_cage_control",
+        "posterior_pelvic_control"
+      ],
+      "movement_pattern": "breathing",
+      "movement_plane": "global",
       "corrects": [
         "rib flare",
         "lumbar extension",
-        "poor breathing control"
+        "poor breathing"
       ],
       "screening_triggers": [
         "posture_side",
         "squat"
       ],
-      "instructions": "Lie on your back with feet on wall, knees bent, breathe slowly through the nose and exhale fully.",
-      "common_errors": "Arching lower back; holding breath; pushing hard into the wall.",
       "sets": "2",
       "reps": "",
       "hold": "60 sec",
@@ -112,12 +206,25 @@
       "week_start": 1,
       "week_end": 4,
       "regression_id": "",
-      "progression_id": "",
+      "progression_id": "CORE001",
       "contraindications": [
-        "pain",
-        "acute injury",
+        "acute pain",
+        "recent trauma",
+        "neurological symptoms",
         "medical red flags"
       ],
+      "pain_rules": {
+        "no_pain": "normal progression allowed",
+        "discomfort": "reduce range and intensity",
+        "pain": "stop exercise and use easier reset/mobility option"
+      },
+      "coaching_cues": [
+        "Exhale fully",
+        "Keep ribs down",
+        "Relax neck"
+      ],
+      "common_errors": "Arching lower back; pushing hard into wall",
+      "expected_improvement": "Improve rib cage and pelvic control.",
       "video_url": "",
       "thumbnail_url": "",
       "tags": [
@@ -128,6 +235,7 @@
     {
       "id": "REC002",
       "name": "Crocodile Breathing",
+      "description": "Corrective exercise targeting diaphragmatic_breathing, thoracic_expansion.",
       "primary_system": "REC",
       "secondary_systems": [
         "THOR",
@@ -138,18 +246,21 @@
       "equipment": [
         "none"
       ],
+      "movement_goals": [
+        "diaphragmatic_breathing",
+        "thoracic_expansion"
+      ],
+      "movement_pattern": "breathing",
+      "movement_plane": "global",
       "corrects": [
         "neck tension",
-        "thoracic stiffness",
-        "breath holding"
+        "thoracic stiffness"
       ],
       "screening_triggers": [
         "posture_side",
         "shoulder_right",
         "shoulder_left"
       ],
-      "instructions": "Lie face down, forehead on hands, breathe into abdomen and ribs without lifting shoulders.",
-      "common_errors": "Shrugging shoulders; forcing inhalation; neck tension.",
       "sets": "2",
       "reps": "",
       "hold": "60 sec",
@@ -159,12 +270,24 @@
       "week_start": 1,
       "week_end": 4,
       "regression_id": "",
-      "progression_id": "",
+      "progression_id": "THOR001",
       "contraindications": [
-        "pain",
-        "acute injury",
+        "acute pain",
+        "recent trauma",
+        "neurological symptoms",
         "medical red flags"
       ],
+      "pain_rules": {
+        "no_pain": "normal progression allowed",
+        "discomfort": "reduce range and intensity",
+        "pain": "stop exercise and use easier reset/mobility option"
+      },
+      "coaching_cues": [
+        "Breathe into abdomen and ribs",
+        "Keep shoulders relaxed"
+      ],
+      "common_errors": "Shrugging shoulders; forcing inhalation",
+      "expected_improvement": "Improve breathing mechanics and thoracic relaxation.",
       "video_url": "",
       "thumbnail_url": "",
       "tags": [
@@ -175,6 +298,7 @@
     {
       "id": "REC003",
       "name": "Child's Pose Breathing",
+      "description": "Corrective exercise targeting lat_relaxation, thoracic_expansion, shoulder_flexion.",
       "primary_system": "REC",
       "secondary_systems": [
         "THOR",
@@ -185,17 +309,21 @@
       "equipment": [
         "none"
       ],
+      "movement_goals": [
+        "lat_relaxation",
+        "thoracic_expansion",
+        "shoulder_flexion"
+      ],
+      "movement_pattern": "breathing_mobility",
+      "movement_plane": "sagittal",
       "corrects": [
         "lat stiffness",
-        "thoracic stiffness",
-        "shoulder limitation"
+        "thoracic stiffness"
       ],
       "screening_triggers": [
         "shoulder_right",
         "shoulder_left"
       ],
-      "instructions": "Sit hips toward heels, arms forward, breathe into upper back and ribs.",
-      "common_errors": "Knee pain; forcing shoulders; breath holding.",
       "sets": "2",
       "reps": "",
       "hold": "45 sec",
@@ -205,23 +333,35 @@
       "week_start": 1,
       "week_end": 4,
       "regression_id": "",
-      "progression_id": "",
+      "progression_id": "SHLD001",
       "contraindications": [
-        "pain",
-        "acute injury",
+        "acute pain",
+        "recent trauma",
+        "neurological symptoms",
         "medical red flags"
       ],
+      "pain_rules": {
+        "no_pain": "normal progression allowed",
+        "discomfort": "reduce range and intensity",
+        "pain": "stop exercise and use easier reset/mobility option"
+      },
+      "coaching_cues": [
+        "Breathe into upper back",
+        "Keep stretch mild"
+      ],
+      "common_errors": "Forcing shoulders; knee discomfort",
+      "expected_improvement": "Reduce lat tone and improve overhead readiness.",
       "video_url": "",
       "thumbnail_url": "",
       "tags": [
-        "recovery",
         "lat",
-        "thoracic"
+        "recovery"
       ]
     },
     {
       "id": "REC004",
       "name": "Foam Roller Thoracic Relaxation",
+      "description": "Corrective exercise targeting thoracic_relaxation, thoracic_extension.",
       "primary_system": "REC",
       "secondary_systems": [
         "THOR"
@@ -231,6 +371,12 @@
       "equipment": [
         "foam_roller"
       ],
+      "movement_goals": [
+        "thoracic_relaxation",
+        "thoracic_extension"
+      ],
+      "movement_pattern": "soft_tissue",
+      "movement_plane": "sagittal",
       "corrects": [
         "thoracic stiffness",
         "desk posture"
@@ -240,8 +386,6 @@
         "shoulder_right",
         "shoulder_left"
       ],
-      "instructions": "Lie with foam roller across upper back, relax and breathe for short intervals.",
-      "common_errors": "Rolling on neck; excessive lumbar arch; pain.",
       "sets": "2",
       "reps": "",
       "hold": "45 sec",
@@ -251,22 +395,35 @@
       "week_start": 1,
       "week_end": 4,
       "regression_id": "",
-      "progression_id": "",
+      "progression_id": "THOR001",
       "contraindications": [
-        "pain",
-        "acute injury",
+        "acute pain",
+        "recent trauma",
+        "neurological symptoms",
         "medical red flags"
       ],
+      "pain_rules": {
+        "no_pain": "normal progression allowed",
+        "discomfort": "reduce range and intensity",
+        "pain": "stop exercise and use easier reset/mobility option"
+      },
+      "coaching_cues": [
+        "Support head",
+        "Breathe slowly"
+      ],
+      "common_errors": "Rolling on neck; lumbar arching",
+      "expected_improvement": "Reduce thoracic stiffness.",
       "video_url": "",
       "thumbnail_url": "",
       "tags": [
         "foam_roller",
-        "recovery"
+        "thoracic"
       ]
     },
     {
       "id": "REC005",
       "name": "Massage Ball Pec Release",
+      "description": "Corrective exercise targeting pec_relaxation, shoulder_opening.",
       "primary_system": "REC",
       "secondary_systems": [
         "SHLD",
@@ -278,18 +435,21 @@
         "massage_ball",
         "wall"
       ],
+      "movement_goals": [
+        "pec_relaxation",
+        "shoulder_opening"
+      ],
+      "movement_pattern": "soft_tissue",
+      "movement_plane": "frontal",
       "corrects": [
         "pec tightness",
-        "rounded shoulders",
-        "limited shoulder flexion"
+        "rounded shoulders"
       ],
       "screening_triggers": [
+        "posture_side",
         "shoulder_right",
-        "shoulder_left",
-        "posture_side"
+        "shoulder_left"
       ],
-      "instructions": "Place ball between chest and wall, breathe and move slowly around tender areas.",
-      "common_errors": "Pressing too hard; numbness or tingling; shoulder pain.",
       "sets": "1",
       "reps": "",
       "hold": "60 sec / side",
@@ -299,12 +459,24 @@
       "week_start": 1,
       "week_end": 4,
       "regression_id": "",
-      "progression_id": "",
+      "progression_id": "SHLD003",
       "contraindications": [
-        "pain",
-        "acute injury",
+        "acute pain",
+        "recent trauma",
+        "neurological symptoms",
         "medical red flags"
       ],
+      "pain_rules": {
+        "no_pain": "normal progression allowed",
+        "discomfort": "reduce range and intensity",
+        "pain": "stop exercise and use easier reset/mobility option"
+      },
+      "coaching_cues": [
+        "Use mild pressure",
+        "Avoid numbness"
+      ],
+      "common_errors": "Pressing too hard; shoulder pinching",
+      "expected_improvement": "Improve anterior shoulder mobility.",
       "video_url": "",
       "thumbnail_url": "",
       "tags": [
@@ -315,6 +487,7 @@
     {
       "id": "REC006",
       "name": "Massage Ball Glute Release",
+      "description": "Corrective exercise targeting hip_relaxation, pelvic_control.",
       "primary_system": "REC",
       "secondary_systems": [
         "HIP",
@@ -325,6 +498,12 @@
       "equipment": [
         "massage_ball"
       ],
+      "movement_goals": [
+        "hip_relaxation",
+        "pelvic_control"
+      ],
+      "movement_pattern": "soft_tissue",
+      "movement_plane": "global",
       "corrects": [
         "hip stiffness",
         "pelvic control limitation"
@@ -334,8 +513,6 @@
         "aslr_right",
         "aslr_left"
       ],
-      "instructions": "Sit on ball over glute area and move gently, avoiding sharp pain.",
-      "common_errors": "Rolling on bone; excessive pressure; nerve symptoms.",
       "sets": "1",
       "reps": "",
       "hold": "60 sec / side",
@@ -345,22 +522,35 @@
       "week_start": 1,
       "week_end": 4,
       "regression_id": "",
-      "progression_id": "",
+      "progression_id": "HIP001",
       "contraindications": [
-        "pain",
-        "acute injury",
+        "acute pain",
+        "recent trauma",
+        "neurological symptoms",
         "medical red flags"
       ],
+      "pain_rules": {
+        "no_pain": "normal progression allowed",
+        "discomfort": "reduce range and intensity",
+        "pain": "stop exercise and use easier reset/mobility option"
+      },
+      "coaching_cues": [
+        "Slow pressure",
+        "Avoid nerve symptoms"
+      ],
+      "common_errors": "Rolling on bone; excessive pressure",
+      "expected_improvement": "Improve hip comfort and mobility readiness.",
       "video_url": "",
       "thumbnail_url": "",
       "tags": [
-        "massage_ball",
-        "hip"
+        "hip",
+        "massage_ball"
       ]
     },
     {
       "id": "REC007",
       "name": "Calf Foam Roll",
+      "description": "Corrective exercise targeting calf_relaxation, ankle_dorsiflexion.",
       "primary_system": "REC",
       "secondary_systems": [
         "ANKL",
@@ -371,6 +561,12 @@
       "equipment": [
         "foam_roller"
       ],
+      "movement_goals": [
+        "calf_relaxation",
+        "ankle_dorsiflexion"
+      ],
+      "movement_pattern": "soft_tissue",
+      "movement_plane": "sagittal",
       "corrects": [
         "limited ankle dorsiflexion",
         "heel lift"
@@ -378,8 +574,6 @@
       "screening_triggers": [
         "squat"
       ],
-      "instructions": "Roll calf slowly, pausing on tight areas while breathing.",
-      "common_errors": "Fast rolling; numbness; excessive pressure.",
       "sets": "1",
       "reps": "",
       "hold": "60 sec / side",
@@ -389,22 +583,35 @@
       "week_start": 1,
       "week_end": 4,
       "regression_id": "",
-      "progression_id": "",
+      "progression_id": "ANKL001",
       "contraindications": [
-        "pain",
-        "acute injury",
+        "acute pain",
+        "recent trauma",
+        "neurological symptoms",
         "medical red flags"
       ],
+      "pain_rules": {
+        "no_pain": "normal progression allowed",
+        "discomfort": "reduce range and intensity",
+        "pain": "stop exercise and use easier reset/mobility option"
+      },
+      "coaching_cues": [
+        "Move slowly",
+        "Pause on tight areas"
+      ],
+      "common_errors": "Fast rolling; numbness",
+      "expected_improvement": "Prepare ankle mobility work.",
       "video_url": "",
       "thumbnail_url": "",
       "tags": [
-        "foam_roller",
+        "calf",
         "ankle"
       ]
     },
     {
       "id": "REC008",
       "name": "Lat Foam Roll",
+      "description": "Corrective exercise targeting lat_relaxation, shoulder_flexion.",
       "primary_system": "REC",
       "secondary_systems": [
         "SHLD",
@@ -415,6 +622,12 @@
       "equipment": [
         "foam_roller"
       ],
+      "movement_goals": [
+        "lat_relaxation",
+        "shoulder_flexion"
+      ],
+      "movement_pattern": "soft_tissue",
+      "movement_plane": "sagittal",
       "corrects": [
         "lat stiffness",
         "limited overhead reach"
@@ -423,8 +636,6 @@
         "shoulder_right",
         "shoulder_left"
       ],
-      "instructions": "Lie on side with roller under lat, move slowly and breathe.",
-      "common_errors": "Rolling into armpit aggressively; shoulder pinching.",
       "sets": "1",
       "reps": "",
       "hold": "45 sec / side",
@@ -434,484 +645,184 @@
       "week_start": 1,
       "week_end": 4,
       "regression_id": "",
-      "progression_id": "",
+      "progression_id": "SHLD001",
       "contraindications": [
-        "pain",
-        "acute injury",
+        "acute pain",
+        "recent trauma",
+        "neurological symptoms",
         "medical red flags"
       ],
+      "pain_rules": {
+        "no_pain": "normal progression allowed",
+        "discomfort": "reduce range and intensity",
+        "pain": "stop exercise and use easier reset/mobility option"
+      },
+      "coaching_cues": [
+        "Breathe into side ribs",
+        "Avoid armpit pressure"
+      ],
+      "common_errors": "Aggressive rolling; shoulder pinching",
+      "expected_improvement": "Improve overhead mobility readiness.",
       "video_url": "",
       "thumbnail_url": "",
       "tags": [
-        "foam_roller",
-        "lat"
+        "lat",
+        "foam_roller"
       ]
     },
     {
-      "id": "CERV001",
-      "name": "Chin Tuck Supine",
-      "primary_system": "CERV",
+      "id": "REC009",
+      "name": "Suboccipital Ball Release",
+      "description": "Corrective exercise targeting suboccipital_relaxation, cervical_alignment.",
+      "primary_system": "REC",
       "secondary_systems": [
-        "THOR"
+        "CERV"
       ],
-      "phase": "3_motor_control",
+      "phase": "1_release_recovery",
       "difficulty": 1,
       "equipment": [
-        "none"
+        "massage_ball"
       ],
+      "movement_goals": [
+        "suboccipital_relaxation",
+        "cervical_alignment"
+      ],
+      "movement_pattern": "soft_tissue",
+      "movement_plane": "sagittal",
       "corrects": [
         "forward head",
-        "cervical alignment"
+        "neck tension"
       ],
       "screening_triggers": [
         "posture_side"
       ],
-      "instructions": "Lie on back and gently draw chin inward as if making a double chin, then relax.",
-      "common_errors": "Lifting head; forcing range; holding breath.",
-      "sets": "2",
-      "reps": "8",
-      "hold": "2 sec",
+      "sets": "1",
+      "reps": "",
+      "hold": "45 sec",
       "tempo": "controlled",
-      "frequency_per_week": "4",
+      "frequency_per_week": "3",
       "duration_minutes": 2,
       "week_start": 1,
       "week_end": 4,
       "regression_id": "",
-      "progression_id": "CERV002",
+      "progression_id": "CERV001",
       "contraindications": [
-        "pain",
-        "acute injury",
+        "acute pain",
+        "recent trauma",
+        "neurological symptoms",
         "medical red flags"
       ],
+      "pain_rules": {
+        "no_pain": "normal progression allowed",
+        "discomfort": "reduce range and intensity",
+        "pain": "stop exercise and use easier reset/mobility option"
+      },
+      "coaching_cues": [
+        "Small nodding motion",
+        "Stay gentle"
+      ],
+      "common_errors": "Too much pressure; dizziness",
+      "expected_improvement": "Reduce upper neck tone.",
       "video_url": "",
       "thumbnail_url": "",
       "tags": [
         "neck",
-        "motor_control"
+        "massage_ball"
       ]
     },
     {
-      "id": "CERV002",
-      "name": "Wall Chin Tuck",
-      "primary_system": "CERV",
+      "id": "REC010",
+      "name": "Quadruped Rock-Back Breathing",
+      "description": "Corrective exercise targeting breathing, hip_flexion, spinal_control.",
+      "primary_system": "REC",
       "secondary_systems": [
-        "THOR"
-      ],
-      "phase": "3_motor_control",
-      "difficulty": 2,
-      "equipment": [
-        "wall"
-      ],
-      "corrects": [
-        "forward head",
-        "desk posture"
-      ],
-      "screening_triggers": [
-        "posture_side"
-      ],
-      "instructions": "Stand against wall, gently tuck chin while keeping back of head long.",
-      "common_errors": "Tilting head down; rib flare; pushing too hard.",
-      "sets": "2",
-      "reps": "8",
-      "hold": "3 sec",
-      "tempo": "controlled",
-      "frequency_per_week": "4",
-      "duration_minutes": 2,
-      "week_start": 1,
-      "week_end": 4,
-      "regression_id": "CERV001",
-      "progression_id": "CERV003",
-      "contraindications": [
-        "pain",
-        "acute injury",
-        "medical red flags"
-      ],
-      "video_url": "",
-      "thumbnail_url": "",
-      "tags": [
-        "neck",
-        "wall"
-      ]
-    },
-    {
-      "id": "CERV003",
-      "name": "Wall Posture Hold",
-      "primary_system": "CERV",
-      "secondary_systems": [
+        "HIP",
         "THOR",
         "CORE"
       ],
-      "phase": "4_stability",
-      "difficulty": 2,
+      "phase": "1_release_recovery",
+      "difficulty": 1,
       "equipment": [
-        "wall"
+        "none"
       ],
+      "movement_goals": [
+        "breathing",
+        "hip_flexion",
+        "spinal_control"
+      ],
+      "movement_pattern": "reset_mobility",
+      "movement_plane": "sagittal",
       "corrects": [
-        "forward head",
-        "thoracic posture"
+        "hip stiffness",
+        "thoracic stiffness"
       ],
       "screening_triggers": [
-        "posture_side"
+        "squat",
+        "aslr_right",
+        "aslr_left"
       ],
-      "instructions": "Stand tall against wall, ribs down, chin neutral, breathe calmly.",
-      "common_errors": "Overarching lower back; shrugging; holding breath.",
-      "sets": "3",
-      "reps": "",
-      "hold": "20 sec",
+      "sets": "2",
+      "reps": "8",
+      "hold": "",
       "tempo": "controlled",
       "frequency_per_week": "3",
       "duration_minutes": 2,
       "week_start": 1,
       "week_end": 4,
-      "regression_id": "CERV002",
-      "progression_id": "",
+      "regression_id": "",
+      "progression_id": "HIP002",
       "contraindications": [
-        "pain",
-        "acute injury",
+        "acute pain",
+        "recent trauma",
+        "neurological symptoms",
         "medical red flags"
       ],
+      "pain_rules": {
+        "no_pain": "normal progression allowed",
+        "discomfort": "reduce range and intensity",
+        "pain": "stop exercise and use easier reset/mobility option"
+      },
+      "coaching_cues": [
+        "Long spine",
+        "Exhale as hips move back"
+      ],
+      "common_errors": "Rounding excessively; forcing range",
+      "expected_improvement": "Improve hip and spine coordination.",
       "video_url": "",
       "thumbnail_url": "",
       "tags": [
-        "posture",
-        "stability"
+        "reset",
+        "hip"
       ]
     },
     {
-      "id": "CERV004",
-      "name": "Seated Neck Rotation Control",
-      "primary_system": "CERV",
+      "id": "REC011",
+      "name": "Wall Lat Breathing",
+      "description": "Corrective exercise targeting lat_relaxation, thoracic_expansion.",
+      "primary_system": "REC",
       "secondary_systems": [
+        "SHLD",
         "THOR"
       ],
-      "phase": "3_motor_control",
+      "phase": "1_release_recovery",
       "difficulty": 1,
-      "equipment": [
-        "chair"
-      ],
-      "corrects": [
-        "neck stiffness",
-        "poor cervical control"
-      ],
-      "screening_triggers": [
-        "posture_side"
-      ],
-      "instructions": "Sit tall and rotate head slowly left and right without shoulder movement.",
-      "common_errors": "Moving trunk; forcing end range; pain.",
-      "sets": "2",
-      "reps": "5 / side",
-      "hold": "",
-      "tempo": "controlled",
-      "frequency_per_week": "3",
-      "duration_minutes": 2,
-      "week_start": 1,
-      "week_end": 4,
-      "regression_id": "",
-      "progression_id": "",
-      "contraindications": [
-        "pain",
-        "acute injury",
-        "medical red flags"
-      ],
-      "video_url": "",
-      "thumbnail_url": "",
-      "tags": [
-        "neck",
-        "rotation"
-      ]
-    },
-    {
-      "id": "THOR001",
-      "name": "Foam Roller Thoracic Extension",
-      "primary_system": "THOR",
-      "secondary_systems": [
-        "SHLD"
-      ],
-      "phase": "2_mobility",
-      "difficulty": 1,
-      "equipment": [
-        "foam_roller"
-      ],
-      "corrects": [
-        "thoracic stiffness",
-        "limited overhead reach",
-        "forward posture"
-      ],
-      "screening_triggers": [
-        "posture_side",
-        "shoulder_right",
-        "shoulder_left"
-      ],
-      "instructions": "Place roller under upper back, support head, extend gently over roller and return.",
-      "common_errors": "Arching from lower back; pulling neck; pain.",
-      "sets": "2",
-      "reps": "6-8",
-      "hold": "2 sec",
-      "tempo": "controlled",
-      "frequency_per_week": "3",
-      "duration_minutes": 2,
-      "week_start": 1,
-      "week_end": 4,
-      "regression_id": "",
-      "progression_id": "THOR002",
-      "contraindications": [
-        "pain",
-        "acute injury",
-        "medical red flags"
-      ],
-      "video_url": "",
-      "thumbnail_url": "",
-      "tags": [
-        "foam_roller",
-        "thoracic_extension"
-      ]
-    },
-    {
-      "id": "THOR002",
-      "name": "Side-Lying Open Book",
-      "primary_system": "THOR",
-      "secondary_systems": [
-        "SHLD"
-      ],
-      "phase": "2_mobility",
-      "difficulty": 1,
-      "equipment": [
-        "none"
-      ],
-      "corrects": [
-        "thoracic rotation limitation",
-        "shoulder mobility"
-      ],
-      "screening_triggers": [
-        "shoulder_right",
-        "shoulder_left",
-        "posture_side"
-      ],
-      "instructions": "Lie on side with knees bent, rotate top arm open while knees stay stacked.",
-      "common_errors": "Forcing shoulder to floor; knees separating; neck tension.",
-      "sets": "2",
-      "reps": "6 / side",
-      "hold": "",
-      "tempo": "controlled",
-      "frequency_per_week": "3",
-      "duration_minutes": 2,
-      "week_start": 1,
-      "week_end": 4,
-      "regression_id": "REC003",
-      "progression_id": "THOR003",
-      "contraindications": [
-        "pain",
-        "acute injury",
-        "medical red flags"
-      ],
-      "video_url": "",
-      "thumbnail_url": "",
-      "tags": [
-        "rotation",
-        "mobility"
-      ]
-    },
-    {
-      "id": "THOR003",
-      "name": "Quadruped Thread the Needle",
-      "primary_system": "THOR",
-      "secondary_systems": [
-        "SCAP"
-      ],
-      "phase": "2_mobility",
-      "difficulty": 2,
-      "equipment": [
-        "none"
-      ],
-      "corrects": [
-        "thoracic rotation",
-        "scapular control"
-      ],
-      "screening_triggers": [
-        "shoulder_right",
-        "shoulder_left"
-      ],
-      "instructions": "From quadruped, reach one arm under body then rotate open.",
-      "common_errors": "Moving hips excessively; collapsing shoulder; breath holding.",
-      "sets": "2",
-      "reps": "6 / side",
-      "hold": "",
-      "tempo": "controlled",
-      "frequency_per_week": "3",
-      "duration_minutes": 2,
-      "week_start": 1,
-      "week_end": 4,
-      "regression_id": "THOR002",
-      "progression_id": "THOR004",
-      "contraindications": [
-        "pain",
-        "acute injury",
-        "medical red flags"
-      ],
-      "video_url": "",
-      "thumbnail_url": "",
-      "tags": [
-        "rotation",
-        "quadruped"
-      ]
-    },
-    {
-      "id": "THOR004",
-      "name": "Wall Thoracic Rotation",
-      "primary_system": "THOR",
-      "secondary_systems": [
-        "SHLD"
-      ],
-      "phase": "2_mobility",
-      "difficulty": 2,
       "equipment": [
         "wall"
       ],
+      "movement_goals": [
+        "lat_relaxation",
+        "thoracic_expansion"
+      ],
+      "movement_pattern": "breathing_mobility",
+      "movement_plane": "sagittal",
       "corrects": [
-        "thoracic stiffness",
+        "lat stiffness",
         "overhead limitation"
       ],
       "screening_triggers": [
         "shoulder_right",
         "shoulder_left"
       ],
-      "instructions": "Stand side-on to wall and rotate upper body open while hips remain stable.",
-      "common_errors": "Turning pelvis; shrugging; forcing range.",
-      "sets": "2",
-      "reps": "6 / side",
-      "hold": "",
-      "tempo": "controlled",
-      "frequency_per_week": "3",
-      "duration_minutes": 2,
-      "week_start": 1,
-      "week_end": 4,
-      "regression_id": "THOR002",
-      "progression_id": "THOR005",
-      "contraindications": [
-        "pain",
-        "acute injury",
-        "medical red flags"
-      ],
-      "video_url": "",
-      "thumbnail_url": "",
-      "tags": [
-        "wall",
-        "rotation"
-      ]
-    },
-    {
-      "id": "THOR005",
-      "name": "Tall-Kneeling Overhead Reach",
-      "primary_system": "THOR",
-      "secondary_systems": [
-        "SHLD",
-        "CORE"
-      ],
-      "phase": "6_integration",
-      "difficulty": 3,
-      "equipment": [
-        "none"
-      ],
-      "corrects": [
-        "overhead mobility",
-        "rib flare",
-        "thoracic extension"
-      ],
-      "screening_triggers": [
-        "shoulder_right",
-        "shoulder_left"
-      ],
-      "instructions": "Tall kneel, ribs down, reach arms overhead without arching.",
-      "common_errors": "Rib flare; shoulder shrug; lower-back extension.",
-      "sets": "2",
-      "reps": "8",
-      "hold": "",
-      "tempo": "controlled",
-      "frequency_per_week": "3",
-      "duration_minutes": 2,
-      "week_start": 1,
-      "week_end": 4,
-      "regression_id": "SHLD002",
-      "progression_id": "",
-      "contraindications": [
-        "pain",
-        "acute injury",
-        "medical red flags"
-      ],
-      "video_url": "",
-      "thumbnail_url": "",
-      "tags": [
-        "overhead",
-        "integration"
-      ]
-    },
-    {
-      "id": "THOR006",
-      "name": "Seated Thoracic Extension Chair",
-      "primary_system": "THOR",
-      "secondary_systems": [
-        "SHLD"
-      ],
-      "phase": "2_mobility",
-      "difficulty": 1,
-      "equipment": [
-        "chair"
-      ],
-      "corrects": [
-        "desk posture",
-        "thoracic stiffness"
-      ],
-      "screening_triggers": [
-        "posture_side",
-        "shoulder_right",
-        "shoulder_left"
-      ],
-      "instructions": "Sit with upper back against chair edge, support head and gently extend.",
-      "common_errors": "Overarching lower back; neck pulling; pain.",
-      "sets": "2",
-      "reps": "6",
-      "hold": "",
-      "tempo": "controlled",
-      "frequency_per_week": "4",
-      "duration_minutes": 2,
-      "week_start": 1,
-      "week_end": 4,
-      "regression_id": "",
-      "progression_id": "",
-      "contraindications": [
-        "pain",
-        "acute injury",
-        "medical red flags"
-      ],
-      "video_url": "",
-      "thumbnail_url": "",
-      "tags": [
-        "chair",
-        "desk"
-      ]
-    },
-    {
-      "id": "SHLD001",
-      "name": "Child's Pose Lat Stretch",
-      "primary_system": "SHLD",
-      "secondary_systems": [
-        "THOR"
-      ],
-      "phase": "2_mobility",
-      "difficulty": 1,
-      "equipment": [
-        "none"
-      ],
-      "corrects": [
-        "lat stiffness",
-        "limited overhead reach"
-      ],
-      "screening_triggers": [
-        "shoulder_right",
-        "shoulder_left"
-      ],
-      "instructions": "Sit hips back and reach arms forward, breathe into sides of ribs.",
-      "common_errors": "Shoulder pinch; forcing range; holding breath.",
       "sets": "2",
       "reps": "",
       "hold": "45 sec",
@@ -923,20 +834,1259 @@
       "regression_id": "",
       "progression_id": "SHLD002",
       "contraindications": [
-        "pain",
-        "acute injury",
+        "acute pain",
+        "recent trauma",
+        "neurological symptoms",
         "medical red flags"
       ],
+      "pain_rules": {
+        "no_pain": "normal progression allowed",
+        "discomfort": "reduce range and intensity",
+        "pain": "stop exercise and use easier reset/mobility option"
+      },
+      "coaching_cues": [
+        "Forearms on wall",
+        "Breathe into side ribs"
+      ],
+      "common_errors": "Rib flare; shoulder shrug",
+      "expected_improvement": "Reduce overhead compensation.",
+      "video_url": "",
+      "thumbnail_url": "",
+      "tags": [
+        "wall",
+        "lat"
+      ]
+    },
+    {
+      "id": "REC012",
+      "name": "Supine Pelvic Clock",
+      "description": "Corrective exercise targeting pelvic_awareness, lumbo_pelvic_control.",
+      "primary_system": "REC",
+      "secondary_systems": [
+        "PELV",
+        "CORE"
+      ],
+      "phase": "1_release_recovery",
+      "difficulty": 1,
+      "equipment": [
+        "none"
+      ],
+      "movement_goals": [
+        "pelvic_awareness",
+        "lumbo_pelvic_control"
+      ],
+      "movement_pattern": "motor_awareness",
+      "movement_plane": "sagittal",
+      "corrects": [
+        "pelvic control limitation",
+        "lumbar extension"
+      ],
+      "screening_triggers": [
+        "squat",
+        "aslr_right",
+        "aslr_left"
+      ],
+      "sets": "2",
+      "reps": "8",
+      "hold": "",
+      "tempo": "controlled",
+      "frequency_per_week": "3",
+      "duration_minutes": 2,
+      "week_start": 1,
+      "week_end": 4,
+      "regression_id": "",
+      "progression_id": "CORE001",
+      "contraindications": [
+        "acute pain",
+        "recent trauma",
+        "neurological symptoms",
+        "medical red flags"
+      ],
+      "pain_rules": {
+        "no_pain": "normal progression allowed",
+        "discomfort": "reduce range and intensity",
+        "pain": "stop exercise and use easier reset/mobility option"
+      },
+      "coaching_cues": [
+        "Small slow movements",
+        "No pain"
+      ],
+      "common_errors": "Moving too fast; holding breath",
+      "expected_improvement": "Improve pelvic awareness.",
+      "video_url": "",
+      "thumbnail_url": "",
+      "tags": [
+        "pelvis",
+        "awareness"
+      ]
+    },
+    {
+      "id": "CERV001",
+      "name": "Chin Tuck Supine",
+      "description": "Corrective exercise targeting deep_neck_flexor_activation, cervical_retraction.",
+      "primary_system": "CERV",
+      "secondary_systems": [
+        "THOR"
+      ],
+      "phase": "3_motor_control",
+      "difficulty": 1,
+      "equipment": [
+        "none"
+      ],
+      "movement_goals": [
+        "deep_neck_flexor_activation",
+        "cervical_retraction"
+      ],
+      "movement_pattern": "activation",
+      "movement_plane": "sagittal",
+      "corrects": [
+        "forward head",
+        "cervical alignment"
+      ],
+      "screening_triggers": [
+        "posture_side"
+      ],
+      "sets": "2",
+      "reps": "8",
+      "hold": "2 sec",
+      "tempo": "controlled",
+      "frequency_per_week": "4",
+      "duration_minutes": 2,
+      "week_start": 1,
+      "week_end": 4,
+      "regression_id": "REC009",
+      "progression_id": "CERV002",
+      "contraindications": [
+        "acute pain",
+        "recent trauma",
+        "neurological symptoms",
+        "medical red flags"
+      ],
+      "pain_rules": {
+        "no_pain": "normal progression allowed",
+        "discomfort": "reduce range and intensity",
+        "pain": "stop exercise and use easier reset/mobility option"
+      },
+      "coaching_cues": [
+        "Make a double chin",
+        "Do not lift head"
+      ],
+      "common_errors": "Lifting head; pushing hard",
+      "expected_improvement": "Improve deep neck flexor control.",
+      "video_url": "",
+      "thumbnail_url": "",
+      "tags": [
+        "neck",
+        "activation"
+      ]
+    },
+    {
+      "id": "CERV002",
+      "name": "Wall Chin Tuck",
+      "description": "Corrective exercise targeting cervical_retraction, postural_control.",
+      "primary_system": "CERV",
+      "secondary_systems": [
+        "THOR"
+      ],
+      "phase": "3_motor_control",
+      "difficulty": 2,
+      "equipment": [
+        "wall"
+      ],
+      "movement_goals": [
+        "cervical_retraction",
+        "postural_control"
+      ],
+      "movement_pattern": "activation",
+      "movement_plane": "sagittal",
+      "corrects": [
+        "forward head",
+        "desk posture"
+      ],
+      "screening_triggers": [
+        "posture_side"
+      ],
+      "sets": "2",
+      "reps": "8",
+      "hold": "3 sec",
+      "tempo": "controlled",
+      "frequency_per_week": "4",
+      "duration_minutes": 2,
+      "week_start": 1,
+      "week_end": 4,
+      "regression_id": "CERV001",
+      "progression_id": "CERV003",
+      "contraindications": [
+        "acute pain",
+        "recent trauma",
+        "neurological symptoms",
+        "medical red flags"
+      ],
+      "pain_rules": {
+        "no_pain": "normal progression allowed",
+        "discomfort": "reduce range and intensity",
+        "pain": "stop exercise and use easier reset/mobility option"
+      },
+      "coaching_cues": [
+        "Back of head long",
+        "Ribs down"
+      ],
+      "common_errors": "Tilting head down; rib flare",
+      "expected_improvement": "Improve upright cervical alignment.",
+      "video_url": "",
+      "thumbnail_url": "",
+      "tags": [
+        "wall",
+        "neck"
+      ]
+    },
+    {
+      "id": "CERV003",
+      "name": "Wall Posture Hold",
+      "description": "Corrective exercise targeting postural_endurance, cervical_alignment, rib_cage_control.",
+      "primary_system": "CERV",
+      "secondary_systems": [
+        "THOR",
+        "CORE"
+      ],
+      "phase": "4_stability",
+      "difficulty": 2,
+      "equipment": [
+        "wall"
+      ],
+      "movement_goals": [
+        "postural_endurance",
+        "cervical_alignment",
+        "rib_cage_control"
+      ],
+      "movement_pattern": "stability",
+      "movement_plane": "sagittal",
+      "corrects": [
+        "forward head",
+        "thoracic posture"
+      ],
+      "screening_triggers": [
+        "posture_side"
+      ],
+      "sets": "3",
+      "reps": "",
+      "hold": "20 sec",
+      "tempo": "controlled",
+      "frequency_per_week": "3",
+      "duration_minutes": 2,
+      "week_start": 1,
+      "week_end": 4,
+      "regression_id": "CERV002",
+      "progression_id": "CERV004",
+      "contraindications": [
+        "acute pain",
+        "recent trauma",
+        "neurological symptoms",
+        "medical red flags"
+      ],
+      "pain_rules": {
+        "no_pain": "normal progression allowed",
+        "discomfort": "reduce range and intensity",
+        "pain": "stop exercise and use easier reset/mobility option"
+      },
+      "coaching_cues": [
+        "Stand tall",
+        "Relax shoulders"
+      ],
+      "common_errors": "Overarching lower back; shrugging",
+      "expected_improvement": "Improve static posture endurance.",
+      "video_url": "",
+      "thumbnail_url": "",
+      "tags": [
+        "posture",
+        "wall"
+      ]
+    },
+    {
+      "id": "CERV004",
+      "name": "Seated Neck Rotation Control",
+      "description": "Corrective exercise targeting cervical_rotation_control.",
+      "primary_system": "CERV",
+      "secondary_systems": [
+        "THOR"
+      ],
+      "phase": "3_motor_control",
+      "difficulty": 1,
+      "equipment": [
+        "chair"
+      ],
+      "movement_goals": [
+        "cervical_rotation_control"
+      ],
+      "movement_pattern": "mobility_control",
+      "movement_plane": "transverse",
+      "corrects": [
+        "neck stiffness"
+      ],
+      "screening_triggers": [
+        "posture_side"
+      ],
+      "sets": "2",
+      "reps": "5 / side",
+      "hold": "",
+      "tempo": "controlled",
+      "frequency_per_week": "3",
+      "duration_minutes": 2,
+      "week_start": 1,
+      "week_end": 4,
+      "regression_id": "CERV001",
+      "progression_id": "CERV005",
+      "contraindications": [
+        "acute pain",
+        "recent trauma",
+        "neurological symptoms",
+        "medical red flags"
+      ],
+      "pain_rules": {
+        "no_pain": "normal progression allowed",
+        "discomfort": "reduce range and intensity",
+        "pain": "stop exercise and use easier reset/mobility option"
+      },
+      "coaching_cues": [
+        "Move slowly",
+        "Keep shoulders still"
+      ],
+      "common_errors": "Turning trunk; forcing range",
+      "expected_improvement": "Improve cervical rotation control.",
+      "video_url": "",
+      "thumbnail_url": "",
+      "tags": [
+        "neck",
+        "rotation"
+      ]
+    },
+    {
+      "id": "CERV005",
+      "name": "Quadruped Neck Retraction",
+      "description": "Corrective exercise targeting cervical_retraction, spinal_alignment.",
+      "primary_system": "CERV",
+      "secondary_systems": [
+        "CORE"
+      ],
+      "phase": "3_motor_control",
+      "difficulty": 2,
+      "equipment": [
+        "none"
+      ],
+      "movement_goals": [
+        "cervical_retraction",
+        "spinal_alignment"
+      ],
+      "movement_pattern": "motor_control",
+      "movement_plane": "sagittal",
+      "corrects": [
+        "forward head",
+        "poor spinal alignment"
+      ],
+      "screening_triggers": [
+        "posture_side"
+      ],
+      "sets": "2",
+      "reps": "8",
+      "hold": "2 sec",
+      "tempo": "controlled",
+      "frequency_per_week": "3",
+      "duration_minutes": 2,
+      "week_start": 1,
+      "week_end": 4,
+      "regression_id": "CERV001",
+      "progression_id": "CERV006",
+      "contraindications": [
+        "acute pain",
+        "recent trauma",
+        "neurological symptoms",
+        "medical red flags"
+      ],
+      "pain_rules": {
+        "no_pain": "normal progression allowed",
+        "discomfort": "reduce range and intensity",
+        "pain": "stop exercise and use easier reset/mobility option"
+      },
+      "coaching_cues": [
+        "Keep spine long",
+        "Eyes to floor"
+      ],
+      "common_errors": "Dropping head; arching back",
+      "expected_improvement": "Improve neck control in loaded position.",
+      "video_url": "",
+      "thumbnail_url": "",
+      "tags": [
+        "quadruped",
+        "neck"
+      ]
+    },
+    {
+      "id": "CERV006",
+      "name": "Standing Band Posture Hold",
+      "description": "Corrective exercise targeting postural_endurance, scapular_control.",
+      "primary_system": "CERV",
+      "secondary_systems": [
+        "SCAP",
+        "THOR"
+      ],
+      "phase": "4_stability",
+      "difficulty": 3,
+      "equipment": [
+        "elastic_band"
+      ],
+      "movement_goals": [
+        "postural_endurance",
+        "scapular_control"
+      ],
+      "movement_pattern": "stability",
+      "movement_plane": "sagittal",
+      "corrects": [
+        "forward head",
+        "rounded shoulders"
+      ],
+      "screening_triggers": [
+        "posture_side",
+        "shoulder_right",
+        "shoulder_left"
+      ],
+      "sets": "2",
+      "reps": "10",
+      "hold": "",
+      "tempo": "controlled",
+      "frequency_per_week": "2",
+      "duration_minutes": 2,
+      "week_start": 1,
+      "week_end": 4,
+      "regression_id": "CERV003",
+      "progression_id": "CERV007",
+      "contraindications": [
+        "acute pain",
+        "recent trauma",
+        "neurological symptoms",
+        "medical red flags"
+      ],
+      "pain_rules": {
+        "no_pain": "normal progression allowed",
+        "discomfort": "reduce range and intensity",
+        "pain": "stop exercise and use easier reset/mobility option"
+      },
+      "coaching_cues": [
+        "Light band tension",
+        "Chin neutral"
+      ],
+      "common_errors": "Shrugging; chin forward",
+      "expected_improvement": "Integrate cervical and scapular posture.",
+      "video_url": "",
+      "thumbnail_url": "",
+      "tags": [
+        "band",
+        "posture"
+      ]
+    },
+    {
+      "id": "CERV007",
+      "name": "Wall Posture March",
+      "description": "Corrective exercise targeting postural_control, single_leg_control.",
+      "primary_system": "CERV",
+      "secondary_systems": [
+        "CORE",
+        "PELV"
+      ],
+      "phase": "6_integration",
+      "difficulty": 3,
+      "equipment": [
+        "wall"
+      ],
+      "movement_goals": [
+        "postural_control",
+        "single_leg_control"
+      ],
+      "movement_pattern": "integration",
+      "movement_plane": "sagittal",
+      "corrects": [
+        "forward head",
+        "pelvic control"
+      ],
+      "screening_triggers": [
+        "posture_side",
+        "squat"
+      ],
+      "sets": "2",
+      "reps": "6 / side",
+      "hold": "",
+      "tempo": "controlled",
+      "frequency_per_week": "2",
+      "duration_minutes": 2,
+      "week_start": 1,
+      "week_end": 4,
+      "regression_id": "CERV003",
+      "progression_id": "",
+      "contraindications": [
+        "acute pain",
+        "recent trauma",
+        "neurological symptoms",
+        "medical red flags"
+      ],
+      "pain_rules": {
+        "no_pain": "normal progression allowed",
+        "discomfort": "reduce range and intensity",
+        "pain": "stop exercise and use easier reset/mobility option"
+      },
+      "coaching_cues": [
+        "Keep head and ribs controlled",
+        "March slowly"
+      ],
+      "common_errors": "Rib flare; leaning away from wall",
+      "expected_improvement": "Integrate posture with lower-body control.",
+      "video_url": "",
+      "thumbnail_url": "",
+      "tags": [
+        "wall",
+        "integration"
+      ]
+    },
+    {
+      "id": "CERV008",
+      "name": "Prone Cervical Retraction",
+      "description": "Corrective exercise targeting deep_neck_extensor_control, cervical_alignment.",
+      "primary_system": "CERV",
+      "secondary_systems": [
+        "THOR"
+      ],
+      "phase": "4_stability",
+      "difficulty": 3,
+      "equipment": [
+        "none"
+      ],
+      "movement_goals": [
+        "deep_neck_extensor_control",
+        "cervical_alignment"
+      ],
+      "movement_pattern": "stability",
+      "movement_plane": "sagittal",
+      "corrects": [
+        "forward head",
+        "neck endurance"
+      ],
+      "screening_triggers": [
+        "posture_side"
+      ],
+      "sets": "2",
+      "reps": "8",
+      "hold": "2 sec",
+      "tempo": "controlled",
+      "frequency_per_week": "2",
+      "duration_minutes": 2,
+      "week_start": 1,
+      "week_end": 4,
+      "regression_id": "CERV001",
+      "progression_id": "",
+      "contraindications": [
+        "acute pain",
+        "recent trauma",
+        "neurological symptoms",
+        "medical red flags"
+      ],
+      "pain_rules": {
+        "no_pain": "normal progression allowed",
+        "discomfort": "reduce range and intensity",
+        "pain": "stop exercise and use easier reset/mobility option"
+      },
+      "coaching_cues": [
+        "Lengthen back of neck",
+        "Small lift only"
+      ],
+      "common_errors": "Excessive neck extension",
+      "expected_improvement": "Improve posterior cervical endurance.",
+      "video_url": "",
+      "thumbnail_url": "",
+      "tags": [
+        "neck",
+        "prone"
+      ]
+    },
+    {
+      "id": "THOR001",
+      "name": "Foam Roller Thoracic Extension",
+      "description": "Corrective exercise targeting thoracic_extension, shoulder_flexion.",
+      "primary_system": "THOR",
+      "secondary_systems": [
+        "SHLD"
+      ],
+      "phase": "2_mobility",
+      "difficulty": 1,
+      "equipment": [
+        "foam_roller"
+      ],
+      "movement_goals": [
+        "thoracic_extension",
+        "shoulder_flexion"
+      ],
+      "movement_pattern": "extension",
+      "movement_plane": "sagittal",
+      "corrects": [
+        "thoracic stiffness",
+        "limited overhead"
+      ],
+      "screening_triggers": [
+        "posture_side",
+        "shoulder_right",
+        "shoulder_left"
+      ],
+      "sets": "2",
+      "reps": "6-8",
+      "hold": "2 sec",
+      "tempo": "controlled",
+      "frequency_per_week": "3",
+      "duration_minutes": 2,
+      "week_start": 1,
+      "week_end": 4,
+      "regression_id": "REC004",
+      "progression_id": "THOR002",
+      "contraindications": [
+        "acute pain",
+        "recent trauma",
+        "neurological symptoms",
+        "medical red flags"
+      ],
+      "pain_rules": {
+        "no_pain": "normal progression allowed",
+        "discomfort": "reduce range and intensity",
+        "pain": "stop exercise and use easier reset/mobility option"
+      },
+      "coaching_cues": [
+        "Support head",
+        "Move from upper back"
+      ],
+      "common_errors": "Arching lower back; pulling neck",
+      "expected_improvement": "Improve thoracic extension.",
+      "video_url": "",
+      "thumbnail_url": "",
+      "tags": [
+        "foam_roller",
+        "extension"
+      ]
+    },
+    {
+      "id": "THOR002",
+      "name": "Side-Lying Open Book",
+      "description": "Corrective exercise targeting thoracic_rotation, rib_cage_mobility.",
+      "primary_system": "THOR",
+      "secondary_systems": [
+        "SHLD"
+      ],
+      "phase": "2_mobility",
+      "difficulty": 1,
+      "equipment": [
+        "none"
+      ],
+      "movement_goals": [
+        "thoracic_rotation",
+        "rib_cage_mobility"
+      ],
+      "movement_pattern": "rotation",
+      "movement_plane": "transverse",
+      "corrects": [
+        "thoracic rotation limitation",
+        "shoulder mobility"
+      ],
+      "screening_triggers": [
+        "shoulder_right",
+        "shoulder_left",
+        "posture_side"
+      ],
+      "sets": "2",
+      "reps": "6 / side",
+      "hold": "",
+      "tempo": "controlled",
+      "frequency_per_week": "3",
+      "duration_minutes": 2,
+      "week_start": 1,
+      "week_end": 4,
+      "regression_id": "REC003",
+      "progression_id": "THOR003",
+      "contraindications": [
+        "acute pain",
+        "recent trauma",
+        "neurological symptoms",
+        "medical red flags"
+      ],
+      "pain_rules": {
+        "no_pain": "normal progression allowed",
+        "discomfort": "reduce range and intensity",
+        "pain": "stop exercise and use easier reset/mobility option"
+      },
+      "coaching_cues": [
+        "Keep knees stacked",
+        "Rotate upper back"
+      ],
+      "common_errors": "Knees separating; forcing shoulder",
+      "expected_improvement": "Improve thoracic rotation.",
+      "video_url": "",
+      "thumbnail_url": "",
+      "tags": [
+        "open_book",
+        "rotation"
+      ]
+    },
+    {
+      "id": "THOR003",
+      "name": "Quadruped Thread the Needle",
+      "description": "Corrective exercise targeting thoracic_rotation, scapular_control.",
+      "primary_system": "THOR",
+      "secondary_systems": [
+        "SCAP"
+      ],
+      "phase": "2_mobility",
+      "difficulty": 2,
+      "equipment": [
+        "none"
+      ],
+      "movement_goals": [
+        "thoracic_rotation",
+        "scapular_control"
+      ],
+      "movement_pattern": "rotation",
+      "movement_plane": "transverse",
+      "corrects": [
+        "thoracic rotation",
+        "scapular control"
+      ],
+      "screening_triggers": [
+        "shoulder_right",
+        "shoulder_left"
+      ],
+      "sets": "2",
+      "reps": "6 / side",
+      "hold": "",
+      "tempo": "controlled",
+      "frequency_per_week": "3",
+      "duration_minutes": 2,
+      "week_start": 1,
+      "week_end": 4,
+      "regression_id": "THOR002",
+      "progression_id": "THOR004",
+      "contraindications": [
+        "acute pain",
+        "recent trauma",
+        "neurological symptoms",
+        "medical red flags"
+      ],
+      "pain_rules": {
+        "no_pain": "normal progression allowed",
+        "discomfort": "reduce range and intensity",
+        "pain": "stop exercise and use easier reset/mobility option"
+      },
+      "coaching_cues": [
+        "Reach under then rotate open",
+        "Keep hips stable"
+      ],
+      "common_errors": "Moving hips; collapsing shoulder",
+      "expected_improvement": "Improve thoracic rotation under light load.",
+      "video_url": "",
+      "thumbnail_url": "",
+      "tags": [
+        "quadruped",
+        "rotation"
+      ]
+    },
+    {
+      "id": "THOR004",
+      "name": "Wall Thoracic Rotation",
+      "description": "Corrective exercise targeting thoracic_rotation, overhead_readiness.",
+      "primary_system": "THOR",
+      "secondary_systems": [
+        "SHLD"
+      ],
+      "phase": "2_mobility",
+      "difficulty": 2,
+      "equipment": [
+        "wall"
+      ],
+      "movement_goals": [
+        "thoracic_rotation",
+        "overhead_readiness"
+      ],
+      "movement_pattern": "rotation",
+      "movement_plane": "transverse",
+      "corrects": [
+        "thoracic stiffness",
+        "overhead limitation"
+      ],
+      "screening_triggers": [
+        "shoulder_right",
+        "shoulder_left"
+      ],
+      "sets": "2",
+      "reps": "6 / side",
+      "hold": "",
+      "tempo": "controlled",
+      "frequency_per_week": "3",
+      "duration_minutes": 2,
+      "week_start": 1,
+      "week_end": 4,
+      "regression_id": "THOR002",
+      "progression_id": "THOR005",
+      "contraindications": [
+        "acute pain",
+        "recent trauma",
+        "neurological symptoms",
+        "medical red flags"
+      ],
+      "pain_rules": {
+        "no_pain": "normal progression allowed",
+        "discomfort": "reduce range and intensity",
+        "pain": "stop exercise and use easier reset/mobility option"
+      },
+      "coaching_cues": [
+        "Hips stay square",
+        "Rotate ribs"
+      ],
+      "common_errors": "Turning pelvis; shrugging",
+      "expected_improvement": "Improve standing thoracic rotation.",
+      "video_url": "",
+      "thumbnail_url": "",
+      "tags": [
+        "wall",
+        "rotation"
+      ]
+    },
+    {
+      "id": "THOR005",
+      "name": "Tall-Kneeling Overhead Reach",
+      "description": "Corrective exercise targeting thoracic_extension, overhead_pattern, rib_cage_control.",
+      "primary_system": "THOR",
+      "secondary_systems": [
+        "SHLD",
+        "CORE"
+      ],
+      "phase": "6_integration",
+      "difficulty": 3,
+      "equipment": [
+        "none"
+      ],
+      "movement_goals": [
+        "thoracic_extension",
+        "overhead_pattern",
+        "rib_cage_control"
+      ],
+      "movement_pattern": "overhead",
+      "movement_plane": "sagittal",
+      "corrects": [
+        "overhead limitation",
+        "rib flare"
+      ],
+      "screening_triggers": [
+        "shoulder_right",
+        "shoulder_left"
+      ],
+      "sets": "2",
+      "reps": "8",
+      "hold": "",
+      "tempo": "controlled",
+      "frequency_per_week": "3",
+      "duration_minutes": 2,
+      "week_start": 1,
+      "week_end": 4,
+      "regression_id": "SHLD002",
+      "progression_id": "THOR006",
+      "contraindications": [
+        "acute pain",
+        "recent trauma",
+        "neurological symptoms",
+        "medical red flags"
+      ],
+      "pain_rules": {
+        "no_pain": "normal progression allowed",
+        "discomfort": "reduce range and intensity",
+        "pain": "stop exercise and use easier reset/mobility option"
+      },
+      "coaching_cues": [
+        "Ribs down",
+        "Reach long"
+      ],
+      "common_errors": "Lower-back arch; shoulder shrug",
+      "expected_improvement": "Integrate thoracic control with overhead reach.",
+      "video_url": "",
+      "thumbnail_url": "",
+      "tags": [
+        "overhead",
+        "integration"
+      ]
+    },
+    {
+      "id": "THOR006",
+      "name": "Seated Thoracic Extension Chair",
+      "description": "Corrective exercise targeting thoracic_extension, desk_posture.",
+      "primary_system": "THOR",
+      "secondary_systems": [
+        "SHLD"
+      ],
+      "phase": "2_mobility",
+      "difficulty": 1,
+      "equipment": [
+        "chair"
+      ],
+      "movement_goals": [
+        "thoracic_extension",
+        "desk_posture"
+      ],
+      "movement_pattern": "extension",
+      "movement_plane": "sagittal",
+      "corrects": [
+        "desk posture",
+        "thoracic stiffness"
+      ],
+      "screening_triggers": [
+        "posture_side",
+        "shoulder_right",
+        "shoulder_left"
+      ],
+      "sets": "2",
+      "reps": "6",
+      "hold": "",
+      "tempo": "controlled",
+      "frequency_per_week": "4",
+      "duration_minutes": 2,
+      "week_start": 1,
+      "week_end": 4,
+      "regression_id": "REC004",
+      "progression_id": "THOR001",
+      "contraindications": [
+        "acute pain",
+        "recent trauma",
+        "neurological symptoms",
+        "medical red flags"
+      ],
+      "pain_rules": {
+        "no_pain": "normal progression allowed",
+        "discomfort": "reduce range and intensity",
+        "pain": "stop exercise and use easier reset/mobility option"
+      },
+      "coaching_cues": [
+        "Support head",
+        "Exhale into extension"
+      ],
+      "common_errors": "Lumbar arch; neck pulling",
+      "expected_improvement": "Desk-friendly thoracic mobility.",
+      "video_url": "",
+      "thumbnail_url": "",
+      "tags": [
+        "chair",
+        "desk"
+      ]
+    },
+    {
+      "id": "THOR007",
+      "name": "Cat-Camel Segmental Control",
+      "description": "Corrective exercise targeting spinal_segmentation, thoracic_control.",
+      "primary_system": "THOR",
+      "secondary_systems": [
+        "CORE"
+      ],
+      "phase": "3_motor_control",
+      "difficulty": 1,
+      "equipment": [
+        "none"
+      ],
+      "movement_goals": [
+        "spinal_segmentation",
+        "thoracic_control"
+      ],
+      "movement_pattern": "spinal_control",
+      "movement_plane": "sagittal",
+      "corrects": [
+        "spinal stiffness"
+      ],
+      "screening_triggers": [
+        "posture_side",
+        "squat"
+      ],
+      "sets": "2",
+      "reps": "8",
+      "hold": "",
+      "tempo": "controlled",
+      "frequency_per_week": "3",
+      "duration_minutes": 2,
+      "week_start": 1,
+      "week_end": 4,
+      "regression_id": "REC010",
+      "progression_id": "THOR003",
+      "contraindications": [
+        "acute pain",
+        "recent trauma",
+        "neurological symptoms",
+        "medical red flags"
+      ],
+      "pain_rules": {
+        "no_pain": "normal progression allowed",
+        "discomfort": "reduce range and intensity",
+        "pain": "stop exercise and use easier reset/mobility option"
+      },
+      "coaching_cues": [
+        "Move slowly one segment at a time"
+      ],
+      "common_errors": "Fast uncontrolled motion",
+      "expected_improvement": "Improve spinal awareness.",
+      "video_url": "",
+      "thumbnail_url": "",
+      "tags": [
+        "spine",
+        "control"
+      ]
+    },
+    {
+      "id": "THOR008",
+      "name": "Wall Angel",
+      "description": "Corrective exercise targeting thoracic_extension, scapular_upward_rotation, shoulder_flexion.",
+      "primary_system": "THOR",
+      "secondary_systems": [
+        "SHLD",
+        "SCAP"
+      ],
+      "phase": "3_motor_control",
+      "difficulty": 2,
+      "equipment": [
+        "wall"
+      ],
+      "movement_goals": [
+        "thoracic_extension",
+        "scapular_upward_rotation",
+        "shoulder_flexion"
+      ],
+      "movement_pattern": "overhead_control",
+      "movement_plane": "sagittal",
+      "corrects": [
+        "limited shoulder flexion",
+        "thoracic posture"
+      ],
+      "screening_triggers": [
+        "shoulder_right",
+        "shoulder_left"
+      ],
+      "sets": "2",
+      "reps": "8",
+      "hold": "",
+      "tempo": "controlled",
+      "frequency_per_week": "3",
+      "duration_minutes": 2,
+      "week_start": 1,
+      "week_end": 4,
+      "regression_id": "SHLD002",
+      "progression_id": "SCAP003",
+      "contraindications": [
+        "acute pain",
+        "recent trauma",
+        "neurological symptoms",
+        "medical red flags"
+      ],
+      "pain_rules": {
+        "no_pain": "normal progression allowed",
+        "discomfort": "reduce range and intensity",
+        "pain": "stop exercise and use easier reset/mobility option"
+      },
+      "coaching_cues": [
+        "Ribs down",
+        "Slide without pain"
+      ],
+      "common_errors": "Rib flare; neck tension",
+      "expected_improvement": "Improve overhead mechanics.",
+      "video_url": "",
+      "thumbnail_url": "",
+      "tags": [
+        "wall",
+        "angel"
+      ]
+    },
+    {
+      "id": "THOR009",
+      "name": "Half-Kneeling Thoracic Rotation",
+      "description": "Corrective exercise targeting thoracic_rotation, hip_stability.",
+      "primary_system": "THOR",
+      "secondary_systems": [
+        "HIP",
+        "CORE"
+      ],
+      "phase": "3_motor_control",
+      "difficulty": 3,
+      "equipment": [
+        "none"
+      ],
+      "movement_goals": [
+        "thoracic_rotation",
+        "hip_stability"
+      ],
+      "movement_pattern": "rotation",
+      "movement_plane": "transverse",
+      "corrects": [
+        "thoracic rotation",
+        "hip stability"
+      ],
+      "screening_triggers": [
+        "shoulder_right",
+        "shoulder_left",
+        "squat"
+      ],
+      "sets": "2",
+      "reps": "6 / side",
+      "hold": "",
+      "tempo": "controlled",
+      "frequency_per_week": "2",
+      "duration_minutes": 2,
+      "week_start": 1,
+      "week_end": 4,
+      "regression_id": "THOR003",
+      "progression_id": "",
+      "contraindications": [
+        "acute pain",
+        "recent trauma",
+        "neurological symptoms",
+        "medical red flags"
+      ],
+      "pain_rules": {
+        "no_pain": "normal progression allowed",
+        "discomfort": "reduce range and intensity",
+        "pain": "stop exercise and use easier reset/mobility option"
+      },
+      "coaching_cues": [
+        "Pelvis quiet",
+        "Rotate ribs"
+      ],
+      "common_errors": "Pelvis turns; lumbar twist",
+      "expected_improvement": "Integrate rotation with hip stability.",
+      "video_url": "",
+      "thumbnail_url": "",
+      "tags": [
+        "half_kneeling",
+        "rotation"
+      ]
+    },
+    {
+      "id": "THOR010",
+      "name": "Bench T-Spine Extension Prayer",
+      "description": "Corrective exercise targeting thoracic_extension, lat_mobility, shoulder_flexion.",
+      "primary_system": "THOR",
+      "secondary_systems": [
+        "SHLD"
+      ],
+      "phase": "2_mobility",
+      "difficulty": 2,
+      "equipment": [
+        "chair"
+      ],
+      "movement_goals": [
+        "thoracic_extension",
+        "lat_mobility",
+        "shoulder_flexion"
+      ],
+      "movement_pattern": "extension",
+      "movement_plane": "sagittal",
+      "corrects": [
+        "lat stiffness",
+        "thoracic stiffness"
+      ],
+      "screening_triggers": [
+        "shoulder_right",
+        "shoulder_left"
+      ],
+      "sets": "2",
+      "reps": "6",
+      "hold": "3 sec",
+      "tempo": "controlled",
+      "frequency_per_week": "3",
+      "duration_minutes": 2,
+      "week_start": 1,
+      "week_end": 4,
+      "regression_id": "REC003",
+      "progression_id": "THOR005",
+      "contraindications": [
+        "acute pain",
+        "recent trauma",
+        "neurological symptoms",
+        "medical red flags"
+      ],
+      "pain_rules": {
+        "no_pain": "normal progression allowed",
+        "discomfort": "reduce range and intensity",
+        "pain": "stop exercise and use easier reset/mobility option"
+      },
+      "coaching_cues": [
+        "Elbows on chair",
+        "Sink chest gently"
+      ],
+      "common_errors": "Lumbar arching; shoulder pain",
+      "expected_improvement": "Improve thoracic extension and overhead position.",
       "video_url": "",
       "thumbnail_url": "",
       "tags": [
         "lat",
-        "mobility"
+        "extension"
+      ]
+    },
+    {
+      "id": "SHLD001",
+      "name": "Child's Pose Lat Stretch",
+      "description": "Corrective exercise targeting lat_mobility, shoulder_flexion.",
+      "primary_system": "SHLD",
+      "secondary_systems": [
+        "THOR"
+      ],
+      "phase": "2_mobility",
+      "difficulty": 1,
+      "equipment": [
+        "none"
+      ],
+      "movement_goals": [
+        "lat_mobility",
+        "shoulder_flexion"
+      ],
+      "movement_pattern": "stretch",
+      "movement_plane": "sagittal",
+      "corrects": [
+        "lat stiffness",
+        "limited overhead"
+      ],
+      "screening_triggers": [
+        "shoulder_right",
+        "shoulder_left"
+      ],
+      "sets": "2",
+      "reps": "",
+      "hold": "45 sec",
+      "tempo": "controlled",
+      "frequency_per_week": "3",
+      "duration_minutes": 2,
+      "week_start": 1,
+      "week_end": 4,
+      "regression_id": "REC003",
+      "progression_id": "SHLD002",
+      "contraindications": [
+        "acute pain",
+        "recent trauma",
+        "neurological symptoms",
+        "medical red flags"
+      ],
+      "pain_rules": {
+        "no_pain": "normal progression allowed",
+        "discomfort": "reduce range and intensity",
+        "pain": "stop exercise and use easier reset/mobility option"
+      },
+      "coaching_cues": [
+        "Breathe into side ribs"
+      ],
+      "common_errors": "Forcing shoulders",
+      "expected_improvement": "Improve overhead range.",
+      "video_url": "",
+      "thumbnail_url": "",
+      "tags": [
+        "lat",
+        "stretch"
       ]
     },
     {
       "id": "SHLD002",
       "name": "Wall Slide",
+      "description": "Corrective exercise targeting shoulder_flexion, scapular_upward_rotation.",
       "primary_system": "SHLD",
       "secondary_systems": [
         "SCAP",
@@ -947,6 +2097,12 @@
       "equipment": [
         "wall"
       ],
+      "movement_goals": [
+        "shoulder_flexion",
+        "scapular_upward_rotation"
+      ],
+      "movement_pattern": "overhead_control",
+      "movement_plane": "sagittal",
       "corrects": [
         "limited overhead mobility",
         "scapular control"
@@ -955,8 +2111,6 @@
         "shoulder_right",
         "shoulder_left"
       ],
-      "instructions": "Forearms on wall, slide upward while ribs stay down and neck relaxed.",
-      "common_errors": "Rib flare; shrugging; lower-back arch.",
       "sets": "2",
       "reps": "8-10",
       "hold": "",
@@ -966,22 +2120,35 @@
       "week_start": 1,
       "week_end": 4,
       "regression_id": "SHLD001",
-      "progression_id": "THOR007",
+      "progression_id": "THOR008",
       "contraindications": [
-        "pain",
-        "acute injury",
+        "acute pain",
+        "recent trauma",
+        "neurological symptoms",
         "medical red flags"
       ],
+      "pain_rules": {
+        "no_pain": "normal progression allowed",
+        "discomfort": "reduce range and intensity",
+        "pain": "stop exercise and use easier reset/mobility option"
+      },
+      "coaching_cues": [
+        "Ribs down",
+        "Push forearms gently"
+      ],
+      "common_errors": "Rib flare; shrugging",
+      "expected_improvement": "Improve overhead control.",
       "video_url": "",
       "thumbnail_url": "",
       "tags": [
         "wall",
-        "scapular_control"
+        "scapula"
       ]
     },
     {
       "id": "SHLD003",
       "name": "Doorway Pec Stretch",
+      "description": "Corrective exercise targeting pec_mobility, shoulder_extension.",
       "primary_system": "SHLD",
       "secondary_systems": [
         "THOR"
@@ -991,6 +2158,12 @@
       "equipment": [
         "wall"
       ],
+      "movement_goals": [
+        "pec_mobility",
+        "shoulder_extension"
+      ],
+      "movement_pattern": "stretch",
+      "movement_plane": "transverse",
       "corrects": [
         "pec tightness",
         "rounded shoulders"
@@ -1000,8 +2173,6 @@
         "shoulder_right",
         "shoulder_left"
       ],
-      "instructions": "Place forearm on doorway and gently turn body away until stretch is mild.",
-      "common_errors": "Shoulder pain; overstretching; rib flare.",
       "sets": "2",
       "reps": "",
       "hold": "30 sec / side",
@@ -1010,23 +2181,36 @@
       "duration_minutes": 2,
       "week_start": 1,
       "week_end": 4,
-      "regression_id": "",
-      "progression_id": "",
+      "regression_id": "REC005",
+      "progression_id": "SCAP005",
       "contraindications": [
-        "pain",
-        "acute injury",
+        "acute pain",
+        "recent trauma",
+        "neurological symptoms",
         "medical red flags"
       ],
+      "pain_rules": {
+        "no_pain": "normal progression allowed",
+        "discomfort": "reduce range and intensity",
+        "pain": "stop exercise and use easier reset/mobility option"
+      },
+      "coaching_cues": [
+        "Mild stretch",
+        "Ribs controlled"
+      ],
+      "common_errors": "Shoulder pinching; overstretching",
+      "expected_improvement": "Reduce anterior shoulder restriction.",
       "video_url": "",
       "thumbnail_url": "",
       "tags": [
         "pec",
-        "mobility"
+        "stretch"
       ]
     },
     {
       "id": "SHLD004",
       "name": "Posterior Shoulder Stretch",
+      "description": "Corrective exercise targeting posterior_shoulder_mobility.",
       "primary_system": "SHLD",
       "secondary_systems": [
         "SCAP"
@@ -1036,16 +2220,18 @@
       "equipment": [
         "none"
       ],
+      "movement_goals": [
+        "posterior_shoulder_mobility"
+      ],
+      "movement_pattern": "stretch",
+      "movement_plane": "transverse",
       "corrects": [
-        "posterior shoulder stiffness",
-        "overhead limitation"
+        "posterior shoulder stiffness"
       ],
       "screening_triggers": [
         "shoulder_right",
         "shoulder_left"
       ],
-      "instructions": "Bring arm across chest and gently support with opposite arm.",
-      "common_errors": "Neck tension; shoulder pinch; aggressive pulling.",
       "sets": "2",
       "reps": "",
       "hold": "30 sec / side",
@@ -1055,22 +2241,90 @@
       "week_start": 1,
       "week_end": 4,
       "regression_id": "",
-      "progression_id": "",
+      "progression_id": "SHLD005",
       "contraindications": [
-        "pain",
-        "acute injury",
+        "acute pain",
+        "recent trauma",
+        "neurological symptoms",
         "medical red flags"
       ],
+      "pain_rules": {
+        "no_pain": "normal progression allowed",
+        "discomfort": "reduce range and intensity",
+        "pain": "stop exercise and use easier reset/mobility option"
+      },
+      "coaching_cues": [
+        "Keep neck relaxed"
+      ],
+      "common_errors": "Pulling aggressively",
+      "expected_improvement": "Improve shoulder mobility.",
       "video_url": "",
       "thumbnail_url": "",
       "tags": [
-        "shoulder",
-        "mobility"
+        "posterior_shoulder"
+      ]
+    },
+    {
+      "id": "SHLD005",
+      "name": "Sleeper Stretch Modified",
+      "description": "Corrective exercise targeting shoulder_internal_rotation.",
+      "primary_system": "SHLD",
+      "secondary_systems": [
+        "SCAP"
+      ],
+      "phase": "2_mobility",
+      "difficulty": 2,
+      "equipment": [
+        "none"
+      ],
+      "movement_goals": [
+        "shoulder_internal_rotation"
+      ],
+      "movement_pattern": "stretch",
+      "movement_plane": "transverse",
+      "corrects": [
+        "posterior shoulder stiffness"
+      ],
+      "screening_triggers": [
+        "shoulder_right",
+        "shoulder_left"
+      ],
+      "sets": "2",
+      "reps": "",
+      "hold": "20 sec / side",
+      "tempo": "controlled",
+      "frequency_per_week": "2",
+      "duration_minutes": 2,
+      "week_start": 1,
+      "week_end": 4,
+      "regression_id": "SHLD004",
+      "progression_id": "",
+      "contraindications": [
+        "acute pain",
+        "recent trauma",
+        "neurological symptoms",
+        "medical red flags"
+      ],
+      "pain_rules": {
+        "no_pain": "normal progression allowed",
+        "discomfort": "reduce range and intensity",
+        "pain": "stop exercise and use easier reset/mobility option"
+      },
+      "coaching_cues": [
+        "Gentle pressure only"
+      ],
+      "common_errors": "Shoulder pain; forcing range",
+      "expected_improvement": "Improve posterior shoulder mobility.",
+      "video_url": "",
+      "thumbnail_url": "",
+      "tags": [
+        "shoulder_ir"
       ]
     },
     {
       "id": "SCAP001",
       "name": "Wall Scapular Push-Up",
+      "description": "Corrective exercise targeting serratus_activation, scapular_protraction.",
       "primary_system": "SCAP",
       "secondary_systems": [
         "SHLD"
@@ -1080,16 +2334,19 @@
       "equipment": [
         "wall"
       ],
+      "movement_goals": [
+        "serratus_activation",
+        "scapular_protraction"
+      ],
+      "movement_pattern": "activation",
+      "movement_plane": "sagittal",
       "corrects": [
-        "scapular control",
-        "beginner shoulder stability"
+        "scapular control"
       ],
       "screening_triggers": [
         "shoulder_right",
         "shoulder_left"
       ],
-      "instructions": "Hands on wall, protract and retract shoulder blades with straight arms.",
-      "common_errors": "Shrugging; bending elbows; head forward.",
       "sets": "2",
       "reps": "10",
       "hold": "",
@@ -1101,20 +2358,33 @@
       "regression_id": "",
       "progression_id": "SCAP002",
       "contraindications": [
-        "pain",
-        "acute injury",
+        "acute pain",
+        "recent trauma",
+        "neurological symptoms",
         "medical red flags"
       ],
+      "pain_rules": {
+        "no_pain": "normal progression allowed",
+        "discomfort": "reduce range and intensity",
+        "pain": "stop exercise and use easier reset/mobility option"
+      },
+      "coaching_cues": [
+        "Elbows straight",
+        "Push wall away"
+      ],
+      "common_errors": "Shrugging; elbow bend",
+      "expected_improvement": "Improve serratus control.",
       "video_url": "",
       "thumbnail_url": "",
       "tags": [
-        "wall",
-        "scapula"
+        "serratus",
+        "wall"
       ]
     },
     {
       "id": "SCAP002",
-      "name": "Scapular Push-Up",
+      "name": "Scapular Push-Up Incline",
+      "description": "Corrective exercise targeting serratus_activation, scapular_control.",
       "primary_system": "SCAP",
       "secondary_systems": [
         "CORE"
@@ -1122,18 +2392,21 @@
       "phase": "3_motor_control",
       "difficulty": 2,
       "equipment": [
-        "none"
+        "chair"
       ],
+      "movement_goals": [
+        "serratus_activation",
+        "scapular_control"
+      ],
+      "movement_pattern": "activation",
+      "movement_plane": "sagittal",
       "corrects": [
-        "scapular instability",
         "serratus weakness"
       ],
       "screening_triggers": [
         "shoulder_right",
         "shoulder_left"
       ],
-      "instructions": "In plank or incline plank, move shoulder blades apart/together without bending elbows.",
-      "common_errors": "Elbows bending; hips sagging; neck tension.",
       "sets": "2",
       "reps": "8-10",
       "hold": "",
@@ -1145,20 +2418,32 @@
       "regression_id": "SCAP001",
       "progression_id": "SCAP003",
       "contraindications": [
-        "pain",
-        "acute injury",
+        "acute pain",
+        "recent trauma",
+        "neurological symptoms",
         "medical red flags"
       ],
+      "pain_rules": {
+        "no_pain": "normal progression allowed",
+        "discomfort": "reduce range and intensity",
+        "pain": "stop exercise and use easier reset/mobility option"
+      },
+      "coaching_cues": [
+        "Move shoulder blades only"
+      ],
+      "common_errors": "Hips sag; elbows bend",
+      "expected_improvement": "Improve scapular control.",
       "video_url": "",
       "thumbnail_url": "",
       "tags": [
         "serratus",
-        "scapula"
+        "incline"
       ]
     },
     {
       "id": "SCAP003",
       "name": "Serratus Wall Slide",
+      "description": "Corrective exercise targeting serratus_activation, scapular_upward_rotation.",
       "primary_system": "SCAP",
       "secondary_systems": [
         "SHLD"
@@ -1169,16 +2454,19 @@
         "wall",
         "elastic_band"
       ],
+      "movement_goals": [
+        "serratus_activation",
+        "scapular_upward_rotation"
+      ],
+      "movement_pattern": "overhead_control",
+      "movement_plane": "sagittal",
       "corrects": [
-        "serratus control",
         "overhead mechanics"
       ],
       "screening_triggers": [
         "shoulder_right",
         "shoulder_left"
       ],
-      "instructions": "Forearms on wall with light band tension, slide up while pushing gently through forearms.",
-      "common_errors": "Rib flare; shrugging; wrist pain.",
       "sets": "2",
       "reps": "8",
       "hold": "",
@@ -1190,10 +2478,22 @@
       "regression_id": "SHLD002",
       "progression_id": "SCAP004",
       "contraindications": [
-        "pain",
-        "acute injury",
+        "acute pain",
+        "recent trauma",
+        "neurological symptoms",
         "medical red flags"
       ],
+      "pain_rules": {
+        "no_pain": "normal progression allowed",
+        "discomfort": "reduce range and intensity",
+        "pain": "stop exercise and use easier reset/mobility option"
+      },
+      "coaching_cues": [
+        "Push forearms into wall",
+        "Ribs down"
+      ],
+      "common_errors": "Shrugging; rib flare",
+      "expected_improvement": "Improve scapular upward rotation.",
       "video_url": "",
       "thumbnail_url": "",
       "tags": [
@@ -1204,6 +2504,7 @@
     {
       "id": "SCAP004",
       "name": "Band External Rotation",
+      "description": "Corrective exercise targeting rotator_cuff_control, shoulder_stability.",
       "primary_system": "SCAP",
       "secondary_systems": [
         "SHLD"
@@ -1213,16 +2514,19 @@
       "equipment": [
         "elastic_band"
       ],
+      "movement_goals": [
+        "rotator_cuff_control",
+        "shoulder_stability"
+      ],
+      "movement_pattern": "rotation_control",
+      "movement_plane": "transverse",
       "corrects": [
-        "rotator cuff control",
-        "shoulder stability"
+        "rotator cuff control"
       ],
       "screening_triggers": [
         "shoulder_right",
         "shoulder_left"
       ],
-      "instructions": "Elbow by side, rotate forearm outward with light band tension.",
-      "common_errors": "Elbow drifting; trunk rotation; too much resistance.",
       "sets": "2",
       "reps": "10 / side",
       "hold": "",
@@ -1232,12 +2536,24 @@
       "week_start": 1,
       "week_end": 4,
       "regression_id": "",
-      "progression_id": "",
+      "progression_id": "SCAP008",
       "contraindications": [
-        "pain",
-        "acute injury",
+        "acute pain",
+        "recent trauma",
+        "neurological symptoms",
         "medical red flags"
       ],
+      "pain_rules": {
+        "no_pain": "normal progression allowed",
+        "discomfort": "reduce range and intensity",
+        "pain": "stop exercise and use easier reset/mobility option"
+      },
+      "coaching_cues": [
+        "Elbow by side",
+        "Rotate slowly"
+      ],
+      "common_errors": "Elbow drifting; trunk rotation",
+      "expected_improvement": "Improve shoulder stability.",
       "video_url": "",
       "thumbnail_url": "",
       "tags": [
@@ -1248,6 +2564,7 @@
     {
       "id": "SCAP005",
       "name": "Band Pull-Apart",
+      "description": "Corrective exercise targeting scapular_retraction, postural_endurance.",
       "primary_system": "SCAP",
       "secondary_systems": [
         "THOR"
@@ -1257,17 +2574,21 @@
       "equipment": [
         "elastic_band"
       ],
+      "movement_goals": [
+        "scapular_retraction",
+        "postural_endurance"
+      ],
+      "movement_pattern": "pull",
+      "movement_plane": "transverse",
       "corrects": [
-        "scapular retraction",
-        "postural control"
+        "rounded shoulders",
+        "scapular control"
       ],
       "screening_triggers": [
         "shoulder_right",
         "shoulder_left",
         "posture_side"
       ],
-      "instructions": "Hold band at chest height, pull apart while ribs stay down and neck relaxed.",
-      "common_errors": "Shrugging; lower-back arch; jerky movement.",
       "sets": "2",
       "reps": "10-12",
       "hold": "",
@@ -1276,13 +2597,25 @@
       "duration_minutes": 2,
       "week_start": 1,
       "week_end": 4,
-      "regression_id": "",
-      "progression_id": "",
+      "regression_id": "SCAP004",
+      "progression_id": "SCAP009",
       "contraindications": [
-        "pain",
-        "acute injury",
+        "acute pain",
+        "recent trauma",
+        "neurological symptoms",
         "medical red flags"
       ],
+      "pain_rules": {
+        "no_pain": "normal progression allowed",
+        "discomfort": "reduce range and intensity",
+        "pain": "stop exercise and use easier reset/mobility option"
+      },
+      "coaching_cues": [
+        "Neck relaxed",
+        "Ribs down"
+      ],
+      "common_errors": "Shrugging; jerky movement",
+      "expected_improvement": "Improve upper-back postural endurance.",
       "video_url": "",
       "thumbnail_url": "",
       "tags": [
@@ -1293,6 +2626,7 @@
     {
       "id": "SCAP006",
       "name": "Prone Y-T-W",
+      "description": "Corrective exercise targeting lower_trap_activation, scapular_control.",
       "primary_system": "SCAP",
       "secondary_systems": [
         "SHLD",
@@ -1303,16 +2637,19 @@
       "equipment": [
         "none"
       ],
+      "movement_goals": [
+        "lower_trap_activation",
+        "scapular_control"
+      ],
+      "movement_pattern": "activation",
+      "movement_plane": "frontal",
       "corrects": [
-        "lower trap control",
-        "shoulder stability"
+        "lower trap control"
       ],
       "screening_triggers": [
         "shoulder_right",
         "shoulder_left"
       ],
-      "instructions": "Lie face down and lift arms in Y, T, W shapes with thumbs up.",
-      "common_errors": "Neck extension; shrugging; lifting too high.",
       "sets": "2",
       "reps": "5 each",
       "hold": "",
@@ -1321,13 +2658,25 @@
       "duration_minutes": 2,
       "week_start": 1,
       "week_end": 4,
-      "regression_id": "",
+      "regression_id": "SCAP005",
       "progression_id": "",
       "contraindications": [
-        "pain",
-        "acute injury",
+        "acute pain",
+        "recent trauma",
+        "neurological symptoms",
         "medical red flags"
       ],
+      "pain_rules": {
+        "no_pain": "normal progression allowed",
+        "discomfort": "reduce range and intensity",
+        "pain": "stop exercise and use easier reset/mobility option"
+      },
+      "coaching_cues": [
+        "Thumbs up",
+        "Small controlled lift"
+      ],
+      "common_errors": "Neck extension; shrugging",
+      "expected_improvement": "Improve scapular stability.",
       "video_url": "",
       "thumbnail_url": "",
       "tags": [
@@ -1336,8 +2685,130 @@
       ]
     },
     {
+      "id": "SCAP007",
+      "name": "Prone Cobra Hold",
+      "description": "Corrective exercise targeting thoracic_extension_endurance, scapular_retraction.",
+      "primary_system": "SCAP",
+      "secondary_systems": [
+        "THOR",
+        "CERV"
+      ],
+      "phase": "4_stability",
+      "difficulty": 3,
+      "equipment": [
+        "none"
+      ],
+      "movement_goals": [
+        "thoracic_extension_endurance",
+        "scapular_retraction"
+      ],
+      "movement_pattern": "stability",
+      "movement_plane": "sagittal",
+      "corrects": [
+        "rounded shoulders",
+        "forward head"
+      ],
+      "screening_triggers": [
+        "posture_side"
+      ],
+      "sets": "3",
+      "reps": "",
+      "hold": "10 sec",
+      "tempo": "controlled",
+      "frequency_per_week": "2",
+      "duration_minutes": 2,
+      "week_start": 1,
+      "week_end": 4,
+      "regression_id": "SCAP005",
+      "progression_id": "",
+      "contraindications": [
+        "acute pain",
+        "recent trauma",
+        "neurological symptoms",
+        "medical red flags"
+      ],
+      "pain_rules": {
+        "no_pain": "normal progression allowed",
+        "discomfort": "reduce range and intensity",
+        "pain": "stop exercise and use easier reset/mobility option"
+      },
+      "coaching_cues": [
+        "Long neck",
+        "Reach hands toward feet"
+      ],
+      "common_errors": "Neck extension; lumbar arch",
+      "expected_improvement": "Improve posterior-chain posture endurance.",
+      "video_url": "",
+      "thumbnail_url": "",
+      "tags": [
+        "cobra",
+        "posture"
+      ]
+    },
+    {
+      "id": "SCAP008",
+      "name": "Half-Kneeling Band External Rotation",
+      "description": "Corrective exercise targeting rotator_cuff_control, trunk_control.",
+      "primary_system": "SCAP",
+      "secondary_systems": [
+        "CORE"
+      ],
+      "phase": "4_stability",
+      "difficulty": 3,
+      "equipment": [
+        "elastic_band"
+      ],
+      "movement_goals": [
+        "rotator_cuff_control",
+        "trunk_control"
+      ],
+      "movement_pattern": "rotation_control",
+      "movement_plane": "transverse",
+      "corrects": [
+        "shoulder stability"
+      ],
+      "screening_triggers": [
+        "shoulder_right",
+        "shoulder_left"
+      ],
+      "sets": "2",
+      "reps": "8 / side",
+      "hold": "",
+      "tempo": "controlled",
+      "frequency_per_week": "2",
+      "duration_minutes": 2,
+      "week_start": 1,
+      "week_end": 4,
+      "regression_id": "SCAP004",
+      "progression_id": "",
+      "contraindications": [
+        "acute pain",
+        "recent trauma",
+        "neurological symptoms",
+        "medical red flags"
+      ],
+      "pain_rules": {
+        "no_pain": "normal progression allowed",
+        "discomfort": "reduce range and intensity",
+        "pain": "stop exercise and use easier reset/mobility option"
+      },
+      "coaching_cues": [
+        "Pelvis quiet",
+        "Slow rotation"
+      ],
+      "common_errors": "Trunk twisting; too much resistance",
+      "expected_improvement": "Integrate cuff and trunk control.",
+      "video_url": "",
+      "thumbnail_url": "",
+      "tags": [
+        "half_kneeling",
+        "band"
+      ]
+    },
+    {
       "id": "CORE001",
       "name": "Dead Bug Breathing",
+      "description": "Corrective exercise targeting anti_extension_control, rib_cage_control.",
       "primary_system": "CORE",
       "secondary_systems": [
         "PELV"
@@ -1347,18 +2818,21 @@
       "equipment": [
         "none"
       ],
+      "movement_goals": [
+        "anti_extension_control",
+        "rib_cage_control"
+      ],
+      "movement_pattern": "core_control",
+      "movement_plane": "sagittal",
       "corrects": [
         "core control",
-        "rib flare",
-        "pelvic control"
+        "rib flare"
       ],
       "screening_triggers": [
         "squat",
         "aslr_right",
         "aslr_left"
       ],
-      "instructions": "Lie on back, ribs down, slowly move opposite arm/leg while breathing.",
-      "common_errors": "Lower-back arch; moving too fast; breath holding.",
       "sets": "2",
       "reps": "6 / side",
       "hold": "",
@@ -1367,23 +2841,36 @@
       "duration_minutes": 2,
       "week_start": 1,
       "week_end": 4,
-      "regression_id": "",
+      "regression_id": "REC001",
       "progression_id": "CORE002",
       "contraindications": [
-        "pain",
-        "acute injury",
+        "acute pain",
+        "recent trauma",
+        "neurological symptoms",
         "medical red flags"
       ],
+      "pain_rules": {
+        "no_pain": "normal progression allowed",
+        "discomfort": "reduce range and intensity",
+        "pain": "stop exercise and use easier reset/mobility option"
+      },
+      "coaching_cues": [
+        "Ribs down",
+        "Move slowly"
+      ],
+      "common_errors": "Lower-back arch; breath holding",
+      "expected_improvement": "Improve trunk control.",
       "video_url": "",
       "thumbnail_url": "",
       "tags": [
-        "core",
-        "motor_control"
+        "dead_bug",
+        "core"
       ]
     },
     {
       "id": "CORE002",
       "name": "Dead Bug Heel Taps",
+      "description": "Corrective exercise targeting anti_extension_control, pelvic_control.",
       "primary_system": "CORE",
       "secondary_systems": [
         "PELV",
@@ -1394,6 +2881,12 @@
       "equipment": [
         "none"
       ],
+      "movement_goals": [
+        "anti_extension_control",
+        "pelvic_control"
+      ],
+      "movement_pattern": "core_control",
+      "movement_plane": "sagittal",
       "corrects": [
         "pelvic control",
         "ASLR limitation"
@@ -1403,8 +2896,6 @@
         "aslr_left",
         "squat"
       ],
-      "instructions": "Lie on back, tap one heel to floor while keeping pelvis quiet.",
-      "common_errors": "Arching back; rushing; neck tension.",
       "sets": "2",
       "reps": "8 / side",
       "hold": "",
@@ -1416,20 +2907,155 @@
       "regression_id": "CORE001",
       "progression_id": "CORE003",
       "contraindications": [
-        "pain",
-        "acute injury",
+        "acute pain",
+        "recent trauma",
+        "neurological symptoms",
         "medical red flags"
       ],
+      "pain_rules": {
+        "no_pain": "normal progression allowed",
+        "discomfort": "reduce range and intensity",
+        "pain": "stop exercise and use easier reset/mobility option"
+      },
+      "coaching_cues": [
+        "Tap lightly",
+        "Keep pelvis still"
+      ],
+      "common_errors": "Arching back; rushing",
+      "expected_improvement": "Improve lumbopelvic control.",
       "video_url": "",
       "thumbnail_url": "",
       "tags": [
-        "core",
-        "aslr"
+        "dead_bug"
       ]
     },
     {
       "id": "CORE003",
+      "name": "Dead Bug Diagonal Reach",
+      "description": "Corrective exercise targeting anti_extension_control, cross_body_control.",
+      "primary_system": "CORE",
+      "secondary_systems": [
+        "PELV"
+      ],
+      "phase": "4_stability",
+      "difficulty": 3,
+      "equipment": [
+        "none"
+      ],
+      "movement_goals": [
+        "anti_extension_control",
+        "cross_body_control"
+      ],
+      "movement_pattern": "core_stability",
+      "movement_plane": "sagittal",
+      "corrects": [
+        "anti-extension deficit"
+      ],
+      "screening_triggers": [
+        "squat",
+        "aslr_right",
+        "aslr_left"
+      ],
+      "sets": "2",
+      "reps": "6 / side",
+      "hold": "",
+      "tempo": "controlled",
+      "frequency_per_week": "2",
+      "duration_minutes": 2,
+      "week_start": 1,
+      "week_end": 4,
+      "regression_id": "CORE002",
+      "progression_id": "",
+      "contraindications": [
+        "acute pain",
+        "recent trauma",
+        "neurological symptoms",
+        "medical red flags"
+      ],
+      "pain_rules": {
+        "no_pain": "normal progression allowed",
+        "discomfort": "reduce range and intensity",
+        "pain": "stop exercise and use easier reset/mobility option"
+      },
+      "coaching_cues": [
+        "Opposite arm/leg",
+        "Slow exhale"
+      ],
+      "common_errors": "Back arch; losing control",
+      "expected_improvement": "Improve integrated core control.",
+      "video_url": "",
+      "thumbnail_url": "",
+      "tags": [
+        "dead_bug",
+        "stability"
+      ]
+    },
+    {
+      "id": "CORE004",
+      "name": "Glute Bridge",
+      "description": "Corrective exercise targeting hip_extension, pelvic_control.",
+      "primary_system": "CORE",
+      "secondary_systems": [
+        "HIP",
+        "PELV"
+      ],
+      "phase": "3_motor_control",
+      "difficulty": 1,
+      "equipment": [
+        "none"
+      ],
+      "movement_goals": [
+        "hip_extension",
+        "pelvic_control"
+      ],
+      "movement_pattern": "bridge",
+      "movement_plane": "sagittal",
+      "corrects": [
+        "pelvic control",
+        "hip extension"
+      ],
+      "screening_triggers": [
+        "squat",
+        "aslr_right",
+        "aslr_left"
+      ],
+      "sets": "2",
+      "reps": "10",
+      "hold": "",
+      "tempo": "controlled",
+      "frequency_per_week": "3",
+      "duration_minutes": 2,
+      "week_start": 1,
+      "week_end": 4,
+      "regression_id": "REC001",
+      "progression_id": "CORE005",
+      "contraindications": [
+        "acute pain",
+        "recent trauma",
+        "neurological symptoms",
+        "medical red flags"
+      ],
+      "pain_rules": {
+        "no_pain": "normal progression allowed",
+        "discomfort": "reduce range and intensity",
+        "pain": "stop exercise and use easier reset/mobility option"
+      },
+      "coaching_cues": [
+        "Push through heels",
+        "Ribs down"
+      ],
+      "common_errors": "Overarching back; hamstring cramp",
+      "expected_improvement": "Improve hip extension and pelvic control.",
+      "video_url": "",
+      "thumbnail_url": "",
+      "tags": [
+        "bridge"
+      ]
+    },
+    {
+      "id": "CORE005",
       "name": "Bridge March",
+      "description": "Corrective exercise targeting pelvic_stability, single_leg_control.",
       "primary_system": "CORE",
       "secondary_systems": [
         "PELV",
@@ -1440,17 +3066,21 @@
       "equipment": [
         "none"
       ],
+      "movement_goals": [
+        "pelvic_stability",
+        "single_leg_control"
+      ],
+      "movement_pattern": "bridge",
+      "movement_plane": "sagittal",
       "corrects": [
-        "pelvic stability",
-        "ASLR control"
+        "ASLR control",
+        "pelvic stability"
       ],
       "screening_triggers": [
         "aslr_right",
         "aslr_left",
         "squat"
       ],
-      "instructions": "Hold bridge and slowly lift one foot without pelvis dropping.",
-      "common_errors": "Pelvis rotating; back arching; hamstring cramp.",
       "sets": "2",
       "reps": "6 / side",
       "hold": "",
@@ -1462,110 +3092,33 @@
       "regression_id": "CORE004",
       "progression_id": "",
       "contraindications": [
-        "pain",
-        "acute injury",
+        "acute pain",
+        "recent trauma",
+        "neurological symptoms",
         "medical red flags"
       ],
+      "pain_rules": {
+        "no_pain": "normal progression allowed",
+        "discomfort": "reduce range and intensity",
+        "pain": "stop exercise and use easier reset/mobility option"
+      },
+      "coaching_cues": [
+        "Keep hips level",
+        "March slowly"
+      ],
+      "common_errors": "Pelvis drops; back arch",
+      "expected_improvement": "Improve lumbopelvic stability.",
       "video_url": "",
       "thumbnail_url": "",
       "tags": [
         "bridge",
-        "pelvic_control"
-      ]
-    },
-    {
-      "id": "CORE004",
-      "name": "Glute Bridge",
-      "primary_system": "CORE",
-      "secondary_systems": [
-        "HIP",
-        "PELV"
-      ],
-      "phase": "3_motor_control",
-      "difficulty": 1,
-      "equipment": [
-        "none"
-      ],
-      "corrects": [
-        "pelvic control",
-        "hip extension"
-      ],
-      "screening_triggers": [
-        "squat",
-        "aslr_right",
-        "aslr_left"
-      ],
-      "instructions": "Lie on back, lift hips by squeezing glutes while ribs stay down.",
-      "common_errors": "Overarching back; pushing through toes; hamstring cramp.",
-      "sets": "2",
-      "reps": "10",
-      "hold": "",
-      "tempo": "controlled",
-      "frequency_per_week": "3",
-      "duration_minutes": 2,
-      "week_start": 1,
-      "week_end": 4,
-      "regression_id": "",
-      "progression_id": "CORE003",
-      "contraindications": [
-        "pain",
-        "acute injury",
-        "medical red flags"
-      ],
-      "video_url": "",
-      "thumbnail_url": "",
-      "tags": [
-        "bridge",
-        "hip"
-      ]
-    },
-    {
-      "id": "CORE005",
-      "name": "Side Plank from Knees",
-      "primary_system": "CORE",
-      "secondary_systems": [
-        "HIP",
-        "SCAP"
-      ],
-      "phase": "4_stability",
-      "difficulty": 2,
-      "equipment": [
-        "none"
-      ],
-      "corrects": [
-        "lateral core stability",
-        "hip control"
-      ],
-      "screening_triggers": [
-        "squat"
-      ],
-      "instructions": "Support on elbow and knees, lift hips and hold neutral line.",
-      "common_errors": "Shoulder shrug; hips dropping; breath holding.",
-      "sets": "2",
-      "reps": "",
-      "hold": "15-20 sec / side",
-      "tempo": "controlled",
-      "frequency_per_week": "3",
-      "duration_minutes": 2,
-      "week_start": 1,
-      "week_end": 4,
-      "regression_id": "",
-      "progression_id": "",
-      "contraindications": [
-        "pain",
-        "acute injury",
-        "medical red flags"
-      ],
-      "video_url": "",
-      "thumbnail_url": "",
-      "tags": [
-        "side_plank",
-        "stability"
+        "march"
       ]
     },
     {
       "id": "CORE006",
       "name": "Bird Dog Regression",
+      "description": "Corrective exercise targeting anti_rotation_control, pelvic_control.",
       "primary_system": "CORE",
       "secondary_systems": [
         "PELV",
@@ -1576,6 +3129,12 @@
       "equipment": [
         "none"
       ],
+      "movement_goals": [
+        "anti_rotation_control",
+        "pelvic_control"
+      ],
+      "movement_pattern": "quadruped",
+      "movement_plane": "sagittal",
       "corrects": [
         "anti-rotation",
         "pelvic control"
@@ -1585,8 +3144,6 @@
         "aslr_right",
         "aslr_left"
       ],
-      "instructions": "In quadruped, extend one leg or one arm only while trunk stays quiet.",
-      "common_errors": "Rotating pelvis; arching back; rushing.",
       "sets": "2",
       "reps": "6 / side",
       "hold": "",
@@ -1595,23 +3152,35 @@
       "duration_minutes": 2,
       "week_start": 1,
       "week_end": 4,
-      "regression_id": "",
+      "regression_id": "CORE001",
       "progression_id": "CORE007",
       "contraindications": [
-        "pain",
-        "acute injury",
+        "acute pain",
+        "recent trauma",
+        "neurological symptoms",
         "medical red flags"
       ],
+      "pain_rules": {
+        "no_pain": "normal progression allowed",
+        "discomfort": "reduce range and intensity",
+        "pain": "stop exercise and use easier reset/mobility option"
+      },
+      "coaching_cues": [
+        "Extend one limb only",
+        "Quiet pelvis"
+      ],
+      "common_errors": "Rotating pelvis; arching back",
+      "expected_improvement": "Improve anti-rotation control.",
       "video_url": "",
       "thumbnail_url": "",
       "tags": [
-        "bird_dog",
-        "anti_rotation"
+        "bird_dog"
       ]
     },
     {
       "id": "CORE007",
       "name": "Full Bird Dog",
+      "description": "Corrective exercise targeting anti_rotation_control, cross_body_integration.",
       "primary_system": "CORE",
       "secondary_systems": [
         "PELV",
@@ -1622,6 +3191,12 @@
       "equipment": [
         "none"
       ],
+      "movement_goals": [
+        "anti_rotation_control",
+        "cross_body_integration"
+      ],
+      "movement_pattern": "quadruped",
+      "movement_plane": "sagittal",
       "corrects": [
         "rotary stability",
         "cross-body control"
@@ -1631,8 +3206,6 @@
         "aslr_right",
         "aslr_left"
       ],
-      "instructions": "Extend opposite arm and leg while keeping trunk quiet.",
-      "common_errors": "Pelvic rotation; low-back arch; neck extension.",
       "sets": "2",
       "reps": "6 / side",
       "hold": "",
@@ -1644,10 +3217,22 @@
       "regression_id": "CORE006",
       "progression_id": "",
       "contraindications": [
-        "pain",
-        "acute injury",
+        "acute pain",
+        "recent trauma",
+        "neurological symptoms",
         "medical red flags"
       ],
+      "pain_rules": {
+        "no_pain": "normal progression allowed",
+        "discomfort": "reduce range and intensity",
+        "pain": "stop exercise and use easier reset/mobility option"
+      },
+      "coaching_cues": [
+        "Long reach",
+        "No pelvis rotation"
+      ],
+      "common_errors": "Low-back arch; neck extension",
+      "expected_improvement": "Improve integrated trunk stability.",
       "video_url": "",
       "thumbnail_url": "",
       "tags": [
@@ -1658,6 +3243,7 @@
     {
       "id": "CORE008",
       "name": "Pallof Press Standing",
+      "description": "Corrective exercise targeting anti_rotation_control, trunk_stability.",
       "primary_system": "CORE",
       "secondary_systems": [
         "FUNC"
@@ -1667,15 +3253,18 @@
       "equipment": [
         "elastic_band"
       ],
+      "movement_goals": [
+        "anti_rotation_control",
+        "trunk_stability"
+      ],
+      "movement_pattern": "anti_rotation",
+      "movement_plane": "transverse",
       "corrects": [
-        "anti-rotation",
         "trunk stability"
       ],
       "screening_triggers": [
         "squat"
       ],
-      "instructions": "Stand side-on to band anchor, press band forward without rotating.",
-      "common_errors": "Leaning; twisting; breath holding.",
       "sets": "2",
       "reps": "8 / side",
       "hold": "",
@@ -1684,13 +3273,25 @@
       "duration_minutes": 2,
       "week_start": 1,
       "week_end": 4,
-      "regression_id": "",
-      "progression_id": "",
+      "regression_id": "CORE006",
+      "progression_id": "CORE009",
       "contraindications": [
-        "pain",
-        "acute injury",
+        "acute pain",
+        "recent trauma",
+        "neurological symptoms",
         "medical red flags"
       ],
+      "pain_rules": {
+        "no_pain": "normal progression allowed",
+        "discomfort": "reduce range and intensity",
+        "pain": "stop exercise and use easier reset/mobility option"
+      },
+      "coaching_cues": [
+        "Press straight ahead",
+        "Do not rotate"
+      ],
+      "common_errors": "Leaning; twisting",
+      "expected_improvement": "Improve anti-rotation strength.",
       "video_url": "",
       "thumbnail_url": "",
       "tags": [
@@ -1699,8 +3300,187 @@
       ]
     },
     {
+      "id": "CORE009",
+      "name": "Pallof Press Split Stance",
+      "description": "Corrective exercise targeting anti_rotation_control, split_stance_control.",
+      "primary_system": "CORE",
+      "secondary_systems": [
+        "HIP",
+        "FUNC"
+      ],
+      "phase": "6_integration",
+      "difficulty": 4,
+      "equipment": [
+        "elastic_band"
+      ],
+      "movement_goals": [
+        "anti_rotation_control",
+        "split_stance_control"
+      ],
+      "movement_pattern": "anti_rotation",
+      "movement_plane": "transverse",
+      "corrects": [
+        "trunk stability",
+        "hip control"
+      ],
+      "screening_triggers": [
+        "squat"
+      ],
+      "sets": "2",
+      "reps": "6 / side",
+      "hold": "",
+      "tempo": "controlled",
+      "frequency_per_week": "2",
+      "duration_minutes": 2,
+      "week_start": 1,
+      "week_end": 4,
+      "regression_id": "CORE008",
+      "progression_id": "",
+      "contraindications": [
+        "acute pain",
+        "recent trauma",
+        "neurological symptoms",
+        "medical red flags"
+      ],
+      "pain_rules": {
+        "no_pain": "normal progression allowed",
+        "discomfort": "reduce range and intensity",
+        "pain": "stop exercise and use easier reset/mobility option"
+      },
+      "coaching_cues": [
+        "Stable pelvis",
+        "Slow press"
+      ],
+      "common_errors": "Knee collapse; trunk rotation",
+      "expected_improvement": "Integrate trunk control with stance.",
+      "video_url": "",
+      "thumbnail_url": "",
+      "tags": [
+        "pallof",
+        "split_stance"
+      ]
+    },
+    {
+      "id": "CORE010",
+      "name": "Side Plank from Knees",
+      "description": "Corrective exercise targeting lateral_core_stability.",
+      "primary_system": "CORE",
+      "secondary_systems": [
+        "HIP",
+        "SCAP"
+      ],
+      "phase": "4_stability",
+      "difficulty": 2,
+      "equipment": [
+        "none"
+      ],
+      "movement_goals": [
+        "lateral_core_stability"
+      ],
+      "movement_pattern": "side_plank",
+      "movement_plane": "frontal",
+      "corrects": [
+        "lateral core stability"
+      ],
+      "screening_triggers": [
+        "squat"
+      ],
+      "sets": "2",
+      "reps": "",
+      "hold": "15-20 sec / side",
+      "tempo": "controlled",
+      "frequency_per_week": "2",
+      "duration_minutes": 2,
+      "week_start": 1,
+      "week_end": 4,
+      "regression_id": "CORE001",
+      "progression_id": "CORE011",
+      "contraindications": [
+        "acute pain",
+        "recent trauma",
+        "neurological symptoms",
+        "medical red flags"
+      ],
+      "pain_rules": {
+        "no_pain": "normal progression allowed",
+        "discomfort": "reduce range and intensity",
+        "pain": "stop exercise and use easier reset/mobility option"
+      },
+      "coaching_cues": [
+        "Straight line",
+        "Breathe"
+      ],
+      "common_errors": "Hips drop; shoulder shrug",
+      "expected_improvement": "Improve frontal-plane trunk control.",
+      "video_url": "",
+      "thumbnail_url": "",
+      "tags": [
+        "side_plank"
+      ]
+    },
+    {
+      "id": "CORE011",
+      "name": "Side Plank Full",
+      "description": "Corrective exercise targeting lateral_core_strength.",
+      "primary_system": "CORE",
+      "secondary_systems": [
+        "HIP",
+        "SCAP"
+      ],
+      "phase": "5_strength",
+      "difficulty": 3,
+      "equipment": [
+        "none"
+      ],
+      "movement_goals": [
+        "lateral_core_strength"
+      ],
+      "movement_pattern": "side_plank",
+      "movement_plane": "frontal",
+      "corrects": [
+        "lateral core stability"
+      ],
+      "screening_triggers": [
+        "squat"
+      ],
+      "sets": "2",
+      "reps": "",
+      "hold": "15 sec / side",
+      "tempo": "controlled",
+      "frequency_per_week": "2",
+      "duration_minutes": 2,
+      "week_start": 1,
+      "week_end": 4,
+      "regression_id": "CORE010",
+      "progression_id": "",
+      "contraindications": [
+        "acute pain",
+        "recent trauma",
+        "neurological symptoms",
+        "medical red flags"
+      ],
+      "pain_rules": {
+        "no_pain": "normal progression allowed",
+        "discomfort": "reduce range and intensity",
+        "pain": "stop exercise and use easier reset/mobility option"
+      },
+      "coaching_cues": [
+        "Stack feet",
+        "Long neck"
+      ],
+      "common_errors": "Hips rotate; shoulder pain",
+      "expected_improvement": "Improve lateral core strength.",
+      "video_url": "",
+      "thumbnail_url": "",
+      "tags": [
+        "side_plank",
+        "strength"
+      ]
+    },
+    {
       "id": "POST001",
       "name": "Supine Hamstring Floss",
+      "description": "Corrective exercise targeting hamstring_mobility, posterior_chain_length.",
       "primary_system": "POST",
       "secondary_systems": [
         "HIP"
@@ -1710,6 +3490,12 @@
       "equipment": [
         "none"
       ],
+      "movement_goals": [
+        "hamstring_mobility",
+        "posterior_chain_length"
+      ],
+      "movement_pattern": "floss",
+      "movement_plane": "sagittal",
       "corrects": [
         "hamstring mobility",
         "ASLR limitation"
@@ -1718,8 +3504,6 @@
         "aslr_right",
         "aslr_left"
       ],
-      "instructions": "Lie on back, hold thigh and gently straighten/bend knee within easy range.",
-      "common_errors": "Forcing stretch; lifting pelvis; pain behind knee.",
       "sets": "2",
       "reps": "8 / side",
       "hold": "",
@@ -1731,10 +3515,22 @@
       "regression_id": "",
       "progression_id": "POST002",
       "contraindications": [
-        "pain",
-        "acute injury",
+        "acute pain",
+        "recent trauma",
+        "neurological symptoms",
         "medical red flags"
       ],
+      "pain_rules": {
+        "no_pain": "normal progression allowed",
+        "discomfort": "reduce range and intensity",
+        "pain": "stop exercise and use easier reset/mobility option"
+      },
+      "coaching_cues": [
+        "Gentle knee extension",
+        "No pain behind knee"
+      ],
+      "common_errors": "Forcing stretch; pelvis lifting",
+      "expected_improvement": "Improve ASLR range.",
       "video_url": "",
       "thumbnail_url": "",
       "tags": [
@@ -1745,6 +3541,7 @@
     {
       "id": "POST002",
       "name": "Band-Assisted Leg Lowering",
+      "description": "Corrective exercise targeting hamstring_mobility, pelvic_control.",
       "primary_system": "POST",
       "secondary_systems": [
         "PELV",
@@ -1755,16 +3552,20 @@
       "equipment": [
         "elastic_band"
       ],
+      "movement_goals": [
+        "hamstring_mobility",
+        "pelvic_control"
+      ],
+      "movement_pattern": "lowering",
+      "movement_plane": "sagittal",
       "corrects": [
         "ASLR limitation",
-        "posterior chain stiffness"
+        "posterior chain"
       ],
       "screening_triggers": [
         "aslr_right",
         "aslr_left"
       ],
-      "instructions": "Use band to support raised leg, slowly lower opposite leg while pelvis stays still.",
-      "common_errors": "Back arching; knee bending; aggressive stretch.",
       "sets": "2",
       "reps": "6 / side",
       "hold": "",
@@ -1776,10 +3577,22 @@
       "regression_id": "POST001",
       "progression_id": "POST003",
       "contraindications": [
-        "pain",
-        "acute injury",
+        "acute pain",
+        "recent trauma",
+        "neurological symptoms",
         "medical red flags"
       ],
+      "pain_rules": {
+        "no_pain": "normal progression allowed",
+        "discomfort": "reduce range and intensity",
+        "pain": "stop exercise and use easier reset/mobility option"
+      },
+      "coaching_cues": [
+        "Keep pelvis still",
+        "Slow lower"
+      ],
+      "common_errors": "Back arch; knee bends",
+      "expected_improvement": "Improve posterior chain control.",
       "video_url": "",
       "thumbnail_url": "",
       "tags": [
@@ -1790,6 +3603,7 @@
     {
       "id": "POST003",
       "name": "Active Straight-Leg Raise Hold",
+      "description": "Corrective exercise targeting active_hip_flexion, aslr_control.",
       "primary_system": "POST",
       "secondary_systems": [
         "HIP",
@@ -1800,6 +3614,12 @@
       "equipment": [
         "none"
       ],
+      "movement_goals": [
+        "active_hip_flexion",
+        "aslr_control"
+      ],
+      "movement_pattern": "active_raise",
+      "movement_plane": "sagittal",
       "corrects": [
         "active hip flexion",
         "ASLR control"
@@ -1808,8 +3628,6 @@
         "aslr_right",
         "aslr_left"
       ],
-      "instructions": "Raise straight leg to controlled height and hold while opposite leg stays long.",
-      "common_errors": "Knee bending; pelvis rotating; breath holding.",
       "sets": "3",
       "reps": "",
       "hold": "10 sec / side",
@@ -1821,20 +3639,33 @@
       "regression_id": "POST002",
       "progression_id": "POST004",
       "contraindications": [
-        "pain",
-        "acute injury",
+        "acute pain",
+        "recent trauma",
+        "neurological symptoms",
         "medical red flags"
       ],
+      "pain_rules": {
+        "no_pain": "normal progression allowed",
+        "discomfort": "reduce range and intensity",
+        "pain": "stop exercise and use easier reset/mobility option"
+      },
+      "coaching_cues": [
+        "Straight knee",
+        "Opposite leg stays down"
+      ],
+      "common_errors": "Knee bends; pelvis rotates",
+      "expected_improvement": "Improve active straight-leg raise.",
       "video_url": "",
       "thumbnail_url": "",
       "tags": [
         "aslr",
-        "motor_control"
+        "control"
       ]
     },
     {
       "id": "POST004",
       "name": "Single-Leg Lowering with Band",
+      "description": "Corrective exercise targeting posterior_chain_control, pelvic_stability.",
       "primary_system": "POST",
       "secondary_systems": [
         "CORE",
@@ -1845,31 +3676,45 @@
       "equipment": [
         "elastic_band"
       ],
+      "movement_goals": [
+        "posterior_chain_control",
+        "pelvic_stability"
+      ],
+      "movement_pattern": "lowering",
+      "movement_plane": "sagittal",
       "corrects": [
-        "posterior chain control",
-        "pelvic stability"
+        "posterior chain control"
       ],
       "screening_triggers": [
         "aslr_right",
         "aslr_left"
       ],
-      "instructions": "Hold one leg with band, lower and raise opposite straight leg under control.",
-      "common_errors": "Arching back; losing knee extension; too much range.",
       "sets": "2",
       "reps": "6 / side",
       "hold": "",
       "tempo": "controlled",
-      "frequency_per_week": "3",
+      "frequency_per_week": "2",
       "duration_minutes": 2,
       "week_start": 1,
       "week_end": 4,
       "regression_id": "POST002",
       "progression_id": "",
       "contraindications": [
-        "pain",
-        "acute injury",
+        "acute pain",
+        "recent trauma",
+        "neurological symptoms",
         "medical red flags"
       ],
+      "pain_rules": {
+        "no_pain": "normal progression allowed",
+        "discomfort": "reduce range and intensity",
+        "pain": "stop exercise and use easier reset/mobility option"
+      },
+      "coaching_cues": [
+        "Exhale as leg lowers"
+      ],
+      "common_errors": "Too much range; back arch",
+      "expected_improvement": "Improve ASLR control.",
       "video_url": "",
       "thumbnail_url": "",
       "tags": [
@@ -1878,8 +3723,69 @@
       ]
     },
     {
+      "id": "POST005",
+      "name": "Calf Stretch Wall",
+      "description": "Corrective exercise targeting calf_mobility, ankle_dorsiflexion.",
+      "primary_system": "POST",
+      "secondary_systems": [
+        "ANKL"
+      ],
+      "phase": "2_mobility",
+      "difficulty": 1,
+      "equipment": [
+        "wall"
+      ],
+      "movement_goals": [
+        "calf_mobility",
+        "ankle_dorsiflexion"
+      ],
+      "movement_pattern": "stretch",
+      "movement_plane": "sagittal",
+      "corrects": [
+        "calf stiffness",
+        "ankle limitation"
+      ],
+      "screening_triggers": [
+        "squat"
+      ],
+      "sets": "2",
+      "reps": "",
+      "hold": "30 sec / side",
+      "tempo": "controlled",
+      "frequency_per_week": "3",
+      "duration_minutes": 2,
+      "week_start": 1,
+      "week_end": 4,
+      "regression_id": "REC007",
+      "progression_id": "ANKL001",
+      "contraindications": [
+        "acute pain",
+        "recent trauma",
+        "neurological symptoms",
+        "medical red flags"
+      ],
+      "pain_rules": {
+        "no_pain": "normal progression allowed",
+        "discomfort": "reduce range and intensity",
+        "pain": "stop exercise and use easier reset/mobility option"
+      },
+      "coaching_cues": [
+        "Heel down",
+        "Toe forward"
+      ],
+      "common_errors": "Toe turns out; bouncing",
+      "expected_improvement": "Improve ankle mobility readiness.",
+      "video_url": "",
+      "thumbnail_url": "",
+      "tags": [
+        "calf",
+        "ankle"
+      ]
+    },
+    {
       "id": "HIP001",
       "name": "90/90 Hip Switch",
+      "description": "Corrective exercise targeting hip_internal_rotation, hip_external_rotation.",
       "primary_system": "HIP",
       "secondary_systems": [
         "PELV"
@@ -1889,6 +3795,12 @@
       "equipment": [
         "none"
       ],
+      "movement_goals": [
+        "hip_internal_rotation",
+        "hip_external_rotation"
+      ],
+      "movement_pattern": "rotation",
+      "movement_plane": "transverse",
       "corrects": [
         "hip rotation limitation",
         "squat depth"
@@ -1896,8 +3808,6 @@
       "screening_triggers": [
         "squat"
       ],
-      "instructions": "Sit in 90/90 position and switch sides with control.",
-      "common_errors": "Rounding back; using momentum; knee pain.",
       "sets": "2",
       "reps": "6 / side",
       "hold": "",
@@ -1906,23 +3816,35 @@
       "duration_minutes": 2,
       "week_start": 1,
       "week_end": 4,
-      "regression_id": "",
-      "progression_id": "HIP002",
+      "regression_id": "REC006",
+      "progression_id": "HIP006",
       "contraindications": [
-        "pain",
-        "acute injury",
+        "acute pain",
+        "recent trauma",
+        "neurological symptoms",
         "medical red flags"
       ],
+      "pain_rules": {
+        "no_pain": "normal progression allowed",
+        "discomfort": "reduce range and intensity",
+        "pain": "stop exercise and use easier reset/mobility option"
+      },
+      "coaching_cues": [
+        "Tall spine",
+        "Move slowly"
+      ],
+      "common_errors": "Rounding back; momentum",
+      "expected_improvement": "Improve hip rotation.",
       "video_url": "",
       "thumbnail_url": "",
       "tags": [
-        "hip_rotation",
-        "mobility"
+        "hip_rotation"
       ]
     },
     {
       "id": "HIP002",
       "name": "Quadruped Rock-Back",
+      "description": "Corrective exercise targeting hip_flexion, hip_hinge.",
       "primary_system": "HIP",
       "secondary_systems": [
         "CORE"
@@ -1932,6 +3854,12 @@
       "equipment": [
         "none"
       ],
+      "movement_goals": [
+        "hip_flexion",
+        "hip_hinge"
+      ],
+      "movement_pattern": "rock_back",
+      "movement_plane": "sagittal",
       "corrects": [
         "hip flexion limitation",
         "squat depth"
@@ -1939,8 +3867,6 @@
       "screening_triggers": [
         "squat"
       ],
-      "instructions": "From hands and knees, rock hips back while spine stays long.",
-      "common_errors": "Rounding lower back; forcing range; shoulder pain.",
       "sets": "2",
       "reps": "8",
       "hold": "",
@@ -1949,13 +3875,25 @@
       "duration_minutes": 2,
       "week_start": 1,
       "week_end": 4,
-      "regression_id": "",
+      "regression_id": "REC010",
       "progression_id": "HIP003",
       "contraindications": [
-        "pain",
-        "acute injury",
+        "acute pain",
+        "recent trauma",
+        "neurological symptoms",
         "medical red flags"
       ],
+      "pain_rules": {
+        "no_pain": "normal progression allowed",
+        "discomfort": "reduce range and intensity",
+        "pain": "stop exercise and use easier reset/mobility option"
+      },
+      "coaching_cues": [
+        "Long spine",
+        "Hips back"
+      ],
+      "common_errors": "Lumbar rounding; forcing range",
+      "expected_improvement": "Improve hip flexion for squat.",
       "video_url": "",
       "thumbnail_url": "",
       "tags": [
@@ -1966,6 +3904,7 @@
     {
       "id": "HIP003",
       "name": "Adductor Rock-Back",
+      "description": "Corrective exercise targeting adductor_mobility, hip_abduction.",
       "primary_system": "HIP",
       "secondary_systems": [
         "PELV"
@@ -1975,6 +3914,12 @@
       "equipment": [
         "none"
       ],
+      "movement_goals": [
+        "adductor_mobility",
+        "hip_abduction"
+      ],
+      "movement_pattern": "rock_back",
+      "movement_plane": "frontal",
       "corrects": [
         "adductor stiffness",
         "squat limitation"
@@ -1982,8 +3927,6 @@
       "screening_triggers": [
         "squat"
       ],
-      "instructions": "In quadruped, extend one leg to side and rock hips back gently.",
-      "common_errors": "Twisting pelvis; knee discomfort; forcing stretch.",
       "sets": "2",
       "reps": "8 / side",
       "hold": "",
@@ -1995,20 +3938,32 @@
       "regression_id": "HIP002",
       "progression_id": "",
       "contraindications": [
-        "pain",
-        "acute injury",
+        "acute pain",
+        "recent trauma",
+        "neurological symptoms",
         "medical red flags"
       ],
+      "pain_rules": {
+        "no_pain": "normal progression allowed",
+        "discomfort": "reduce range and intensity",
+        "pain": "stop exercise and use easier reset/mobility option"
+      },
+      "coaching_cues": [
+        "Move hips back",
+        "Keep foot flat"
+      ],
+      "common_errors": "Twisting pelvis; knee discomfort",
+      "expected_improvement": "Improve hip abduction and squat depth.",
       "video_url": "",
       "thumbnail_url": "",
       "tags": [
-        "adductor",
-        "mobility"
+        "adductor"
       ]
     },
     {
       "id": "HIP004",
       "name": "Half-Kneeling Hip Flexor Stretch",
+      "description": "Corrective exercise targeting hip_extension, pelvic_control.",
       "primary_system": "HIP",
       "secondary_systems": [
         "PELV"
@@ -2018,6 +3973,12 @@
       "equipment": [
         "none"
       ],
+      "movement_goals": [
+        "hip_extension",
+        "pelvic_control"
+      ],
+      "movement_pattern": "stretch",
+      "movement_plane": "sagittal",
       "corrects": [
         "hip extension limitation",
         "pelvic control"
@@ -2027,8 +3988,6 @@
         "aslr_right",
         "aslr_left"
       ],
-      "instructions": "Half-kneel, tuck pelvis slightly and shift forward gently.",
-      "common_errors": "Arching back; forcing lunge; knee pain.",
       "sets": "2",
       "reps": "",
       "hold": "30 sec / side",
@@ -2038,22 +3997,34 @@
       "week_start": 1,
       "week_end": 4,
       "regression_id": "",
-      "progression_id": "",
+      "progression_id": "HIP005",
       "contraindications": [
-        "pain",
-        "acute injury",
+        "acute pain",
+        "recent trauma",
+        "neurological symptoms",
         "medical red flags"
       ],
+      "pain_rules": {
+        "no_pain": "normal progression allowed",
+        "discomfort": "reduce range and intensity",
+        "pain": "stop exercise and use easier reset/mobility option"
+      },
+      "coaching_cues": [
+        "Tuck pelvis",
+        "Gentle shift"
+      ],
+      "common_errors": "Lumbar arch; forcing lunge",
+      "expected_improvement": "Improve hip extension and pelvis position.",
       "video_url": "",
       "thumbnail_url": "",
       "tags": [
-        "hip_flexor",
-        "mobility"
+        "hip_flexor"
       ]
     },
     {
       "id": "HIP005",
       "name": "Hip Hinge with Dowel",
+      "description": "Corrective exercise targeting hip_hinge, posterior_chain_integration.",
       "primary_system": "HIP",
       "secondary_systems": [
         "POST",
@@ -2064,17 +4035,21 @@
       "equipment": [
         "stick"
       ],
+      "movement_goals": [
+        "hip_hinge",
+        "posterior_chain_integration"
+      ],
+      "movement_pattern": "hinge",
+      "movement_plane": "sagittal",
       "corrects": [
         "hip hinge pattern",
-        "posterior chain integration"
+        "posterior chain"
       ],
       "screening_triggers": [
         "aslr_right",
         "aslr_left",
         "squat"
       ],
-      "instructions": "Hold dowel along spine and hinge at hips while maintaining three contact points.",
-      "common_errors": "Rounding back; bending knees too much; losing dowel contact.",
       "sets": "2",
       "reps": "8",
       "hold": "",
@@ -2083,23 +4058,219 @@
       "duration_minutes": 2,
       "week_start": 3,
       "week_end": 4,
-      "regression_id": "",
-      "progression_id": "",
+      "regression_id": "HIP002",
+      "progression_id": "POST006",
       "contraindications": [
-        "pain",
-        "acute injury",
+        "acute pain",
+        "recent trauma",
+        "neurological symptoms",
         "medical red flags"
       ],
+      "pain_rules": {
+        "no_pain": "normal progression allowed",
+        "discomfort": "reduce range and intensity",
+        "pain": "stop exercise and use easier reset/mobility option"
+      },
+      "coaching_cues": [
+        "Three points of contact",
+        "Hinge from hips"
+      ],
+      "common_errors": "Rounding back; losing dowel",
+      "expected_improvement": "Integrate hip and trunk control.",
+      "video_url": "",
+      "thumbnail_url": "",
+      "tags": [
+        "hinge"
+      ]
+    },
+    {
+      "id": "HIP006",
+      "name": "90/90 Hip Lift-Off",
+      "description": "Corrective exercise targeting active_hip_rotation, pelvic_control.",
+      "primary_system": "HIP",
+      "secondary_systems": [
+        "PELV"
+      ],
+      "phase": "3_motor_control",
+      "difficulty": 3,
+      "equipment": [
+        "none"
+      ],
+      "movement_goals": [
+        "active_hip_rotation",
+        "pelvic_control"
+      ],
+      "movement_pattern": "rotation_control",
+      "movement_plane": "transverse",
+      "corrects": [
+        "hip rotation control"
+      ],
+      "screening_triggers": [
+        "squat"
+      ],
+      "sets": "2",
+      "reps": "5 / side",
+      "hold": "",
+      "tempo": "controlled",
+      "frequency_per_week": "2",
+      "duration_minutes": 2,
+      "week_start": 2,
+      "week_end": 4,
+      "regression_id": "HIP001",
+      "progression_id": "",
+      "contraindications": [
+        "acute pain",
+        "recent trauma",
+        "neurological symptoms",
+        "medical red flags"
+      ],
+      "pain_rules": {
+        "no_pain": "normal progression allowed",
+        "discomfort": "reduce range and intensity",
+        "pain": "stop exercise and use easier reset/mobility option"
+      },
+      "coaching_cues": [
+        "Lift foot gently",
+        "No trunk lean"
+      ],
+      "common_errors": "Leaning away; forcing",
+      "expected_improvement": "Improve active hip rotation control.",
+      "video_url": "",
+      "thumbnail_url": "",
+      "tags": [
+        "hip_rotation",
+        "control"
+      ]
+    },
+    {
+      "id": "POST006",
+      "name": "Bodyweight Romanian Deadlift Pattern",
+      "description": "Corrective exercise targeting hip_hinge_strength, posterior_chain_control.",
+      "primary_system": "POST",
+      "secondary_systems": [
+        "HIP",
+        "CORE"
+      ],
+      "phase": "5_strength",
+      "difficulty": 3,
+      "equipment": [
+        "none"
+      ],
+      "movement_goals": [
+        "hip_hinge_strength",
+        "posterior_chain_control"
+      ],
+      "movement_pattern": "hinge",
+      "movement_plane": "sagittal",
+      "corrects": [
+        "posterior chain strength"
+      ],
+      "screening_triggers": [
+        "squat",
+        "aslr_right",
+        "aslr_left"
+      ],
+      "sets": "2",
+      "reps": "8",
+      "hold": "",
+      "tempo": "controlled",
+      "frequency_per_week": "2",
+      "duration_minutes": 2,
+      "week_start": 3,
+      "week_end": 4,
+      "regression_id": "HIP005",
+      "progression_id": "POST007",
+      "contraindications": [
+        "acute pain",
+        "recent trauma",
+        "neurological symptoms",
+        "medical red flags"
+      ],
+      "pain_rules": {
+        "no_pain": "normal progression allowed",
+        "discomfort": "reduce range and intensity",
+        "pain": "stop exercise and use easier reset/mobility option"
+      },
+      "coaching_cues": [
+        "Soft knees",
+        "Long spine"
+      ],
+      "common_errors": "Rounding back; neck reach",
+      "expected_improvement": "Improve hinge strength.",
       "video_url": "",
       "thumbnail_url": "",
       "tags": [
         "hinge",
-        "integration"
+        "strength"
+      ]
+    },
+    {
+      "id": "POST007",
+      "name": "Single-Leg RDL Reach Assisted",
+      "description": "Corrective exercise targeting single_leg_hinge, posterior_chain_control.",
+      "primary_system": "POST",
+      "secondary_systems": [
+        "HIP",
+        "CORE"
+      ],
+      "phase": "6_integration",
+      "difficulty": 3,
+      "equipment": [
+        "chair"
+      ],
+      "movement_goals": [
+        "single_leg_hinge",
+        "posterior_chain_control"
+      ],
+      "movement_pattern": "hinge",
+      "movement_plane": "sagittal",
+      "corrects": [
+        "single-leg control",
+        "posterior chain"
+      ],
+      "screening_triggers": [
+        "squat",
+        "aslr_right",
+        "aslr_left"
+      ],
+      "sets": "2",
+      "reps": "6 / side",
+      "hold": "",
+      "tempo": "controlled",
+      "frequency_per_week": "2",
+      "duration_minutes": 2,
+      "week_start": 4,
+      "week_end": 4,
+      "regression_id": "POST006",
+      "progression_id": "",
+      "contraindications": [
+        "acute pain",
+        "recent trauma",
+        "neurological symptoms",
+        "medical red flags"
+      ],
+      "pain_rules": {
+        "no_pain": "normal progression allowed",
+        "discomfort": "reduce range and intensity",
+        "pain": "stop exercise and use easier reset/mobility option"
+      },
+      "coaching_cues": [
+        "Hold chair lightly",
+        "Pelvis level"
+      ],
+      "common_errors": "Pelvis rotation; balance loss",
+      "expected_improvement": "Integrate hip hinge with balance.",
+      "video_url": "",
+      "thumbnail_url": "",
+      "tags": [
+        "single_leg",
+        "hinge"
       ]
     },
     {
       "id": "ANKL001",
       "name": "Ankle Knee-to-Wall Rocks",
+      "description": "Corrective exercise targeting ankle_dorsiflexion, knee_tracking.",
       "primary_system": "ANKL",
       "secondary_systems": [
         "KNEE"
@@ -2109,6 +4280,12 @@
       "equipment": [
         "wall"
       ],
+      "movement_goals": [
+        "ankle_dorsiflexion",
+        "knee_tracking"
+      ],
+      "movement_pattern": "mobility",
+      "movement_plane": "sagittal",
       "corrects": [
         "ankle dorsiflexion limitation",
         "heel lift"
@@ -2116,8 +4293,6 @@
       "screening_triggers": [
         "squat"
       ],
-      "instructions": "Face wall, drive knee toward wall while heel stays down.",
-      "common_errors": "Heel lifting; knee collapsing inward; forcing pain.",
       "sets": "2",
       "reps": "8 / side",
       "hold": "",
@@ -2126,13 +4301,25 @@
       "duration_minutes": 2,
       "week_start": 1,
       "week_end": 4,
-      "regression_id": "",
+      "regression_id": "POST005",
       "progression_id": "ANKL002",
       "contraindications": [
-        "pain",
-        "acute injury",
+        "acute pain",
+        "recent trauma",
+        "neurological symptoms",
         "medical red flags"
       ],
+      "pain_rules": {
+        "no_pain": "normal progression allowed",
+        "discomfort": "reduce range and intensity",
+        "pain": "stop exercise and use easier reset/mobility option"
+      },
+      "coaching_cues": [
+        "Heel stays down",
+        "Knee over toes"
+      ],
+      "common_errors": "Heel lift; knee collapse",
+      "expected_improvement": "Improve squat ankle mobility.",
       "video_url": "",
       "thumbnail_url": "",
       "tags": [
@@ -2143,6 +4330,7 @@
     {
       "id": "ANKL002",
       "name": "Half-Kneeling Ankle Dorsiflexion Rock",
+      "description": "Corrective exercise targeting ankle_dorsiflexion, squat_depth.",
       "primary_system": "ANKL",
       "secondary_systems": [
         "HIP"
@@ -2152,6 +4340,12 @@
       "equipment": [
         "none"
       ],
+      "movement_goals": [
+        "ankle_dorsiflexion",
+        "squat_depth"
+      ],
+      "movement_pattern": "mobility",
+      "movement_plane": "sagittal",
       "corrects": [
         "ankle mobility",
         "squat depth"
@@ -2159,8 +4353,6 @@
       "screening_triggers": [
         "squat"
       ],
-      "instructions": "Half-kneel and rock knee forward over toes while heel stays down.",
-      "common_errors": "Arch collapsing; knee pain; heel lift.",
       "sets": "2",
       "reps": "8 / side",
       "hold": "",
@@ -2170,22 +4362,93 @@
       "week_start": 1,
       "week_end": 4,
       "regression_id": "ANKL001",
-      "progression_id": "",
+      "progression_id": "ANKL003",
       "contraindications": [
-        "pain",
-        "acute injury",
+        "acute pain",
+        "recent trauma",
+        "neurological symptoms",
         "medical red flags"
       ],
+      "pain_rules": {
+        "no_pain": "normal progression allowed",
+        "discomfort": "reduce range and intensity",
+        "pain": "stop exercise and use easier reset/mobility option"
+      },
+      "coaching_cues": [
+        "Heel down",
+        "Control arch"
+      ],
+      "common_errors": "Arch collapse; heel lift",
+      "expected_improvement": "Improve dorsiflexion.",
       "video_url": "",
       "thumbnail_url": "",
       "tags": [
-        "ankle",
-        "mobility"
+        "ankle"
+      ]
+    },
+    {
+      "id": "ANKL003",
+      "name": "Banded Ankle Mobilization",
+      "description": "Corrective exercise targeting ankle_dorsiflexion.",
+      "primary_system": "ANKL",
+      "secondary_systems": [
+        "KNEE"
+      ],
+      "phase": "2_mobility",
+      "difficulty": 3,
+      "equipment": [
+        "elastic_band"
+      ],
+      "movement_goals": [
+        "ankle_dorsiflexion"
+      ],
+      "movement_pattern": "joint_mobility",
+      "movement_plane": "sagittal",
+      "corrects": [
+        "ankle restriction",
+        "heel lift"
+      ],
+      "screening_triggers": [
+        "squat"
+      ],
+      "sets": "2",
+      "reps": "8 / side",
+      "hold": "",
+      "tempo": "controlled",
+      "frequency_per_week": "2",
+      "duration_minutes": 2,
+      "week_start": 2,
+      "week_end": 4,
+      "regression_id": "ANKL002",
+      "progression_id": "SQT001",
+      "contraindications": [
+        "acute pain",
+        "recent trauma",
+        "neurological symptoms",
+        "medical red flags"
+      ],
+      "pain_rules": {
+        "no_pain": "normal progression allowed",
+        "discomfort": "reduce range and intensity",
+        "pain": "stop exercise and use easier reset/mobility option"
+      },
+      "coaching_cues": [
+        "Band low on ankle",
+        "Rock forward"
+      ],
+      "common_errors": "Wrong band placement; pain",
+      "expected_improvement": "Improve ankle dorsiflexion.",
+      "video_url": "",
+      "thumbnail_url": "",
+      "tags": [
+        "band",
+        "ankle"
       ]
     },
     {
       "id": "KNEE001",
       "name": "Mini-Band Squat Hold",
+      "description": "Corrective exercise targeting knee_tracking, hip_abductor_control.",
       "primary_system": "KNEE",
       "secondary_systems": [
         "HIP",
@@ -2196,6 +4459,12 @@
       "equipment": [
         "mini_band"
       ],
+      "movement_goals": [
+        "knee_tracking",
+        "hip_abductor_control"
+      ],
+      "movement_pattern": "squat_hold",
+      "movement_plane": "frontal",
       "corrects": [
         "knee valgus",
         "hip control"
@@ -2203,33 +4472,44 @@
       "screening_triggers": [
         "squat"
       ],
-      "instructions": "Hold shallow squat with band above knees, knees track over toes.",
-      "common_errors": "Knees collapsing; feet rolling in; breath holding.",
       "sets": "3",
       "reps": "",
       "hold": "15 sec",
       "tempo": "controlled",
-      "frequency_per_week": "3",
+      "frequency_per_week": "2",
       "duration_minutes": 2,
       "week_start": 2,
       "week_end": 4,
-      "regression_id": "",
-      "progression_id": "",
+      "regression_id": "SQT001",
+      "progression_id": "KNEE002",
       "contraindications": [
-        "pain",
-        "acute injury",
+        "acute pain",
+        "recent trauma",
+        "neurological symptoms",
         "medical red flags"
       ],
+      "pain_rules": {
+        "no_pain": "normal progression allowed",
+        "discomfort": "reduce range and intensity",
+        "pain": "stop exercise and use easier reset/mobility option"
+      },
+      "coaching_cues": [
+        "Knees track toes",
+        "Feet grounded"
+      ],
+      "common_errors": "Knees collapse; feet roll in",
+      "expected_improvement": "Improve knee alignment.",
       "video_url": "",
       "thumbnail_url": "",
       "tags": [
-        "knee_control",
-        "mini_band"
+        "mini_band",
+        "knee"
       ]
     },
     {
       "id": "KNEE002",
       "name": "Mini-Band Lateral Walk",
+      "description": "Corrective exercise targeting hip_abductor_strength, knee_tracking.",
       "primary_system": "KNEE",
       "secondary_systems": [
         "HIP"
@@ -2239,6 +4519,12 @@
       "equipment": [
         "mini_band"
       ],
+      "movement_goals": [
+        "hip_abductor_strength",
+        "knee_tracking"
+      ],
+      "movement_pattern": "lateral_walk",
+      "movement_plane": "frontal",
       "corrects": [
         "glute medius control",
         "knee alignment"
@@ -2246,23 +4532,33 @@
       "screening_triggers": [
         "squat"
       ],
-      "instructions": "Step sideways with band tension, pelvis level and feet forward.",
-      "common_errors": "Feet turning out; trunk swaying; knees collapsing.",
       "sets": "2",
       "reps": "8 steps / side",
       "hold": "",
       "tempo": "controlled",
-      "frequency_per_week": "3",
+      "frequency_per_week": "2",
       "duration_minutes": 2,
       "week_start": 2,
       "week_end": 4,
-      "regression_id": "",
-      "progression_id": "",
+      "regression_id": "KNEE001",
+      "progression_id": "KNEE003",
       "contraindications": [
-        "pain",
-        "acute injury",
+        "acute pain",
+        "recent trauma",
+        "neurological symptoms",
         "medical red flags"
       ],
+      "pain_rules": {
+        "no_pain": "normal progression allowed",
+        "discomfort": "reduce range and intensity",
+        "pain": "stop exercise and use easier reset/mobility option"
+      },
+      "coaching_cues": [
+        "Small steps",
+        "Pelvis level"
+      ],
+      "common_errors": "Feet turn out; trunk sway",
+      "expected_improvement": "Improve frontal-plane hip control.",
       "video_url": "",
       "thumbnail_url": "",
       "tags": [
@@ -2271,8 +4567,69 @@
       ]
     },
     {
+      "id": "KNEE003",
+      "name": "Step-Up Low Box",
+      "description": "Corrective exercise targeting single_leg_strength, knee_tracking.",
+      "primary_system": "KNEE",
+      "secondary_systems": [
+        "HIP",
+        "FUNC"
+      ],
+      "phase": "6_integration",
+      "difficulty": 3,
+      "equipment": [
+        "chair"
+      ],
+      "movement_goals": [
+        "single_leg_strength",
+        "knee_tracking"
+      ],
+      "movement_pattern": "step",
+      "movement_plane": "sagittal",
+      "corrects": [
+        "knee alignment",
+        "single-leg strength"
+      ],
+      "screening_triggers": [
+        "squat"
+      ],
+      "sets": "2",
+      "reps": "6 / side",
+      "hold": "",
+      "tempo": "controlled",
+      "frequency_per_week": "2",
+      "duration_minutes": 2,
+      "week_start": 4,
+      "week_end": 4,
+      "regression_id": "KNEE002",
+      "progression_id": "",
+      "contraindications": [
+        "acute pain",
+        "recent trauma",
+        "neurological symptoms",
+        "medical red flags"
+      ],
+      "pain_rules": {
+        "no_pain": "normal progression allowed",
+        "discomfort": "reduce range and intensity",
+        "pain": "stop exercise and use easier reset/mobility option"
+      },
+      "coaching_cues": [
+        "Push through whole foot",
+        "Control descent"
+      ],
+      "common_errors": "Knee collapse; pushing off back leg",
+      "expected_improvement": "Improve single-leg knee control.",
+      "video_url": "",
+      "thumbnail_url": "",
+      "tags": [
+        "step_up"
+      ]
+    },
+    {
       "id": "SQT001",
       "name": "Goblet Counterbalance Squat to Box",
+      "description": "Corrective exercise targeting squat_pattern, trunk_control, balance.",
       "primary_system": "FUNC",
       "secondary_systems": [
         "ANKL",
@@ -2284,6 +4641,13 @@
       "equipment": [
         "chair"
       ],
+      "movement_goals": [
+        "squat_pattern",
+        "trunk_control",
+        "balance"
+      ],
+      "movement_pattern": "squat",
+      "movement_plane": "sagittal",
       "corrects": [
         "squat depth",
         "trunk lean",
@@ -2292,8 +4656,6 @@
       "screening_triggers": [
         "squat"
       ],
-      "instructions": "Hold light counterweight or arms forward, squat to box with control.",
-      "common_errors": "Knees collapse; heels lift; trunk falling forward.",
       "sets": "3",
       "reps": "6-8",
       "hold": "",
@@ -2302,13 +4664,25 @@
       "duration_minutes": 2,
       "week_start": 1,
       "week_end": 4,
-      "regression_id": "",
+      "regression_id": "HIP002",
       "progression_id": "SQT002",
       "contraindications": [
-        "pain",
-        "acute injury",
+        "acute pain",
+        "recent trauma",
+        "neurological symptoms",
         "medical red flags"
       ],
+      "pain_rules": {
+        "no_pain": "normal progression allowed",
+        "discomfort": "reduce range and intensity",
+        "pain": "stop exercise and use easier reset/mobility option"
+      },
+      "coaching_cues": [
+        "Reach arms forward",
+        "Sit to box"
+      ],
+      "common_errors": "Knees collapse; heels lift",
+      "expected_improvement": "Rebuild squat pattern.",
       "video_url": "",
       "thumbnail_url": "",
       "tags": [
@@ -2319,6 +4693,7 @@
     {
       "id": "SQT002",
       "name": "Wall Squat Facing Wall",
+      "description": "Corrective exercise targeting squat_pattern, thoracic_control, hip_ankle_mobility.",
       "primary_system": "FUNC",
       "secondary_systems": [
         "THOR",
@@ -2330,15 +4705,20 @@
       "equipment": [
         "wall"
       ],
+      "movement_goals": [
+        "squat_pattern",
+        "thoracic_control",
+        "hip_ankle_mobility"
+      ],
+      "movement_pattern": "squat",
+      "movement_plane": "sagittal",
       "corrects": [
         "trunk lean",
-        "squat patterning"
+        "squat pattern"
       ],
       "screening_triggers": [
         "squat"
       ],
-      "instructions": "Face wall, squat slowly without touching wall, keeping chest controlled.",
-      "common_errors": "Too close; heel lift; knees collapse.",
       "sets": "2",
       "reps": "6",
       "hold": "",
@@ -2347,13 +4727,25 @@
       "duration_minutes": 2,
       "week_start": 1,
       "week_end": 4,
-      "regression_id": "",
+      "regression_id": "SQT001",
       "progression_id": "SQT003",
       "contraindications": [
-        "pain",
-        "acute injury",
+        "acute pain",
+        "recent trauma",
+        "neurological symptoms",
         "medical red flags"
       ],
+      "pain_rules": {
+        "no_pain": "normal progression allowed",
+        "discomfort": "reduce range and intensity",
+        "pain": "stop exercise and use easier reset/mobility option"
+      },
+      "coaching_cues": [
+        "Stay tall",
+        "Do not touch wall"
+      ],
+      "common_errors": "Heel lift; knees collapse",
+      "expected_improvement": "Reduce excessive trunk lean.",
       "video_url": "",
       "thumbnail_url": "",
       "tags": [
@@ -2364,6 +4756,7 @@
     {
       "id": "SQT003",
       "name": "Tempo Squat to Box",
+      "description": "Corrective exercise targeting squat_strength, trunk_control.",
       "primary_system": "FUNC",
       "secondary_systems": [
         "CORE",
@@ -2374,6 +4767,12 @@
       "equipment": [
         "chair"
       ],
+      "movement_goals": [
+        "squat_strength",
+        "trunk_control"
+      ],
+      "movement_pattern": "squat",
+      "movement_plane": "sagittal",
       "corrects": [
         "squat control",
         "lower-body strength"
@@ -2381,8 +4780,6 @@
       "screening_triggers": [
         "squat"
       ],
-      "instructions": "Squat to box with three-second lowering, pause, stand tall.",
-      "common_errors": "Dropping fast; knee collapse; breath holding.",
       "sets": "3",
       "reps": "6",
       "hold": "",
@@ -2391,23 +4788,36 @@
       "duration_minutes": 2,
       "week_start": 3,
       "week_end": 4,
-      "regression_id": "",
-      "progression_id": "",
+      "regression_id": "SQT001",
+      "progression_id": "SQT004",
       "contraindications": [
-        "pain",
-        "acute injury",
+        "acute pain",
+        "recent trauma",
+        "neurological symptoms",
         "medical red flags"
       ],
+      "pain_rules": {
+        "no_pain": "normal progression allowed",
+        "discomfort": "reduce range and intensity",
+        "pain": "stop exercise and use easier reset/mobility option"
+      },
+      "coaching_cues": [
+        "Slow descent",
+        "Pause on box"
+      ],
+      "common_errors": "Dropping fast; breath holding",
+      "expected_improvement": "Improve squat control under load.",
       "video_url": "",
       "thumbnail_url": "",
       "tags": [
-        "squat",
-        "tempo"
+        "tempo",
+        "squat"
       ]
     },
     {
       "id": "SQT004",
       "name": "Squat-to-Stand Mobility Drill",
+      "description": "Corrective exercise targeting squat_depth, posterior_chain_mobility.",
       "primary_system": "FUNC",
       "secondary_systems": [
         "HIP",
@@ -2419,32 +4829,48 @@
       "equipment": [
         "none"
       ],
+      "movement_goals": [
+        "squat_depth",
+        "posterior_chain_mobility"
+      ],
+      "movement_pattern": "squat_mobility",
+      "movement_plane": "sagittal",
       "corrects": [
         "squat depth",
-        "posterior chain mobility"
+        "posterior chain"
       ],
       "screening_triggers": [
         "squat",
         "aslr_right",
         "aslr_left"
       ],
-      "instructions": "Reach toward toes, pull into squat, lift chest, then stand.",
-      "common_errors": "Forcing low position; heels lifting; back pain.",
       "sets": "2",
       "reps": "6",
       "hold": "",
       "tempo": "controlled",
-      "frequency_per_week": "3",
+      "frequency_per_week": "2",
       "duration_minutes": 2,
       "week_start": 3,
       "week_end": 4,
-      "regression_id": "",
-      "progression_id": "",
+      "regression_id": "SQT003",
+      "progression_id": "SQT005",
       "contraindications": [
-        "pain",
-        "acute injury",
+        "acute pain",
+        "recent trauma",
+        "neurological symptoms",
         "medical red flags"
       ],
+      "pain_rules": {
+        "no_pain": "normal progression allowed",
+        "discomfort": "reduce range and intensity",
+        "pain": "stop exercise and use easier reset/mobility option"
+      },
+      "coaching_cues": [
+        "Pull into squat",
+        "Lift chest"
+      ],
+      "common_errors": "Forcing low position; back pain",
+      "expected_improvement": "Integrate squat mobility.",
       "video_url": "",
       "thumbnail_url": "",
       "tags": [
@@ -2453,8 +4879,71 @@
       ]
     },
     {
+      "id": "SQT005",
+      "name": "Goblet Squat",
+      "description": "Corrective exercise targeting squat_strength, trunk_control.",
+      "primary_system": "FUNC",
+      "secondary_systems": [
+        "KNEE",
+        "CORE"
+      ],
+      "phase": "5_strength",
+      "difficulty": 3,
+      "equipment": [
+        "dumbbell",
+        "kettlebell"
+      ],
+      "movement_goals": [
+        "squat_strength",
+        "trunk_control"
+      ],
+      "movement_pattern": "squat",
+      "movement_plane": "sagittal",
+      "corrects": [
+        "squat strength",
+        "knee control"
+      ],
+      "screening_triggers": [
+        "squat"
+      ],
+      "sets": "3",
+      "reps": "6-8",
+      "hold": "",
+      "tempo": "controlled",
+      "frequency_per_week": "2",
+      "duration_minutes": 2,
+      "week_start": 4,
+      "week_end": 4,
+      "regression_id": "SQT003",
+      "progression_id": "",
+      "contraindications": [
+        "acute pain",
+        "recent trauma",
+        "neurological symptoms",
+        "medical red flags"
+      ],
+      "pain_rules": {
+        "no_pain": "normal progression allowed",
+        "discomfort": "reduce range and intensity",
+        "pain": "stop exercise and use easier reset/mobility option"
+      },
+      "coaching_cues": [
+        "Weight close",
+        "Controlled depth"
+      ],
+      "common_errors": "Excessive load; rib flare",
+      "expected_improvement": "Build squat strength.",
+      "video_url": "",
+      "thumbnail_url": "",
+      "tags": [
+        "goblet",
+        "strength"
+      ]
+    },
+    {
       "id": "FUNC001",
       "name": "Split Squat Short Range",
+      "description": "Corrective exercise targeting split_stance_control, hip_mobility.",
       "primary_system": "FUNC",
       "secondary_systems": [
         "HIP",
@@ -2465,40 +4954,117 @@
       "equipment": [
         "none"
       ],
+      "movement_goals": [
+        "split_stance_control",
+        "hip_mobility"
+      ],
+      "movement_pattern": "lunge",
+      "movement_plane": "sagittal",
       "corrects": [
-        "split-stance control",
-        "hip mobility"
+        "split-stance control"
       ],
       "screening_triggers": [
         "squat"
       ],
-      "instructions": "Step into split stance and lower slightly with control.",
-      "common_errors": "Front knee collapse; trunk lean; pain.",
       "sets": "2",
       "reps": "6 / side",
       "hold": "",
       "tempo": "controlled",
-      "frequency_per_week": "3",
+      "frequency_per_week": "2",
       "duration_minutes": 2,
       "week_start": 3,
       "week_end": 4,
-      "regression_id": "",
-      "progression_id": "",
+      "regression_id": "KNEE001",
+      "progression_id": "FUNC002",
       "contraindications": [
-        "pain",
-        "acute injury",
+        "acute pain",
+        "recent trauma",
+        "neurological symptoms",
         "medical red flags"
       ],
+      "pain_rules": {
+        "no_pain": "normal progression allowed",
+        "discomfort": "reduce range and intensity",
+        "pain": "stop exercise and use easier reset/mobility option"
+      },
+      "coaching_cues": [
+        "Short range",
+        "Knee tracks toes"
+      ],
+      "common_errors": "Trunk lean; knee collapse",
+      "expected_improvement": "Improve split-stance control.",
       "video_url": "",
       "thumbnail_url": "",
       "tags": [
-        "split_squat",
-        "integration"
+        "split_squat"
       ]
     },
     {
       "id": "FUNC002",
+      "name": "Reverse Lunge to Pad",
+      "description": "Corrective exercise targeting lunge_control, pelvic_control.",
+      "primary_system": "FUNC",
+      "secondary_systems": [
+        "HIP",
+        "KNEE",
+        "CORE"
+      ],
+      "phase": "6_integration",
+      "difficulty": 3,
+      "equipment": [
+        "none"
+      ],
+      "movement_goals": [
+        "lunge_control",
+        "pelvic_control"
+      ],
+      "movement_pattern": "lunge",
+      "movement_plane": "sagittal",
+      "corrects": [
+        "lower-body integration"
+      ],
+      "screening_triggers": [
+        "squat",
+        "aslr_right",
+        "aslr_left"
+      ],
+      "sets": "2",
+      "reps": "6 / side",
+      "hold": "",
+      "tempo": "controlled",
+      "frequency_per_week": "2",
+      "duration_minutes": 2,
+      "week_start": 4,
+      "week_end": 4,
+      "regression_id": "FUNC001",
+      "progression_id": "",
+      "contraindications": [
+        "acute pain",
+        "recent trauma",
+        "neurological symptoms",
+        "medical red flags"
+      ],
+      "pain_rules": {
+        "no_pain": "normal progression allowed",
+        "discomfort": "reduce range and intensity",
+        "pain": "stop exercise and use easier reset/mobility option"
+      },
+      "coaching_cues": [
+        "Step back slowly",
+        "Return tall"
+      ],
+      "common_errors": "Balance loss; knee collapse",
+      "expected_improvement": "Improve functional lower-body control.",
+      "video_url": "",
+      "thumbnail_url": "",
+      "tags": [
+        "lunge"
+      ]
+    },
+    {
+      "id": "FUNC003",
       "name": "Controlled March with Pause",
+      "description": "Corrective exercise targeting hip_flexion_control, balance.",
       "primary_system": "FUNC",
       "secondary_systems": [
         "HIP",
@@ -2509,6 +5075,12 @@
       "equipment": [
         "none"
       ],
+      "movement_goals": [
+        "hip_flexion_control",
+        "balance"
+      ],
+      "movement_pattern": "march",
+      "movement_plane": "sagittal",
       "corrects": [
         "hip flexion control",
         "balance"
@@ -2518,28 +5090,97 @@
         "aslr_left",
         "squat"
       ],
-      "instructions": "March slowly and pause at top of each knee lift while pelvis stays level.",
-      "common_errors": "Leaning back; foot collapse; rushing.",
       "sets": "2",
       "reps": "8 / side",
       "hold": "",
       "tempo": "controlled",
-      "frequency_per_week": "3",
+      "frequency_per_week": "2",
       "duration_minutes": 2,
       "week_start": 3,
       "week_end": 4,
-      "regression_id": "",
-      "progression_id": "",
+      "regression_id": "CORE002",
+      "progression_id": "FUNC004",
       "contraindications": [
-        "pain",
-        "acute injury",
+        "acute pain",
+        "recent trauma",
+        "neurological symptoms",
         "medical red flags"
       ],
+      "pain_rules": {
+        "no_pain": "normal progression allowed",
+        "discomfort": "reduce range and intensity",
+        "pain": "stop exercise and use easier reset/mobility option"
+      },
+      "coaching_cues": [
+        "Pause at top",
+        "Pelvis level"
+      ],
+      "common_errors": "Leaning back; rushing",
+      "expected_improvement": "Improve standing hip control.",
       "video_url": "",
       "thumbnail_url": "",
       "tags": [
-        "march",
-        "balance"
+        "march"
+      ]
+    },
+    {
+      "id": "FUNC004",
+      "name": "Suitcase Carry",
+      "description": "Corrective exercise targeting anti_lateral_flexion, gait_control.",
+      "primary_system": "FUNC",
+      "secondary_systems": [
+        "CORE",
+        "HIP"
+      ],
+      "phase": "6_integration",
+      "difficulty": 3,
+      "equipment": [
+        "dumbbell",
+        "kettlebell"
+      ],
+      "movement_goals": [
+        "anti_lateral_flexion",
+        "gait_control"
+      ],
+      "movement_pattern": "carry",
+      "movement_plane": "frontal",
+      "corrects": [
+        "trunk stability"
+      ],
+      "screening_triggers": [
+        "squat"
+      ],
+      "sets": "3",
+      "reps": "",
+      "hold": "20 m / side",
+      "tempo": "controlled",
+      "frequency_per_week": "2",
+      "duration_minutes": 2,
+      "week_start": 4,
+      "week_end": 4,
+      "regression_id": "CORE008",
+      "progression_id": "",
+      "contraindications": [
+        "acute pain",
+        "recent trauma",
+        "neurological symptoms",
+        "medical red flags"
+      ],
+      "pain_rules": {
+        "no_pain": "normal progression allowed",
+        "discomfort": "reduce range and intensity",
+        "pain": "stop exercise and use easier reset/mobility option"
+      },
+      "coaching_cues": [
+        "Walk tall",
+        "Do not lean"
+      ],
+      "common_errors": "Leaning; shrugging",
+      "expected_improvement": "Integrate core stability into gait.",
+      "video_url": "",
+      "thumbnail_url": "",
+      "tags": [
+        "carry"
       ]
     }
   ]
