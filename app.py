@@ -344,177 +344,154 @@ def analyze_squat(xy, conf):
 
 def analyze_aslr(xy, conf, side="RIGHT"):
     """
-    Active Straight Leg Raise (ASLR) analysis — V15.1 raised-leg auto-selection.
+    Active Straight Leg Raise (ASLR) analysis — V15.2 endpoint-elevation fix.
 
-    Main fix vs V15:
-    - In supine / lying photos, YOLO often swaps left and right legs.
-    - Therefore, for ASLR we DO NOT blindly trust COCO left/right labels.
-    - We calculate both leg angles and automatically select the raised leg.
-    - The selected ASLR angle is the leg with the higher elevation angle.
+    Why V15.2:
+    - In lying ASLR photos, YOLO often swaps left/right and sometimes mislabels the floor leg.
+    - The most reliable visual cue is: the raised leg has the knee/ankle highest above the pelvis.
+    - Therefore we detect the raised limb by searching all lower-limb endpoints and selecting the
+      endpoint with the greatest vertical elevation above the pelvis center.
+    - This should fix the case where a straight leg above the hip is incorrectly read as ~30°.
 
-    This fixes the common error:
-    - user raises the leg vertically
-    - YOLO labels the other/floor leg as the requested side
-    - old code reads 20–40° instead of ~90°
+    Output:
+    - 0° = leg close to floor
+    - 90° = leg vertical above hip
+    - <45 red, 45–70 yellow, >=70 green
     """
 
     L_HIP, R_HIP = 11, 12
     L_KNEE, R_KNEE = 13, 14
     L_ANK, R_ANK = 15, 16
 
-    MIN_REQUIRED_CONF = 0.10
-    MIN_GOOD_CONF = 0.25
+    MIN_CONF = 0.08
+    GOOD_CONF = 0.25
 
-    def angle_from_horizontal(p1, p2):
-        dx = float(p2[0] - p1[0])
-        dy = float(p1[1] - p2[1])  # invert image y-axis
-        ang = abs(math.degrees(math.atan2(dy, abs(dx) + 1e-6)))
-        return max(0.0, min(180.0, ang))
+    left_hip, right_hip = xy[L_HIP], xy[R_HIP]
+    pelvis = (left_hip + right_hip) / 2.0
+    pelvis_conf = float((conf[L_HIP] + conf[R_HIP]) / 2.0)
 
-    def knee_angle_deg(hip, knee, ankle):
-        try:
-            v1 = hip - knee
-            v2 = ankle - knee
-            raw = abs(math.degrees(math.atan2(v2[1], v2[0]) - math.atan2(v1[1], v1[0])))
-            if raw > 180:
-                raw = 360 - raw
-            return float(raw)
-        except Exception:
-            return None
+    diagnostic_flags = []
+    if pelvis_conf < MIN_CONF:
+        diagnostic_flags.append("low_pelvis_confidence")
 
-    def leg_candidate(label, hip_i, knee_i, ankle_i, other_hip_i, other_ankle_i):
-        hip = xy[hip_i]
-        knee = xy[knee_i]
-        ankle = xy[ankle_i]
-        other_hip = xy[other_hip_i]
-        other_ankle = xy[other_ankle_i]
+    def angle_from_pelvis(endpoint):
+        # Image y-axis goes downward. For anatomical upward movement:
+        dx = float(endpoint[0] - pelvis[0])
+        dy_up = float(pelvis[1] - endpoint[1])
+        angle = math.degrees(math.atan2(max(0.0, dy_up), abs(dx) + 1e-6))
+        return max(0.0, min(90.0, float(angle)))
 
-        hip_c = float(conf[hip_i])
-        knee_c = float(conf[knee_i])
-        ankle_c = float(conf[ankle_i])
-        other_hip_c = float(conf[other_hip_i])
-        other_ankle_c = float(conf[other_ankle_i])
-
-        hip_to_ankle_angle = angle_from_horizontal(hip, ankle)
-        hip_to_knee_angle = angle_from_horizontal(hip, knee)
-        knee_to_ankle_angle = angle_from_horizontal(knee, ankle)
-
-        estimates = []
-        if hip_c >= MIN_REQUIRED_CONF and ankle_c >= MIN_REQUIRED_CONF:
-            estimates.append((hip_to_ankle_angle, max(0.05, min(1.0, (hip_c + ankle_c) / 2.0)) * 1.2, "hip_to_ankle"))
-        if hip_c >= MIN_REQUIRED_CONF and knee_c >= MIN_REQUIRED_CONF:
-            estimates.append((hip_to_knee_angle, max(0.05, min(1.0, (hip_c + knee_c) / 2.0)) * 1.0, "hip_to_knee"))
-        if knee_c >= MIN_REQUIRED_CONF and ankle_c >= MIN_REQUIRED_CONF:
-            estimates.append((knee_to_ankle_angle, max(0.05, min(1.0, (knee_c + ankle_c) / 2.0)) * 0.45, "knee_to_ankle"))
-
-        diagnostic_flags = []
-        if hip_c < MIN_REQUIRED_CONF:
-            diagnostic_flags.append("low_hip_confidence")
-        if knee_c < MIN_REQUIRED_CONF:
-            diagnostic_flags.append("low_knee_confidence")
-        if ankle_c < MIN_REQUIRED_CONF:
-            diagnostic_flags.append("low_ankle_confidence")
-
-        if not estimates:
-            angle = 0.0
-            method = "insufficient_keypoints"
-            diagnostic_flags.append("insufficient_required_keypoints")
-        else:
-            total_w = sum(w for _, w, _ in estimates)
-            angle = sum(a * w for a, w, _ in estimates) / max(total_w, 1e-6)
-            method = "+".join(m for _, _, m in estimates)
-
-        raised_knee_angle = knee_angle_deg(hip, knee, ankle)
-        if raised_knee_angle is not None and raised_knee_angle < 145:
-            diagnostic_flags.append("raised_knee_bent")
-
-        opposite_leg_angle = None
-        if other_hip_c >= MIN_REQUIRED_CONF and other_ankle_c >= MIN_REQUIRED_CONF:
-            opposite_leg_angle = angle_from_horizontal(other_hip, other_ankle)
-
-        conf_out = max(0.0, min(1.0, float(hip_c + knee_c + ankle_c) / 3.0))
-
-        # Selection score favors a high elevation angle and acceptable confidence.
-        # It also slightly penalizes a very bent knee, because ASLR requires a straight leg.
-        selection_score = angle * (0.65 + 0.35 * conf_out)
-        if raised_knee_angle is not None and raised_knee_angle < 145:
-            selection_score -= 10
-
-        return {
+    # Build endpoint candidates. Ankles get higher weight, but knees can rescue detection.
+    candidates = []
+    for label, idx, point_type, weight in [
+        ("left_knee", L_KNEE, "knee", 0.85),
+        ("right_knee", R_KNEE, "knee", 0.85),
+        ("left_ankle", L_ANK, "ankle", 1.15),
+        ("right_ankle", R_ANK, "ankle", 1.15),
+    ]:
+        c = float(conf[idx])
+        if c < MIN_CONF:
+            continue
+        p = xy[idx]
+        dy_up = float(pelvis[1] - p[1])
+        # Endpoint must be above or approximately at pelvis level. If below pelvis, it is probably floor leg.
+        if dy_up < -15:
+            continue
+        angle = angle_from_pelvis(p)
+        # Prefer endpoints that are high above pelvis and close to vertical.
+        vertical_elevation = max(0.0, dy_up)
+        selection_score = (angle * 1.6 + vertical_elevation * 0.06) * (0.65 + 0.35 * min(1.0, c)) * weight
+        candidates.append({
             "label": label,
-            "angle": max(0.0, min(180.0, float(angle))),
-            "selection_score": float(selection_score),
-            "confidence": conf_out,
-            "angle_method": method,
-            "hip_to_ankle_angle": hip_to_ankle_angle,
-            "hip_to_knee_angle": hip_to_knee_angle,
-            "knee_to_ankle_angle": knee_to_ankle_angle,
-            "raised_knee_angle": raised_knee_angle,
-            "opposite_leg_angle": opposite_leg_angle,
-            "diagnostic_flags": diagnostic_flags,
-            "keypoint_confidence": {
-                "hip": round(hip_c, 3),
-                "knee": round(knee_c, 3),
-                "ankle": round(ankle_c, 3),
-                "opposite_hip": round(other_hip_c, 3),
-                "opposite_ankle": round(other_ankle_c, 3),
-            }
-        }
+            "idx": idx,
+            "point_type": point_type,
+            "confidence": c,
+            "point": p,
+            "angle": angle,
+            "dy_up": dy_up,
+            "selection_score": selection_score,
+        })
 
-    left_candidate = leg_candidate("COCO_LEFT", L_HIP, L_KNEE, L_ANK, R_HIP, R_ANK)
-    right_candidate = leg_candidate("COCO_RIGHT", R_HIP, R_KNEE, R_ANK, L_HIP, L_ANK)
+    if not candidates:
+        diagnostic_flags.append("no_valid_raised_leg_endpoint")
+        aslr_angle = 0.0
+        selected = None
+    else:
+        selected = max(candidates, key=lambda x: x["selection_score"])
+        aslr_angle = selected["angle"]
 
-    # For ASLR, the raised leg is the leg with the higher elevation angle/selection score.
-    candidates = [left_candidate, right_candidate]
-    selected = max(candidates, key=lambda c: c["selection_score"])
+    # Extra segment diagnostics when possible.
+    def point_angle(a, b):
+        dx = float(b[0] - a[0])
+        dy_up = float(a[1] - b[1])
+        return max(0.0, min(90.0, math.degrees(math.atan2(max(0.0, dy_up), abs(dx) + 1e-6))))
 
-    aslr_angle = selected["angle"]
-    diagnostic_flags = list(selected["diagnostic_flags"])
+    left_hip_ankle = point_angle(xy[L_HIP], xy[L_ANK]) if float(conf[L_HIP]) >= MIN_CONF and float(conf[L_ANK]) >= MIN_CONF else None
+    right_hip_ankle = point_angle(xy[R_HIP], xy[R_ANK]) if float(conf[R_HIP]) >= MIN_CONF and float(conf[R_ANK]) >= MIN_CONF else None
+    left_hip_knee = point_angle(xy[L_HIP], xy[L_KNEE]) if float(conf[L_HIP]) >= MIN_CONF and float(conf[L_KNEE]) >= MIN_CONF else None
+    right_hip_knee = point_angle(xy[R_HIP], xy[R_KNEE]) if float(conf[R_HIP]) >= MIN_CONF and float(conf[R_KNEE]) >= MIN_CONF else None
+
+    # If ankle and knee from the same side are both strong, refine using their average.
+    # This helps avoid an overestimated angle from a misplaced knee alone.
+    if selected is not None:
+        if "left" in selected["label"]:
+            side_angles = [a for a in [left_hip_ankle, left_hip_knee] if a is not None]
+            side_confs = [float(conf[i]) for i in [L_ANK, L_KNEE] if float(conf[i]) >= MIN_CONF]
+            detected_coco_side = "COCO_LEFT"
+        else:
+            side_angles = [a for a in [right_hip_ankle, right_hip_knee] if a is not None]
+            side_confs = [float(conf[i]) for i in [R_ANK, R_KNEE] if float(conf[i]) >= MIN_CONF]
+            detected_coco_side = "COCO_RIGHT"
+
+        if len(side_angles) >= 2 and max(side_confs) >= GOOD_CONF:
+            aslr_angle = (max(side_angles) * 0.7 + min(side_angles) * 0.3)
+
+        if selected["confidence"] < GOOD_CONF:
+            diagnostic_flags.append("low_selected_endpoint_confidence")
+    else:
+        detected_coco_side = "UNKNOWN"
 
     requested_side = side.upper()
-    detected_coco_side = selected["label"]
-
-    # This flag is expected sometimes in lying photos and is the reason V15.1 exists.
     if (requested_side == "RIGHT" and detected_coco_side == "COCO_LEFT") or (requested_side == "LEFT" and detected_coco_side == "COCO_RIGHT"):
         diagnostic_flags.append("yolo_left_right_swap_possible")
 
-    # Opposite/floor leg should stay relatively close to horizontal.
-    if selected.get("opposite_leg_angle") is not None and selected["opposite_leg_angle"] > 25:
-        diagnostic_flags.append("opposite_leg_lifted")
+    # Opposite leg compensation proxy: if the second-best endpoint is also very high, the opposite leg may be lifted.
+    sorted_candidates = sorted(candidates, key=lambda x: x["selection_score"], reverse=True)
+    if len(sorted_candidates) > 1:
+        second = sorted_candidates[1]
+        if second["angle"] > 35 and second["dy_up"] > 40:
+            diagnostic_flags.append("opposite_leg_or_second_endpoint_high")
+
+    aslr_angle = max(0.0, min(90.0, float(aslr_angle)))
 
     if aslr_angle < 45:
         score = 40.0
     elif aslr_angle < 70:
         score = 60.0 + ((aslr_angle - 45.0) / 25.0) * 19.0
     else:
-        score = 85.0 + (min(aslr_angle, 110.0) - 70.0) / 40.0 * 15.0
+        score = 85.0 + (min(aslr_angle, 90.0) - 70.0) / 20.0 * 15.0
 
-    # Small validity penalties only.
-    if "raised_knee_bent" in diagnostic_flags:
-        score -= 6.0
-    if "opposite_leg_lifted" in diagnostic_flags:
-        score -= 4.0
-    if selected["keypoint_confidence"]["ankle"] < MIN_GOOD_CONF:
+    if "low_selected_endpoint_confidence" in diagnostic_flags:
         score -= 3.0
-
     score = max(0.0, min(100.0, score))
 
     aslr_thr = make_thresholds(
         "deg",
         0,
-        180,
+        90,
         [
             {"label": "Red", "min": 0, "max": 45, "color": "red"},
             {"label": "Yellow", "min": 45, "max": 70, "color": "yellow"},
-            {"label": "Green", "min": 70, "max": 180, "color": "green"},
+            {"label": "Green", "min": 70, "max": 90, "color": "green"},
         ],
         aslr_angle
     )
 
-    conf_out = max(0.0, min(1.0, float(selected["confidence"])))
+    selected_conf = float(selected["confidence"]) if selected is not None else 0.0
+    conf_out = max(0.0, min(1.0, (pelvis_conf + selected_conf) / 2.0))
 
     quality_label = "good"
-    if conf_out < 0.35 or "insufficient_required_keypoints" in diagnostic_flags:
+    if conf_out < 0.30:
         quality_label = "low"
     elif conf_out < 0.55 or diagnostic_flags:
         quality_label = "moderate"
@@ -527,27 +504,33 @@ def analyze_aslr(xy, conf, side="RIGHT"):
             "requested_side": requested_side,
             "detected_coco_side": detected_coco_side,
             "side": requested_side,
-            "angle_method": selected["angle_method"],
+            "angle_method": "pelvis_to_highest_lower_limb_endpoint_v15_2",
             "quality_label": quality_label,
             "diagnostic_flags": diagnostic_flags,
-            "left_candidate": {
-                "angle": round(float(left_candidate["angle"]), 2),
-                "selection_score": round(float(left_candidate["selection_score"]), 2),
-                "confidence": round(float(left_candidate["confidence"]), 3),
-                "keypoint_confidence": left_candidate["keypoint_confidence"],
-            },
-            "right_candidate": {
-                "angle": round(float(right_candidate["angle"]), 2),
-                "selection_score": round(float(right_candidate["selection_score"]), 2),
-                "confidence": round(float(right_candidate["confidence"]), 3),
-                "keypoint_confidence": right_candidate["keypoint_confidence"],
-            },
-            "hip_to_ankle_angle": round(float(selected["hip_to_ankle_angle"]), 2),
-            "hip_to_knee_angle": round(float(selected["hip_to_knee_angle"]), 2),
-            "knee_to_ankle_angle": round(float(selected["knee_to_ankle_angle"]), 2),
-            "raised_knee_angle": round(float(selected["raised_knee_angle"]), 2) if selected["raised_knee_angle"] is not None else None,
-            "opposite_leg_angle": round(float(selected["opposite_leg_angle"]), 2) if selected["opposite_leg_angle"] is not None else None,
-            "keypoint_confidence": selected["keypoint_confidence"]
+            "selected_endpoint": selected["label"] if selected is not None else None,
+            "selected_endpoint_confidence": round(selected_conf, 3),
+            "candidate_angles": [
+                {
+                    "label": c["label"],
+                    "angle": round(float(c["angle"]), 2),
+                    "dy_up": round(float(c["dy_up"]), 1),
+                    "confidence": round(float(c["confidence"]), 3),
+                    "selection_score": round(float(c["selection_score"]), 2),
+                }
+                for c in sorted_candidates
+            ],
+            "left_hip_ankle_angle": round(float(left_hip_ankle), 2) if left_hip_ankle is not None else None,
+            "right_hip_ankle_angle": round(float(right_hip_ankle), 2) if right_hip_ankle is not None else None,
+            "left_hip_knee_angle": round(float(left_hip_knee), 2) if left_hip_knee is not None else None,
+            "right_hip_knee_angle": round(float(right_hip_knee), 2) if right_hip_knee is not None else None,
+            "keypoint_confidence": {
+                "left_hip": round(float(conf[L_HIP]), 3),
+                "right_hip": round(float(conf[R_HIP]), 3),
+                "left_knee": round(float(conf[L_KNEE]), 3),
+                "right_knee": round(float(conf[R_KNEE]), 3),
+                "left_ankle": round(float(conf[L_ANK]), 3),
+                "right_ankle": round(float(conf[R_ANK]), 3),
+            }
         },
         "thresholds": {
             "aslr_angle": aslr_thr
