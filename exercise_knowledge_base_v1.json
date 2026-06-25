@@ -1,0 +1,968 @@
+{
+  "library_name": "FlexiLab Corrective Exercise Knowledge Base",
+  "version": "1.0.0",
+  "principles": [
+    "Week 1 Restore: mobility, breathing, low-load control.",
+    "Week 2 Control: active mobility and coordination.",
+    "Week 3 Stabilize: stability and light loading.",
+    "Week 4 Integrate: functional movement patterns.",
+    "Pain triggers regression or referral."
+  ],
+  "exercises": [
+    {
+      "id": "CERV_1_01",
+      "name": "Suboccipital Ball Release",
+      "region": "cervical",
+      "phase": "release",
+      "week": 1,
+      "level": 1,
+      "goal": "reduce upper-neck tone",
+      "why": "Targets reduce upper-neck tone to improve movement quality and support the FlexiLab priorities.",
+      "equipment": [
+        "none"
+      ],
+      "sets": "1",
+      "reps": "",
+      "hold": "45 sec",
+      "rest": "20–45 sec",
+      "tempo": "controlled",
+      "coaching_cues": [
+        "Use gentle pressure",
+        "breathe slowly"
+      ],
+      "common_mistakes": [
+        "Moving too fast",
+        "Losing alignment",
+        "Forcing range"
+      ],
+      "pain_modification": "Reduce range, slow down, or use the previous regression if pain appears.",
+      "progression": "Supine Chin Tuck",
+      "regression": ""
+    },
+    {
+      "id": "CERV_2_02",
+      "name": "Supine Chin Tuck",
+      "region": "cervical",
+      "phase": "motor_control",
+      "week": 2,
+      "level": 2,
+      "goal": "activate deep neck flexors",
+      "why": "Targets activate deep neck flexors to improve movement quality and support the FlexiLab priorities.",
+      "equipment": [
+        "none"
+      ],
+      "sets": "2",
+      "reps": "8 reps • 2 sec hold",
+      "hold": "",
+      "rest": "20–45 sec",
+      "tempo": "controlled",
+      "coaching_cues": [
+        "Small double chin",
+        "do not lift head"
+      ],
+      "common_mistakes": [
+        "Moving too fast",
+        "Losing alignment",
+        "Forcing range"
+      ],
+      "pain_modification": "Reduce range, slow down, or use the previous regression if pain appears.",
+      "progression": "Wall Chin Tuck",
+      "regression": ""
+    },
+    {
+      "id": "CERV_3_03",
+      "name": "Wall Chin Tuck",
+      "region": "cervical",
+      "phase": "motor_control",
+      "week": 3,
+      "level": 3,
+      "goal": "upright cervical control",
+      "why": "Targets upright cervical control to improve movement quality and support the FlexiLab priorities.",
+      "equipment": [
+        "none"
+      ],
+      "sets": "2",
+      "reps": "10 reps • 3 sec hold",
+      "hold": "",
+      "rest": "20–45 sec",
+      "tempo": "controlled",
+      "coaching_cues": [
+        "Ribs down",
+        "relax shoulders"
+      ],
+      "common_mistakes": [
+        "Moving too fast",
+        "Losing alignment",
+        "Forcing range"
+      ],
+      "pain_modification": "Reduce range, slow down, or use the previous regression if pain appears.",
+      "progression": "Wall Posture Hold",
+      "regression": ""
+    },
+    {
+      "id": "CERV_4_04",
+      "name": "Wall Posture Hold",
+      "region": "cervical",
+      "phase": "stability",
+      "week": 4,
+      "level": 4,
+      "goal": "postural endurance",
+      "why": "Targets postural endurance to improve movement quality and support the FlexiLab priorities.",
+      "equipment": [
+        "none"
+      ],
+      "sets": "3",
+      "reps": "",
+      "hold": "20 sec hold",
+      "rest": "20–45 sec",
+      "tempo": "controlled",
+      "coaching_cues": [
+        "Stand tall",
+        "breathe normally"
+      ],
+      "common_mistakes": [
+        "Moving too fast",
+        "Losing alignment",
+        "Forcing range"
+      ],
+      "pain_modification": "Reduce range, slow down, or use the previous regression if pain appears.",
+      "progression": "Wall Posture March",
+      "regression": ""
+    },
+    {
+      "id": "THOR_1_01",
+      "name": "Foam Roller Thoracic Extension",
+      "region": "thoracic",
+      "phase": "mobility",
+      "week": 1,
+      "level": 1,
+      "goal": "restore thoracic extension",
+      "why": "Targets restore thoracic extension to improve movement quality and support the FlexiLab priorities.",
+      "equipment": [
+        "none"
+      ],
+      "sets": "2",
+      "reps": "8 reps • 2 sec hold",
+      "hold": "",
+      "rest": "20–45 sec",
+      "tempo": "controlled",
+      "coaching_cues": [
+        "Support head",
+        "move from upper back"
+      ],
+      "common_mistakes": [
+        "Moving too fast",
+        "Losing alignment",
+        "Forcing range"
+      ],
+      "pain_modification": "Reduce range, slow down, or use the previous regression if pain appears.",
+      "progression": "Bench T-Spine Extension Prayer",
+      "regression": ""
+    },
+    {
+      "id": "THOR_2_02",
+      "name": "Side-Lying Open Book",
+      "region": "thoracic",
+      "phase": "mobility",
+      "week": 2,
+      "level": 2,
+      "goal": "restore thoracic rotation",
+      "why": "Targets restore thoracic rotation to improve movement quality and support the FlexiLab priorities.",
+      "equipment": [
+        "none"
+      ],
+      "sets": "2",
+      "reps": "6 reps / side",
+      "hold": "",
+      "rest": "20–45 sec",
+      "tempo": "controlled",
+      "coaching_cues": [
+        "Keep knees stacked",
+        "rotate ribs"
+      ],
+      "common_mistakes": [
+        "Moving too fast",
+        "Losing alignment",
+        "Forcing range"
+      ],
+      "pain_modification": "Reduce range, slow down, or use the previous regression if pain appears.",
+      "progression": "Thread the Needle",
+      "regression": ""
+    },
+    {
+      "id": "THOR_3_03",
+      "name": "Wall Angel",
+      "region": "thoracic",
+      "phase": "stability",
+      "week": 3,
+      "level": 3,
+      "goal": "thoracic extension and scapular control",
+      "why": "Targets thoracic extension and scapular control to improve movement quality and support the FlexiLab priorities.",
+      "equipment": [
+        "none"
+      ],
+      "sets": "2",
+      "reps": "8 reps",
+      "hold": "",
+      "rest": "20–45 sec",
+      "tempo": "controlled",
+      "coaching_cues": [
+        "Ribs down",
+        "slide smoothly"
+      ],
+      "common_mistakes": [
+        "Moving too fast",
+        "Losing alignment",
+        "Forcing range"
+      ],
+      "pain_modification": "Reduce range, slow down, or use the previous regression if pain appears.",
+      "progression": "Band Wall Angel",
+      "regression": ""
+    },
+    {
+      "id": "THOR_4_04",
+      "name": "Tall-Kneeling Overhead Reach",
+      "region": "thoracic",
+      "phase": "integration",
+      "week": 4,
+      "level": 4,
+      "goal": "overhead pattern integration",
+      "why": "Targets overhead pattern integration to improve movement quality and support the FlexiLab priorities.",
+      "equipment": [
+        "none"
+      ],
+      "sets": "2",
+      "reps": "8 reps",
+      "hold": "",
+      "rest": "20–45 sec",
+      "tempo": "controlled",
+      "coaching_cues": [
+        "Glutes engaged",
+        "ribs down"
+      ],
+      "common_mistakes": [
+        "Moving too fast",
+        "Losing alignment",
+        "Forcing range"
+      ],
+      "pain_modification": "Reduce range, slow down, or use the previous regression if pain appears.",
+      "progression": "",
+      "regression": ""
+    },
+    {
+      "id": "SHOU_1_01",
+      "name": "Child's Pose Lat Stretch",
+      "region": "shoulder",
+      "phase": "mobility",
+      "week": 1,
+      "level": 1,
+      "goal": "improve shoulder flexion",
+      "why": "Targets improve shoulder flexion to improve movement quality and support the FlexiLab priorities.",
+      "equipment": [
+        "none"
+      ],
+      "sets": "2",
+      "reps": "",
+      "hold": "45 sec",
+      "rest": "20–45 sec",
+      "tempo": "controlled",
+      "coaching_cues": [
+        "Breathe into side ribs"
+      ],
+      "common_mistakes": [
+        "Moving too fast",
+        "Losing alignment",
+        "Forcing range"
+      ],
+      "pain_modification": "Reduce range, slow down, or use the previous regression if pain appears.",
+      "progression": "Wall Slide",
+      "regression": ""
+    },
+    {
+      "id": "SHOU_2_02",
+      "name": "Doorway Pec Stretch",
+      "region": "shoulder",
+      "phase": "mobility",
+      "week": 2,
+      "level": 2,
+      "goal": "reduce anterior shoulder restriction",
+      "why": "Targets reduce anterior shoulder restriction to improve movement quality and support the FlexiLab priorities.",
+      "equipment": [
+        "none"
+      ],
+      "sets": "2",
+      "reps": "",
+      "hold": "30 sec / side",
+      "rest": "20–45 sec",
+      "tempo": "controlled",
+      "coaching_cues": [
+        "Mild stretch",
+        "ribs controlled"
+      ],
+      "common_mistakes": [
+        "Moving too fast",
+        "Losing alignment",
+        "Forcing range"
+      ],
+      "pain_modification": "Reduce range, slow down, or use the previous regression if pain appears.",
+      "progression": "Band Pull-Apart",
+      "regression": ""
+    },
+    {
+      "id": "SHOU_3_03",
+      "name": "Wall Slide",
+      "region": "shoulder",
+      "phase": "motor_control",
+      "week": 3,
+      "level": 3,
+      "goal": "scapular upward rotation",
+      "why": "Targets scapular upward rotation to improve movement quality and support the FlexiLab priorities.",
+      "equipment": [
+        "none"
+      ],
+      "sets": "2",
+      "reps": "8 reps",
+      "hold": "",
+      "rest": "20–45 sec",
+      "tempo": "controlled",
+      "coaching_cues": [
+        "Ribs down",
+        "avoid shrugging"
+      ],
+      "common_mistakes": [
+        "Moving too fast",
+        "Losing alignment",
+        "Forcing range"
+      ],
+      "pain_modification": "Reduce range, slow down, or use the previous regression if pain appears.",
+      "progression": "Serratus Wall Slide",
+      "regression": ""
+    },
+    {
+      "id": "SHOU_4_04",
+      "name": "Serratus Wall Slide",
+      "region": "shoulder",
+      "phase": "stability",
+      "week": 4,
+      "level": 4,
+      "goal": "serratus and scapular control",
+      "why": "Targets serratus and scapular control to improve movement quality and support the FlexiLab priorities.",
+      "equipment": [
+        "none"
+      ],
+      "sets": "2",
+      "reps": "8 reps",
+      "hold": "",
+      "rest": "20–45 sec",
+      "tempo": "controlled",
+      "coaching_cues": [
+        "Push gently into wall"
+      ],
+      "common_mistakes": [
+        "Moving too fast",
+        "Losing alignment",
+        "Forcing range"
+      ],
+      "pain_modification": "Reduce range, slow down, or use the previous regression if pain appears.",
+      "progression": "Wall Angel to Lift-Off",
+      "regression": ""
+    },
+    {
+      "id": "CORE_1_01",
+      "name": "90/90 Breathing Feet on Wall",
+      "region": "core",
+      "phase": "reset",
+      "week": 1,
+      "level": 1,
+      "goal": "rib cage and pelvic control",
+      "why": "Targets rib cage and pelvic control to improve movement quality and support the FlexiLab priorities.",
+      "equipment": [
+        "none"
+      ],
+      "sets": "2",
+      "reps": "",
+      "hold": "60 sec",
+      "rest": "20–45 sec",
+      "tempo": "controlled",
+      "coaching_cues": [
+        "Exhale fully",
+        "ribs down"
+      ],
+      "common_mistakes": [
+        "Moving too fast",
+        "Losing alignment",
+        "Forcing range"
+      ],
+      "pain_modification": "Reduce range, slow down, or use the previous regression if pain appears.",
+      "progression": "Dead Bug Breathing",
+      "regression": ""
+    },
+    {
+      "id": "CORE_2_02",
+      "name": "Dead Bug Breathing",
+      "region": "core",
+      "phase": "motor_control",
+      "week": 2,
+      "level": 2,
+      "goal": "anti-extension control",
+      "why": "Targets anti-extension control to improve movement quality and support the FlexiLab priorities.",
+      "equipment": [
+        "none"
+      ],
+      "sets": "2",
+      "reps": "6 reps / side",
+      "hold": "",
+      "rest": "20–45 sec",
+      "tempo": "controlled",
+      "coaching_cues": [
+        "Ribs down",
+        "exhale as leg moves"
+      ],
+      "common_mistakes": [
+        "Moving too fast",
+        "Losing alignment",
+        "Forcing range"
+      ],
+      "pain_modification": "Reduce range, slow down, or use the previous regression if pain appears.",
+      "progression": "Dead Bug Heel Taps",
+      "regression": ""
+    },
+    {
+      "id": "CORE_3_03",
+      "name": "Dead Bug Heel Taps",
+      "region": "core",
+      "phase": "motor_control",
+      "week": 3,
+      "level": 3,
+      "goal": "lumbopelvic control",
+      "why": "Targets lumbopelvic control to improve movement quality and support the FlexiLab priorities.",
+      "equipment": [
+        "none"
+      ],
+      "sets": "2",
+      "reps": "8 reps / side",
+      "hold": "",
+      "rest": "20–45 sec",
+      "tempo": "controlled",
+      "coaching_cues": [
+        "Tap lightly",
+        "pelvis still"
+      ],
+      "common_mistakes": [
+        "Moving too fast",
+        "Losing alignment",
+        "Forcing range"
+      ],
+      "pain_modification": "Reduce range, slow down, or use the previous regression if pain appears.",
+      "progression": "Dead Bug Diagonal Reach",
+      "regression": ""
+    },
+    {
+      "id": "CORE_4_04",
+      "name": "Pallof Press Standing",
+      "region": "core",
+      "phase": "stability",
+      "week": 4,
+      "level": 4,
+      "goal": "anti-rotation stability",
+      "why": "Targets anti-rotation stability to improve movement quality and support the FlexiLab priorities.",
+      "equipment": [
+        "none"
+      ],
+      "sets": "2",
+      "reps": "8 reps / side",
+      "hold": "",
+      "rest": "20–45 sec",
+      "tempo": "controlled",
+      "coaching_cues": [
+        "Press straight",
+        "do not rotate"
+      ],
+      "common_mistakes": [
+        "Moving too fast",
+        "Losing alignment",
+        "Forcing range"
+      ],
+      "pain_modification": "Reduce range, slow down, or use the previous regression if pain appears.",
+      "progression": "Pallof Press Split Stance",
+      "regression": ""
+    },
+    {
+      "id": "HIP_1_01",
+      "name": "Quadruped Rock-Back",
+      "region": "hip",
+      "phase": "mobility",
+      "week": 1,
+      "level": 1,
+      "goal": "hip flexion and hinge pattern",
+      "why": "Targets hip flexion and hinge pattern to improve movement quality and support the FlexiLab priorities.",
+      "equipment": [
+        "none"
+      ],
+      "sets": "2",
+      "reps": "8 reps",
+      "hold": "",
+      "rest": "20–45 sec",
+      "tempo": "controlled",
+      "coaching_cues": [
+        "Long spine",
+        "hips back"
+      ],
+      "common_mistakes": [
+        "Moving too fast",
+        "Losing alignment",
+        "Forcing range"
+      ],
+      "pain_modification": "Reduce range, slow down, or use the previous regression if pain appears.",
+      "progression": "90/90 Hip Switch",
+      "regression": ""
+    },
+    {
+      "id": "HIP_2_02",
+      "name": "Half-Kneeling Hip Flexor Stretch",
+      "region": "hip",
+      "phase": "mobility",
+      "week": 2,
+      "level": 2,
+      "goal": "hip extension mobility",
+      "why": "Targets hip extension mobility to improve movement quality and support the FlexiLab priorities.",
+      "equipment": [
+        "none"
+      ],
+      "sets": "2",
+      "reps": "",
+      "hold": "30 sec / side",
+      "rest": "20–45 sec",
+      "tempo": "controlled",
+      "coaching_cues": [
+        "Tuck pelvis gently"
+      ],
+      "common_mistakes": [
+        "Moving too fast",
+        "Losing alignment",
+        "Forcing range"
+      ],
+      "pain_modification": "Reduce range, slow down, or use the previous regression if pain appears.",
+      "progression": "Dynamic Hip Flexor Stretch",
+      "regression": ""
+    },
+    {
+      "id": "HIP_3_03",
+      "name": "90/90 Hip Switch",
+      "region": "hip",
+      "phase": "mobility",
+      "week": 3,
+      "level": 3,
+      "goal": "hip internal and external rotation",
+      "why": "Targets hip internal and external rotation to improve movement quality and support the FlexiLab priorities.",
+      "equipment": [
+        "none"
+      ],
+      "sets": "2",
+      "reps": "6 reps / side",
+      "hold": "",
+      "rest": "20–45 sec",
+      "tempo": "controlled",
+      "coaching_cues": [
+        "Tall spine",
+        "move slowly"
+      ],
+      "common_mistakes": [
+        "Moving too fast",
+        "Losing alignment",
+        "Forcing range"
+      ],
+      "pain_modification": "Reduce range, slow down, or use the previous regression if pain appears.",
+      "progression": "90/90 Hip Lift-Off",
+      "regression": ""
+    },
+    {
+      "id": "HIP_4_04",
+      "name": "Bridge March",
+      "region": "hip",
+      "phase": "stability",
+      "week": 4,
+      "level": 4,
+      "goal": "pelvic stability",
+      "why": "Targets pelvic stability to improve movement quality and support the FlexiLab priorities.",
+      "equipment": [
+        "none"
+      ],
+      "sets": "2",
+      "reps": "6 reps / side",
+      "hold": "",
+      "rest": "20–45 sec",
+      "tempo": "controlled",
+      "coaching_cues": [
+        "Hips level",
+        "march slowly"
+      ],
+      "common_mistakes": [
+        "Moving too fast",
+        "Losing alignment",
+        "Forcing range"
+      ],
+      "pain_modification": "Reduce range, slow down, or use the previous regression if pain appears.",
+      "progression": "Single-Leg Glute Bridge",
+      "regression": ""
+    },
+    {
+      "id": "POST_1_01",
+      "name": "Supine Hamstring Floss",
+      "region": "posterior_chain",
+      "phase": "mobility",
+      "week": 1,
+      "level": 1,
+      "goal": "hamstring mobility for ASLR",
+      "why": "Targets hamstring mobility for ASLR to improve movement quality and support the FlexiLab priorities.",
+      "equipment": [
+        "none"
+      ],
+      "sets": "2",
+      "reps": "8 reps / side",
+      "hold": "",
+      "rest": "20–45 sec",
+      "tempo": "controlled",
+      "coaching_cues": [
+        "Gentle knee extension"
+      ],
+      "common_mistakes": [
+        "Moving too fast",
+        "Losing alignment",
+        "Forcing range"
+      ],
+      "pain_modification": "Reduce range, slow down, or use the previous regression if pain appears.",
+      "progression": "Band-Assisted Leg Lowering",
+      "regression": ""
+    },
+    {
+      "id": "POST_2_02",
+      "name": "Band-Assisted Leg Lowering",
+      "region": "posterior_chain",
+      "phase": "motor_control",
+      "week": 2,
+      "level": 2,
+      "goal": "posterior chain mobility and pelvic control",
+      "why": "Targets posterior chain mobility and pelvic control to improve movement quality and support the FlexiLab priorities.",
+      "equipment": [
+        "none"
+      ],
+      "sets": "2",
+      "reps": "6 reps / side",
+      "hold": "",
+      "rest": "20–45 sec",
+      "tempo": "controlled",
+      "coaching_cues": [
+        "Keep pelvis still"
+      ],
+      "common_mistakes": [
+        "Moving too fast",
+        "Losing alignment",
+        "Forcing range"
+      ],
+      "pain_modification": "Reduce range, slow down, or use the previous regression if pain appears.",
+      "progression": "Active Straight-Leg Raise Hold",
+      "regression": ""
+    },
+    {
+      "id": "POST_3_03",
+      "name": "Active Straight-Leg Raise Hold",
+      "region": "posterior_chain",
+      "phase": "stability",
+      "week": 3,
+      "level": 3,
+      "goal": "active ASLR control",
+      "why": "Targets active ASLR control to improve movement quality and support the FlexiLab priorities.",
+      "equipment": [
+        "none"
+      ],
+      "sets": "3",
+      "reps": "",
+      "hold": "10 sec / side",
+      "rest": "20–45 sec",
+      "tempo": "controlled",
+      "coaching_cues": [
+        "Straight knee",
+        "pelvis still"
+      ],
+      "common_mistakes": [
+        "Moving too fast",
+        "Losing alignment",
+        "Forcing range"
+      ],
+      "pain_modification": "Reduce range, slow down, or use the previous regression if pain appears.",
+      "progression": "Single-Leg Lowering with Band",
+      "regression": ""
+    },
+    {
+      "id": "POST_4_04",
+      "name": "Single-Leg RDL Reach Assisted",
+      "region": "posterior_chain",
+      "phase": "integration",
+      "week": 4,
+      "level": 4,
+      "goal": "posterior chain and balance integration",
+      "why": "Targets posterior chain and balance integration to improve movement quality and support the FlexiLab priorities.",
+      "equipment": [
+        "none"
+      ],
+      "sets": "2",
+      "reps": "6 reps / side",
+      "hold": "",
+      "rest": "20–45 sec",
+      "tempo": "controlled",
+      "coaching_cues": [
+        "Pelvis level",
+        "hold chair lightly"
+      ],
+      "common_mistakes": [
+        "Moving too fast",
+        "Losing alignment",
+        "Forcing range"
+      ],
+      "pain_modification": "Reduce range, slow down, or use the previous regression if pain appears.",
+      "progression": "",
+      "regression": ""
+    },
+    {
+      "id": "ANKL_1_01",
+      "name": "Calf Stretch Wall",
+      "region": "ankle",
+      "phase": "mobility",
+      "week": 1,
+      "level": 1,
+      "goal": "calf mobility",
+      "why": "Targets calf mobility to improve movement quality and support the FlexiLab priorities.",
+      "equipment": [
+        "none"
+      ],
+      "sets": "2",
+      "reps": "",
+      "hold": "30 sec / side",
+      "rest": "20–45 sec",
+      "tempo": "controlled",
+      "coaching_cues": [
+        "Heel down",
+        "toe forward"
+      ],
+      "common_mistakes": [
+        "Moving too fast",
+        "Losing alignment",
+        "Forcing range"
+      ],
+      "pain_modification": "Reduce range, slow down, or use the previous regression if pain appears.",
+      "progression": "Knee-to-Wall Rocks",
+      "regression": ""
+    },
+    {
+      "id": "ANKL_2_02",
+      "name": "Ankle Knee-to-Wall Rocks",
+      "region": "ankle",
+      "phase": "mobility",
+      "week": 2,
+      "level": 2,
+      "goal": "ankle dorsiflexion",
+      "why": "Targets ankle dorsiflexion to improve movement quality and support the FlexiLab priorities.",
+      "equipment": [
+        "none"
+      ],
+      "sets": "2",
+      "reps": "8 reps / side",
+      "hold": "",
+      "rest": "20–45 sec",
+      "tempo": "controlled",
+      "coaching_cues": [
+        "Heel down",
+        "knee tracks toes"
+      ],
+      "common_mistakes": [
+        "Moving too fast",
+        "Losing alignment",
+        "Forcing range"
+      ],
+      "pain_modification": "Reduce range, slow down, or use the previous regression if pain appears.",
+      "progression": "Half-Kneeling Ankle Mobilization",
+      "regression": ""
+    },
+    {
+      "id": "ANKL_3_03",
+      "name": "Half-Kneeling Ankle Mobilization",
+      "region": "ankle",
+      "phase": "stability",
+      "week": 3,
+      "level": 3,
+      "goal": "loaded dorsiflexion",
+      "why": "Targets loaded dorsiflexion to improve movement quality and support the FlexiLab priorities.",
+      "equipment": [
+        "none"
+      ],
+      "sets": "2",
+      "reps": "8 reps / side",
+      "hold": "",
+      "rest": "20–45 sec",
+      "tempo": "controlled",
+      "coaching_cues": [
+        "Control arch",
+        "slow rocks"
+      ],
+      "common_mistakes": [
+        "Moving too fast",
+        "Losing alignment",
+        "Forcing range"
+      ],
+      "pain_modification": "Reduce range, slow down, or use the previous regression if pain appears.",
+      "progression": "Squat to Box",
+      "regression": ""
+    },
+    {
+      "id": "ANKL_4_04",
+      "name": "Goblet Counterbalance Squat to Box",
+      "region": "ankle",
+      "phase": "integration",
+      "week": 4,
+      "level": 4,
+      "goal": "squat pattern integration",
+      "why": "Targets squat pattern integration to improve movement quality and support the FlexiLab priorities.",
+      "equipment": [
+        "none"
+      ],
+      "sets": "3",
+      "reps": "6–8 reps",
+      "hold": "",
+      "rest": "20–45 sec",
+      "tempo": "controlled",
+      "coaching_cues": [
+        "Heels grounded",
+        "sit to box"
+      ],
+      "common_mistakes": [
+        "Moving too fast",
+        "Losing alignment",
+        "Forcing range"
+      ],
+      "pain_modification": "Reduce range, slow down, or use the previous regression if pain appears.",
+      "progression": "",
+      "regression": ""
+    },
+    {
+      "id": "FUNC_1_01",
+      "name": "Squat to Box",
+      "region": "functional",
+      "phase": "integration",
+      "week": 1,
+      "level": 1,
+      "goal": "squat pattern control",
+      "why": "Targets squat pattern control to improve movement quality and support the FlexiLab priorities.",
+      "equipment": [
+        "none"
+      ],
+      "sets": "3",
+      "reps": "6 reps",
+      "hold": "",
+      "rest": "20–45 sec",
+      "tempo": "controlled",
+      "coaching_cues": [
+        "Slow descent",
+        "stand tall"
+      ],
+      "common_mistakes": [
+        "Moving too fast",
+        "Losing alignment",
+        "Forcing range"
+      ],
+      "pain_modification": "Reduce range, slow down, or use the previous regression if pain appears.",
+      "progression": "Tempo Squat to Box",
+      "regression": ""
+    },
+    {
+      "id": "FUNC_2_02",
+      "name": "Tempo Squat to Box",
+      "region": "functional",
+      "phase": "integration",
+      "week": 2,
+      "level": 2,
+      "goal": "controlled squat strength",
+      "why": "Targets controlled squat strength to improve movement quality and support the FlexiLab priorities.",
+      "equipment": [
+        "none"
+      ],
+      "sets": "3",
+      "reps": "6 reps • 3 sec down",
+      "hold": "",
+      "rest": "20–45 sec",
+      "tempo": "controlled",
+      "coaching_cues": [
+        "Pause on box",
+        "knees track toes"
+      ],
+      "common_mistakes": [
+        "Moving too fast",
+        "Losing alignment",
+        "Forcing range"
+      ],
+      "pain_modification": "Reduce range, slow down, or use the previous regression if pain appears.",
+      "progression": "",
+      "regression": ""
+    },
+    {
+      "id": "FUNC_3_03",
+      "name": "Full Bird Dog",
+      "region": "functional",
+      "phase": "integration",
+      "week": 3,
+      "level": 3,
+      "goal": "cross-body control",
+      "why": "Targets cross-body control to improve movement quality and support the FlexiLab priorities.",
+      "equipment": [
+        "none"
+      ],
+      "sets": "2",
+      "reps": "6 reps / side",
+      "hold": "",
+      "rest": "20–45 sec",
+      "tempo": "controlled",
+      "coaching_cues": [
+        "Long reach",
+        "pelvis level"
+      ],
+      "common_mistakes": [
+        "Moving too fast",
+        "Losing alignment",
+        "Forcing range"
+      ],
+      "pain_modification": "Reduce range, slow down, or use the previous regression if pain appears.",
+      "progression": "",
+      "regression": ""
+    },
+    {
+      "id": "FUNC_4_04",
+      "name": "Assisted Single-Leg RDL Reach",
+      "region": "functional",
+      "phase": "integration",
+      "week": 4,
+      "level": 4,
+      "goal": "single-leg hinge control",
+      "why": "Targets single-leg hinge control to improve movement quality and support the FlexiLab priorities.",
+      "equipment": [
+        "none"
+      ],
+      "sets": "2",
+      "reps": "6 reps / side",
+      "hold": "",
+      "rest": "20–45 sec",
+      "tempo": "controlled",
+      "coaching_cues": [
+        "Hips square",
+        "slow reach"
+      ],
+      "common_mistakes": [
+        "Moving too fast",
+        "Losing alignment",
+        "Forcing range"
+      ],
+      "pain_modification": "Reduce range, slow down, or use the previous regression if pain appears.",
+      "progression": "",
+      "regression": ""
+    }
+  ]
+}
