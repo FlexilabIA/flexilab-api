@@ -344,12 +344,16 @@ def analyze_squat(xy, conf):
 
 def analyze_aslr(xy, conf, side="RIGHT"):
     """
-    Active Straight Leg Raise (ASLR) analysis.
+    Active Straight Leg Raise (ASLR) analysis — V15 robust lying-position fix.
 
-    Angle-based V13:
-    - 0° = leg horizontal / close to the floor
-    - 90° = leg vertical
-    - <45° red, 45–70° yellow, >=70° green
+    Why this version is more reliable:
+    - ASLR photos are horizontal; YOLO pose confidence is often lower than standing tests.
+    - We use hip->knee AND hip->ankle to estimate the raised-leg direction.
+    - We keep the result even when one distal point is weaker, but return diagnostics.
+    - Thresholds remain clinically simple:
+        <45° red
+        45–70° yellow
+        >=70° green
     """
 
     L_HIP, R_HIP = 11, 12
@@ -358,25 +362,96 @@ def analyze_aslr(xy, conf, side="RIGHT"):
 
     if side == "RIGHT":
         hip_i, knee_i, ankle_i = R_HIP, R_KNEE, R_ANK
+        other_hip_i, other_knee_i, other_ankle_i = L_HIP, L_KNEE, L_ANK
     else:
         hip_i, knee_i, ankle_i = L_HIP, L_KNEE, L_ANK
+        other_hip_i, other_knee_i, other_ankle_i = R_HIP, R_KNEE, R_ANK
 
     hip = xy[hip_i]
     knee = xy[knee_i]
     ankle = xy[ankle_i]
 
+    other_hip = xy[other_hip_i]
+    other_knee = xy[other_knee_i]
+    other_ankle = xy[other_ankle_i]
+
     hip_c = float(conf[hip_i])
     knee_c = float(conf[knee_i])
     ankle_c = float(conf[ankle_i])
+    other_hip_c = float(conf[other_hip_i])
+    other_knee_c = float(conf[other_knee_i])
+    other_ankle_c = float(conf[other_ankle_i])
 
-    # Raised leg vector: hip -> ankle.
-    # Image y-axis points downward, so invert dy for anatomical upward direction.
-    dx = float(ankle[0] - hip[0])
-    dy = float(hip[1] - ankle[1])
+    MIN_REQUIRED_CONF = 0.12
+    MIN_GOOD_CONF = 0.25
 
-    # Angle of raised leg relative to horizontal.
-    aslr_angle = abs(math.degrees(math.atan2(dy, abs(dx) + 1e-6)))
-    aslr_angle = max(0.0, min(180.0, aslr_angle))
+    diagnostic_flags = []
+
+    if hip_c < MIN_REQUIRED_CONF:
+        diagnostic_flags.append("low_hip_confidence")
+    if knee_c < MIN_REQUIRED_CONF:
+        diagnostic_flags.append("low_knee_confidence")
+    if ankle_c < MIN_REQUIRED_CONF:
+        diagnostic_flags.append("low_ankle_confidence")
+
+    def angle_from_horizontal(p1, p2):
+        # Image y-axis points downward, so invert dy.
+        dx = float(p2[0] - p1[0])
+        dy = float(p1[1] - p2[1])
+        ang = abs(math.degrees(math.atan2(dy, abs(dx) + 1e-6)))
+        return max(0.0, min(180.0, ang))
+
+    # Segment estimates.
+    hip_to_ankle_angle = angle_from_horizontal(hip, ankle)
+    hip_to_knee_angle = angle_from_horizontal(hip, knee)
+    knee_to_ankle_angle = angle_from_horizontal(knee, ankle)
+
+    # Weighted robust estimate.
+    # Hip->ankle is most anatomical when reliable.
+    # Hip->knee is more stable when ankle confidence is weak.
+    estimates = []
+    if hip_c >= MIN_REQUIRED_CONF and ankle_c >= MIN_REQUIRED_CONF:
+        estimates.append((hip_to_ankle_angle, max(0.05, min(1.0, (hip_c + ankle_c) / 2.0)) * 1.2, "hip_to_ankle"))
+    if hip_c >= MIN_REQUIRED_CONF and knee_c >= MIN_REQUIRED_CONF:
+        estimates.append((hip_to_knee_angle, max(0.05, min(1.0, (hip_c + knee_c) / 2.0)) * 1.0, "hip_to_knee"))
+    if knee_c >= MIN_REQUIRED_CONF and ankle_c >= MIN_REQUIRED_CONF:
+        estimates.append((knee_to_ankle_angle, max(0.05, min(1.0, (knee_c + ankle_c) / 2.0)) * 0.6, "knee_to_ankle"))
+
+    if not estimates:
+        # Return a safe red result with explicit diagnostics instead of failing silently.
+        aslr_angle = 0.0
+        angle_method = "insufficient_keypoints"
+        diagnostic_flags.append("insufficient_required_keypoints")
+    else:
+        total_w = sum(w for _, w, _ in estimates)
+        aslr_angle = sum(a * w for a, w, _ in estimates) / max(total_w, 1e-6)
+        angle_method = "+".join(m for _, _, m in estimates)
+
+    # Knee extension diagnostic: if raised knee is very bent, the ASLR measurement is less valid.
+    raised_knee_angle = None
+    try:
+        v1 = hip - knee
+        v2 = ankle - knee
+        raw = abs(math.degrees(math.atan2(v2[1], v2[0]) - math.atan2(v1[1], v1[0])))
+        if raw > 180:
+            raw = 360 - raw
+        raised_knee_angle = float(raw)
+        if raised_knee_angle < 145:
+            diagnostic_flags.append("raised_knee_bent")
+    except Exception:
+        diagnostic_flags.append("knee_angle_unavailable")
+
+    # Contralateral leg compensation proxy: opposite leg should stay close to the floor.
+    opposite_leg_angle = None
+    try:
+        if other_hip_c >= MIN_REQUIRED_CONF and other_ankle_c >= MIN_REQUIRED_CONF:
+            opposite_leg_angle = angle_from_horizontal(other_hip, other_ankle)
+            if opposite_leg_angle > 20:
+                diagnostic_flags.append("opposite_leg_lifted")
+    except Exception:
+        diagnostic_flags.append("opposite_leg_angle_unavailable")
+
+    aslr_angle = max(0.0, min(180.0, float(aslr_angle)))
 
     if aslr_angle < 45:
         score = 40.0
@@ -384,6 +459,14 @@ def analyze_aslr(xy, conf, side="RIGHT"):
         score = 60.0 + ((aslr_angle - 45.0) / 25.0) * 19.0
     else:
         score = 85.0 + (min(aslr_angle, 110.0) - 70.0) / 40.0 * 15.0
+
+    # Penalize low validity slightly without making the endpoint fail.
+    if "raised_knee_bent" in diagnostic_flags:
+        score -= 8.0
+    if "opposite_leg_lifted" in diagnostic_flags:
+        score -= 6.0
+    if ankle_c < MIN_GOOD_CONF:
+        score -= 4.0
 
     score = max(0.0, min(100.0, score))
 
@@ -401,16 +484,33 @@ def analyze_aslr(xy, conf, side="RIGHT"):
 
     conf_out = max(0.0, min(1.0, float(hip_c + knee_c + ankle_c) / 3.0))
 
+    quality_label = "good"
+    if conf_out < 0.35 or "insufficient_required_keypoints" in diagnostic_flags:
+        quality_label = "low"
+    elif conf_out < 0.55 or diagnostic_flags:
+        quality_label = "moderate"
+
     return {
         "score": round(float(score), 1),
         "confidence": round(conf_out, 3),
         "metrics": {
             "aslr_angle": round(float(aslr_angle), 2),
             "side": side,
+            "angle_method": angle_method,
+            "hip_to_ankle_angle": round(float(hip_to_ankle_angle), 2),
+            "hip_to_knee_angle": round(float(hip_to_knee_angle), 2),
+            "knee_to_ankle_angle": round(float(knee_to_ankle_angle), 2),
+            "raised_knee_angle": round(float(raised_knee_angle), 2) if raised_knee_angle is not None else None,
+            "opposite_leg_angle": round(float(opposite_leg_angle), 2) if opposite_leg_angle is not None else None,
+            "quality_label": quality_label,
+            "diagnostic_flags": diagnostic_flags,
             "keypoint_confidence": {
                 "hip": round(hip_c, 3),
                 "knee": round(knee_c, 3),
-                "ankle": round(ankle_c, 3)
+                "ankle": round(ankle_c, 3),
+                "opposite_hip": round(other_hip_c, 3),
+                "opposite_knee": round(other_knee_c, 3),
+                "opposite_ankle": round(other_ankle_c, 3)
             }
         },
         "thresholds": {
@@ -544,7 +644,8 @@ async def analyze(
             interpolation=cv2.INTER_AREA
         )
 
-    res = model(img, conf=0.5, classes=[0])
+    yolo_conf = 0.20 if str(test_type).startswith("aslr") else 0.50
+    res = model(img, conf=yolo_conf, classes=[0])
     if res[0].keypoints is None or len(res[0].keypoints.xy) == 0:
         return {"error": "No person detected"}
 
@@ -671,7 +772,8 @@ def run_yolo_analysis_from_bytes(img_bytes, test_type):
             interpolation=cv2.INTER_AREA
         )
 
-    res = model(img, conf=0.5, classes=[0])
+    yolo_conf = 0.20 if str(test_type).startswith("aslr") else 0.50
+    res = model(img, conf=yolo_conf, classes=[0])
 
     if res[0].keypoints is None or len(res[0].keypoints.xy) == 0:
         raise ValueError("No person detected")
@@ -1324,4 +1426,3 @@ def program(session_id: str, lang: str = "fr"):
         "report": report_data,
         "program": program_data
     }
-
