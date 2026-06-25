@@ -1,6 +1,6 @@
 {
   "library_name": "FlexiLab Exercise Knowledge Base",
-  "version": "V2.0-knowledge-base-140",
+  "version": "V2.1-knowledge-base-report-ready",
   "scope": "Corrective exercise prescription for FlexiLab AI Screening and future movement tests.",
   "safety_note": "Educational movement-quality support only. Stop and refer to a qualified clinician if pain, neurological symptoms, recent trauma, unexplained weakness, dizziness, numbness, or medical red flags are present.",
   "taxonomy": {
@@ -164,7 +164,17 @@
     "expected_improvement",
     "video_url",
     "thumbnail_url",
-    "tags"
+    "tags",
+    "name_en",
+    "name_fr",
+    "description_en",
+    "description_fr",
+    "instructions_en",
+    "instructions_fr",
+    "why_prescribed_en",
+    "why_prescribed_fr",
+    "exercise_priority",
+    "expected_improvement_window"
   ],
   "exercises": [
     {
@@ -230,7 +240,18 @@
       "tags": [
         "breathing",
         "reset"
-      ]
+      ],
+      "name_en": "90/90 Breathing Feet on Wall",
+      "name_fr": "90/90 Breathing Feet on Wall",
+      "description_en": "Supine breathing reset with feet on wall.",
+      "description_fr": "Supine breathing reset with feet on wall.",
+      "why_prescribed_en": "This exercise targets diaphragmatic_breathing, rib_cage_control, posterior_pelvic_control and supports REC, CORE, PELV movement priorities.",
+      "why_prescribed_fr": "Cet exercice cible diaphragmatic_breathing, rib_cage_control, posterior_pelvic_control et soutient les priorités REC, CORE, PELV.",
+      "exercise_priority": "essential",
+      "expected_improvement_window": "2-4 weeks",
+      "instructions": "Supine breathing reset with feet on wall.",
+      "instructions_en": "Supine breathing reset with feet on wall.",
+      "instructions_fr": "Supine breathing reset with feet on wall."
     },
     {
       "id": "REC002",
@@ -293,7 +314,18 @@
       "tags": [
         "breathing",
         "recovery"
-      ]
+      ],
+      "name_en": "Crocodile Breathing",
+      "name_fr": "Crocodile Breathing",
+      "description_en": "Corrective exercise targeting diaphragmatic_breathing, thoracic_expansion.",
+      "description_fr": "Corrective exercise targeting diaphragmatic_breathing, thoracic_expansion.",
+      "why_prescribed_en": "This exercise targets diaphragmatic_breathing, thoracic_expansion and supports REC, THOR, CORE movement priorities.",
+      "why_prescribed_fr": "Cet exercice cible diaphragmatic_breathing, thoracic_expansion et soutient les priorités REC, THOR, CORE.",
+      "exercise_priority": "essential",
+      "expected_improvement_window": "2-4 weeks",
+      "instructions": "Corrective exercise targeting diaphragmatic_breathing, thoracic_expansion.",
+      "instructions_en": "Corrective exercise targeting diaphragmatic_breathing, thoracic_expansion.",
+      "instructions_fr": "Corrective exercise targeting diaphragmatic_breathing, thoracic_expansion."
     },
     {
       "id": "REC003",
@@ -356,7 +388,18 @@
       "tags": [
         "lat",
         "recovery"
-      ]
+      ],
+      "name_en": "Child's Pose Breathing",
+      "name_fr": "Child's Pose Breathing",
+      "description_en": "Corrective exercise targeting lat_relaxation, thoracic_expansion, shoulder_flexion.",
+      "description_fr": "Corrective exercise targeting lat_relaxation, thoracic_expansion, shoulder_flexion.",
+      "why_prescribed_en": "This exercise targets lat_relaxation, thoracic_expansion, shoulder_flexion and supports REC, THOR, SHLD movement priorities.",
+      "why_prescribed_fr": "Cet exercice cible lat_relaxation, thoracic_expansion, shoulder_flexion et soutient les priorités REC, THOR, SHLD.",
+      "exercise_priority": "essential",
+      "expected_improvement_window": "2-4 weeks",
+      "instructions": "Corrective exercise targeting lat_relaxation, thoracic_expansion, shoulder_flexion.",
+      "instructions_en": "Corrective exercise targeting lat_relaxation, thoracic_expansion, shoulder_flexion.",
+      "instructions_fr": "Corrective exercise targeting lat_relaxation, thoracic_expansion, shoulder_flexion."
     },
     {
       "id": "REC004",
@@ -418,7 +461,18 @@
       "tags": [
         "foam_roller",
         "thoracic"
-      ]
+      ],
+      "name_en": "Foam Roller Thoracic Relaxation",
+      "name_fr": "Foam Roller Thoracic Relaxation",
+      "description_en": "Corrective exercise targeting thoracic_relaxation, thoracic_extension.",
+      "description_fr": "Corrective exercise targeting thoracic_relaxation, thoracic_extension.",
+      "why_prescribed_en": "This exercise targets thoracic_relaxation, thoracic_extension and supports REC, THOR movement priorities.",
+      "why_prescribed_fr": "Cet exercice cible thoracic_relaxation, thoracic_extension et soutient les priorités REC, THOR.",
+      "exercise_priority": "essential",
+      "expected_improvement_window": "2-4 weeks",
+      "instructions": "Corrective exercise targeting thoracic_relaxation, thoracic_extension.",
+      "instructions_en": "Corrective exercise targeting thoracic_relaxation, thoracic_extension.",
+      "instructions_fr": "Corrective exercise targeting thoracic_relaxation, thoracic_extension."
     },
     {
       "id": "REC005",
@@ -482,7 +536,18 @@
       "tags": [
         "massage_ball",
         "pec"
-      ]
+      ],
+      "name_en": "Massage Ball Pec Release",
+      "name_fr": "Massage Ball Pec Release",
+      "description_en": "Corrective exercise targeting pec_relaxation, shoulder_opening.",
+      "description_fr": "Corrective exercise targeting pec_relaxation, shoulder_opening.",
+      "why_prescribed_en": "This exercise targets pec_relaxation, shoulder_opening and supports REC, SHLD, SCAP movement priorities.",
+      "why_prescribed_fr": "Cet exercice cible pec_relaxation, shoulder_opening et soutient les priorités REC, SHLD, SCAP.",
+      "exercise_priority": "essential",
+      "expected_improvement_window": "2-4 weeks",
+      "instructions": "Corrective exercise targeting pec_relaxation, shoulder_opening.",
+      "instructions_en": "Corrective exercise targeting pec_relaxation, shoulder_opening.",
+      "instructions_fr": "Corrective exercise targeting pec_relaxation, shoulder_opening."
     },
     {
       "id": "REC006",
@@ -545,7 +610,18 @@
       "tags": [
         "hip",
         "massage_ball"
-      ]
+      ],
+      "name_en": "Massage Ball Glute Release",
+      "name_fr": "Massage Ball Glute Release",
+      "description_en": "Corrective exercise targeting hip_relaxation, pelvic_control.",
+      "description_fr": "Corrective exercise targeting hip_relaxation, pelvic_control.",
+      "why_prescribed_en": "This exercise targets hip_relaxation, pelvic_control and supports REC, HIP, PELV movement priorities.",
+      "why_prescribed_fr": "Cet exercice cible hip_relaxation, pelvic_control et soutient les priorités REC, HIP, PELV.",
+      "exercise_priority": "essential",
+      "expected_improvement_window": "2-4 weeks",
+      "instructions": "Corrective exercise targeting hip_relaxation, pelvic_control.",
+      "instructions_en": "Corrective exercise targeting hip_relaxation, pelvic_control.",
+      "instructions_fr": "Corrective exercise targeting hip_relaxation, pelvic_control."
     },
     {
       "id": "REC007",
@@ -606,7 +682,18 @@
       "tags": [
         "calf",
         "ankle"
-      ]
+      ],
+      "name_en": "Calf Foam Roll",
+      "name_fr": "Calf Foam Roll",
+      "description_en": "Corrective exercise targeting calf_relaxation, ankle_dorsiflexion.",
+      "description_fr": "Corrective exercise targeting calf_relaxation, ankle_dorsiflexion.",
+      "why_prescribed_en": "This exercise targets calf_relaxation, ankle_dorsiflexion and supports REC, ANKL, POST movement priorities.",
+      "why_prescribed_fr": "Cet exercice cible calf_relaxation, ankle_dorsiflexion et soutient les priorités REC, ANKL, POST.",
+      "exercise_priority": "essential",
+      "expected_improvement_window": "2-4 weeks",
+      "instructions": "Corrective exercise targeting calf_relaxation, ankle_dorsiflexion.",
+      "instructions_en": "Corrective exercise targeting calf_relaxation, ankle_dorsiflexion.",
+      "instructions_fr": "Corrective exercise targeting calf_relaxation, ankle_dorsiflexion."
     },
     {
       "id": "REC008",
@@ -668,7 +755,18 @@
       "tags": [
         "lat",
         "foam_roller"
-      ]
+      ],
+      "name_en": "Lat Foam Roll",
+      "name_fr": "Lat Foam Roll",
+      "description_en": "Corrective exercise targeting lat_relaxation, shoulder_flexion.",
+      "description_fr": "Corrective exercise targeting lat_relaxation, shoulder_flexion.",
+      "why_prescribed_en": "This exercise targets lat_relaxation, shoulder_flexion and supports REC, SHLD, THOR movement priorities.",
+      "why_prescribed_fr": "Cet exercice cible lat_relaxation, shoulder_flexion et soutient les priorités REC, SHLD, THOR.",
+      "exercise_priority": "essential",
+      "expected_improvement_window": "2-4 weeks",
+      "instructions": "Corrective exercise targeting lat_relaxation, shoulder_flexion.",
+      "instructions_en": "Corrective exercise targeting lat_relaxation, shoulder_flexion.",
+      "instructions_fr": "Corrective exercise targeting lat_relaxation, shoulder_flexion."
     },
     {
       "id": "REC009",
@@ -728,7 +826,18 @@
       "tags": [
         "neck",
         "massage_ball"
-      ]
+      ],
+      "name_en": "Suboccipital Ball Release",
+      "name_fr": "Suboccipital Ball Release",
+      "description_en": "Corrective exercise targeting suboccipital_relaxation, cervical_alignment.",
+      "description_fr": "Corrective exercise targeting suboccipital_relaxation, cervical_alignment.",
+      "why_prescribed_en": "This exercise targets suboccipital_relaxation, cervical_alignment and supports REC, CERV movement priorities.",
+      "why_prescribed_fr": "Cet exercice cible suboccipital_relaxation, cervical_alignment et soutient les priorités REC, CERV.",
+      "exercise_priority": "essential",
+      "expected_improvement_window": "2-4 weeks",
+      "instructions": "Corrective exercise targeting suboccipital_relaxation, cervical_alignment.",
+      "instructions_en": "Corrective exercise targeting suboccipital_relaxation, cervical_alignment.",
+      "instructions_fr": "Corrective exercise targeting suboccipital_relaxation, cervical_alignment."
     },
     {
       "id": "REC010",
@@ -793,7 +902,18 @@
       "tags": [
         "reset",
         "hip"
-      ]
+      ],
+      "name_en": "Quadruped Rock-Back Breathing",
+      "name_fr": "Quadruped Rock-Back Breathing",
+      "description_en": "Corrective exercise targeting breathing, hip_flexion, spinal_control.",
+      "description_fr": "Corrective exercise targeting breathing, hip_flexion, spinal_control.",
+      "why_prescribed_en": "This exercise targets breathing, hip_flexion, spinal_control and supports REC, HIP, THOR, CORE movement priorities.",
+      "why_prescribed_fr": "Cet exercice cible breathing, hip_flexion, spinal_control et soutient les priorités REC, HIP, THOR, CORE.",
+      "exercise_priority": "essential",
+      "expected_improvement_window": "2-4 weeks",
+      "instructions": "Corrective exercise targeting breathing, hip_flexion, spinal_control.",
+      "instructions_en": "Corrective exercise targeting breathing, hip_flexion, spinal_control.",
+      "instructions_fr": "Corrective exercise targeting breathing, hip_flexion, spinal_control."
     },
     {
       "id": "REC011",
@@ -855,7 +975,18 @@
       "tags": [
         "wall",
         "lat"
-      ]
+      ],
+      "name_en": "Wall Lat Breathing",
+      "name_fr": "Wall Lat Breathing",
+      "description_en": "Corrective exercise targeting lat_relaxation, thoracic_expansion.",
+      "description_fr": "Corrective exercise targeting lat_relaxation, thoracic_expansion.",
+      "why_prescribed_en": "This exercise targets lat_relaxation, thoracic_expansion and supports REC, SHLD, THOR movement priorities.",
+      "why_prescribed_fr": "Cet exercice cible lat_relaxation, thoracic_expansion et soutient les priorités REC, SHLD, THOR.",
+      "exercise_priority": "essential",
+      "expected_improvement_window": "2-4 weeks",
+      "instructions": "Corrective exercise targeting lat_relaxation, thoracic_expansion.",
+      "instructions_en": "Corrective exercise targeting lat_relaxation, thoracic_expansion.",
+      "instructions_fr": "Corrective exercise targeting lat_relaxation, thoracic_expansion."
     },
     {
       "id": "REC012",
@@ -918,7 +1049,18 @@
       "tags": [
         "pelvis",
         "awareness"
-      ]
+      ],
+      "name_en": "Supine Pelvic Clock",
+      "name_fr": "Supine Pelvic Clock",
+      "description_en": "Corrective exercise targeting pelvic_awareness, lumbo_pelvic_control.",
+      "description_fr": "Corrective exercise targeting pelvic_awareness, lumbo_pelvic_control.",
+      "why_prescribed_en": "This exercise targets pelvic_awareness, lumbo_pelvic_control and supports REC, PELV, CORE movement priorities.",
+      "why_prescribed_fr": "Cet exercice cible pelvic_awareness, lumbo_pelvic_control et soutient les priorités REC, PELV, CORE.",
+      "exercise_priority": "essential",
+      "expected_improvement_window": "2-4 weeks",
+      "instructions": "Corrective exercise targeting pelvic_awareness, lumbo_pelvic_control.",
+      "instructions_en": "Corrective exercise targeting pelvic_awareness, lumbo_pelvic_control.",
+      "instructions_fr": "Corrective exercise targeting pelvic_awareness, lumbo_pelvic_control."
     },
     {
       "id": "CERV001",
@@ -978,7 +1120,18 @@
       "tags": [
         "neck",
         "activation"
-      ]
+      ],
+      "name_en": "Chin Tuck Supine",
+      "name_fr": "Chin Tuck Supine",
+      "description_en": "Corrective exercise targeting deep_neck_flexor_activation, cervical_retraction.",
+      "description_fr": "Corrective exercise targeting deep_neck_flexor_activation, cervical_retraction.",
+      "why_prescribed_en": "This exercise targets deep_neck_flexor_activation, cervical_retraction and supports CERV, THOR movement priorities.",
+      "why_prescribed_fr": "Cet exercice cible deep_neck_flexor_activation, cervical_retraction et soutient les priorités CERV, THOR.",
+      "exercise_priority": "essential",
+      "expected_improvement_window": "2-4 weeks",
+      "instructions": "Corrective exercise targeting deep_neck_flexor_activation, cervical_retraction.",
+      "instructions_en": "Corrective exercise targeting deep_neck_flexor_activation, cervical_retraction.",
+      "instructions_fr": "Corrective exercise targeting deep_neck_flexor_activation, cervical_retraction."
     },
     {
       "id": "CERV002",
@@ -1038,7 +1191,18 @@
       "tags": [
         "wall",
         "neck"
-      ]
+      ],
+      "name_en": "Wall Chin Tuck",
+      "name_fr": "Wall Chin Tuck",
+      "description_en": "Corrective exercise targeting cervical_retraction, postural_control.",
+      "description_fr": "Corrective exercise targeting cervical_retraction, postural_control.",
+      "why_prescribed_en": "This exercise targets cervical_retraction, postural_control and supports CERV, THOR movement priorities.",
+      "why_prescribed_fr": "Cet exercice cible cervical_retraction, postural_control et soutient les priorités CERV, THOR.",
+      "exercise_priority": "essential",
+      "expected_improvement_window": "2-4 weeks",
+      "instructions": "Corrective exercise targeting cervical_retraction, postural_control.",
+      "instructions_en": "Corrective exercise targeting cervical_retraction, postural_control.",
+      "instructions_fr": "Corrective exercise targeting cervical_retraction, postural_control."
     },
     {
       "id": "CERV003",
@@ -1100,7 +1264,18 @@
       "tags": [
         "posture",
         "wall"
-      ]
+      ],
+      "name_en": "Wall Posture Hold",
+      "name_fr": "Wall Posture Hold",
+      "description_en": "Corrective exercise targeting postural_endurance, cervical_alignment, rib_cage_control.",
+      "description_fr": "Corrective exercise targeting postural_endurance, cervical_alignment, rib_cage_control.",
+      "why_prescribed_en": "This exercise targets postural_endurance, cervical_alignment, rib_cage_control and supports CERV, THOR, CORE movement priorities.",
+      "why_prescribed_fr": "Cet exercice cible postural_endurance, cervical_alignment, rib_cage_control et soutient les priorités CERV, THOR, CORE.",
+      "exercise_priority": "recommended",
+      "expected_improvement_window": "2-4 weeks",
+      "instructions": "Corrective exercise targeting postural_endurance, cervical_alignment, rib_cage_control.",
+      "instructions_en": "Corrective exercise targeting postural_endurance, cervical_alignment, rib_cage_control.",
+      "instructions_fr": "Corrective exercise targeting postural_endurance, cervical_alignment, rib_cage_control."
     },
     {
       "id": "CERV004",
@@ -1158,7 +1333,18 @@
       "tags": [
         "neck",
         "rotation"
-      ]
+      ],
+      "name_en": "Seated Neck Rotation Control",
+      "name_fr": "Seated Neck Rotation Control",
+      "description_en": "Corrective exercise targeting cervical_rotation_control.",
+      "description_fr": "Corrective exercise targeting cervical_rotation_control.",
+      "why_prescribed_en": "This exercise targets cervical_rotation_control and supports CERV, THOR movement priorities.",
+      "why_prescribed_fr": "Cet exercice cible cervical_rotation_control et soutient les priorités CERV, THOR.",
+      "exercise_priority": "essential",
+      "expected_improvement_window": "2-4 weeks",
+      "instructions": "Corrective exercise targeting cervical_rotation_control.",
+      "instructions_en": "Corrective exercise targeting cervical_rotation_control.",
+      "instructions_fr": "Corrective exercise targeting cervical_rotation_control."
     },
     {
       "id": "CERV005",
@@ -1218,7 +1404,18 @@
       "tags": [
         "quadruped",
         "neck"
-      ]
+      ],
+      "name_en": "Quadruped Neck Retraction",
+      "name_fr": "Quadruped Neck Retraction",
+      "description_en": "Corrective exercise targeting cervical_retraction, spinal_alignment.",
+      "description_fr": "Corrective exercise targeting cervical_retraction, spinal_alignment.",
+      "why_prescribed_en": "This exercise targets cervical_retraction, spinal_alignment and supports CERV, CORE movement priorities.",
+      "why_prescribed_fr": "Cet exercice cible cervical_retraction, spinal_alignment et soutient les priorités CERV, CORE.",
+      "exercise_priority": "essential",
+      "expected_improvement_window": "2-4 weeks",
+      "instructions": "Corrective exercise targeting cervical_retraction, spinal_alignment.",
+      "instructions_en": "Corrective exercise targeting cervical_retraction, spinal_alignment.",
+      "instructions_fr": "Corrective exercise targeting cervical_retraction, spinal_alignment."
     },
     {
       "id": "CERV006",
@@ -1281,7 +1478,18 @@
       "tags": [
         "band",
         "posture"
-      ]
+      ],
+      "name_en": "Standing Band Posture Hold",
+      "name_fr": "Standing Band Posture Hold",
+      "description_en": "Corrective exercise targeting postural_endurance, scapular_control.",
+      "description_fr": "Corrective exercise targeting postural_endurance, scapular_control.",
+      "why_prescribed_en": "This exercise targets postural_endurance, scapular_control and supports CERV, SCAP, THOR movement priorities.",
+      "why_prescribed_fr": "Cet exercice cible postural_endurance, scapular_control et soutient les priorités CERV, SCAP, THOR.",
+      "exercise_priority": "recommended",
+      "expected_improvement_window": "2-4 weeks",
+      "instructions": "Corrective exercise targeting postural_endurance, scapular_control.",
+      "instructions_en": "Corrective exercise targeting postural_endurance, scapular_control.",
+      "instructions_fr": "Corrective exercise targeting postural_endurance, scapular_control."
     },
     {
       "id": "CERV007",
@@ -1343,7 +1551,18 @@
       "tags": [
         "wall",
         "integration"
-      ]
+      ],
+      "name_en": "Wall Posture March",
+      "name_fr": "Wall Posture March",
+      "description_en": "Corrective exercise targeting postural_control, single_leg_control.",
+      "description_fr": "Corrective exercise targeting postural_control, single_leg_control.",
+      "why_prescribed_en": "This exercise targets postural_control, single_leg_control and supports CERV, CORE, PELV movement priorities.",
+      "why_prescribed_fr": "Cet exercice cible postural_control, single_leg_control et soutient les priorités CERV, CORE, PELV.",
+      "exercise_priority": "recommended",
+      "expected_improvement_window": "2-4 weeks",
+      "instructions": "Corrective exercise targeting postural_control, single_leg_control.",
+      "instructions_en": "Corrective exercise targeting postural_control, single_leg_control.",
+      "instructions_fr": "Corrective exercise targeting postural_control, single_leg_control."
     },
     {
       "id": "CERV008",
@@ -1403,7 +1622,18 @@
       "tags": [
         "neck",
         "prone"
-      ]
+      ],
+      "name_en": "Prone Cervical Retraction",
+      "name_fr": "Prone Cervical Retraction",
+      "description_en": "Corrective exercise targeting deep_neck_extensor_control, cervical_alignment.",
+      "description_fr": "Corrective exercise targeting deep_neck_extensor_control, cervical_alignment.",
+      "why_prescribed_en": "This exercise targets deep_neck_extensor_control, cervical_alignment and supports CERV, THOR movement priorities.",
+      "why_prescribed_fr": "Cet exercice cible deep_neck_extensor_control, cervical_alignment et soutient les priorités CERV, THOR.",
+      "exercise_priority": "recommended",
+      "expected_improvement_window": "2-4 weeks",
+      "instructions": "Corrective exercise targeting deep_neck_extensor_control, cervical_alignment.",
+      "instructions_en": "Corrective exercise targeting deep_neck_extensor_control, cervical_alignment.",
+      "instructions_fr": "Corrective exercise targeting deep_neck_extensor_control, cervical_alignment."
     },
     {
       "id": "THOR001",
@@ -1465,7 +1695,18 @@
       "tags": [
         "foam_roller",
         "extension"
-      ]
+      ],
+      "name_en": "Foam Roller Thoracic Extension",
+      "name_fr": "Foam Roller Thoracic Extension",
+      "description_en": "Corrective exercise targeting thoracic_extension, shoulder_flexion.",
+      "description_fr": "Corrective exercise targeting thoracic_extension, shoulder_flexion.",
+      "why_prescribed_en": "This exercise targets thoracic_extension, shoulder_flexion and supports THOR, SHLD movement priorities.",
+      "why_prescribed_fr": "Cet exercice cible thoracic_extension, shoulder_flexion et soutient les priorités THOR, SHLD.",
+      "exercise_priority": "essential",
+      "expected_improvement_window": "2-4 weeks",
+      "instructions": "Corrective exercise targeting thoracic_extension, shoulder_flexion.",
+      "instructions_en": "Corrective exercise targeting thoracic_extension, shoulder_flexion.",
+      "instructions_fr": "Corrective exercise targeting thoracic_extension, shoulder_flexion."
     },
     {
       "id": "THOR002",
@@ -1527,7 +1768,18 @@
       "tags": [
         "open_book",
         "rotation"
-      ]
+      ],
+      "name_en": "Side-Lying Open Book",
+      "name_fr": "Side-Lying Open Book",
+      "description_en": "Corrective exercise targeting thoracic_rotation, rib_cage_mobility.",
+      "description_fr": "Corrective exercise targeting thoracic_rotation, rib_cage_mobility.",
+      "why_prescribed_en": "This exercise targets thoracic_rotation, rib_cage_mobility and supports THOR, SHLD movement priorities.",
+      "why_prescribed_fr": "Cet exercice cible thoracic_rotation, rib_cage_mobility et soutient les priorités THOR, SHLD.",
+      "exercise_priority": "essential",
+      "expected_improvement_window": "2-4 weeks",
+      "instructions": "Corrective exercise targeting thoracic_rotation, rib_cage_mobility.",
+      "instructions_en": "Corrective exercise targeting thoracic_rotation, rib_cage_mobility.",
+      "instructions_fr": "Corrective exercise targeting thoracic_rotation, rib_cage_mobility."
     },
     {
       "id": "THOR003",
@@ -1588,7 +1840,18 @@
       "tags": [
         "quadruped",
         "rotation"
-      ]
+      ],
+      "name_en": "Quadruped Thread the Needle",
+      "name_fr": "Quadruped Thread the Needle",
+      "description_en": "Corrective exercise targeting thoracic_rotation, scapular_control.",
+      "description_fr": "Corrective exercise targeting thoracic_rotation, scapular_control.",
+      "why_prescribed_en": "This exercise targets thoracic_rotation, scapular_control and supports THOR, SCAP movement priorities.",
+      "why_prescribed_fr": "Cet exercice cible thoracic_rotation, scapular_control et soutient les priorités THOR, SCAP.",
+      "exercise_priority": "essential",
+      "expected_improvement_window": "2-4 weeks",
+      "instructions": "Corrective exercise targeting thoracic_rotation, scapular_control.",
+      "instructions_en": "Corrective exercise targeting thoracic_rotation, scapular_control.",
+      "instructions_fr": "Corrective exercise targeting thoracic_rotation, scapular_control."
     },
     {
       "id": "THOR004",
@@ -1649,7 +1912,18 @@
       "tags": [
         "wall",
         "rotation"
-      ]
+      ],
+      "name_en": "Wall Thoracic Rotation",
+      "name_fr": "Wall Thoracic Rotation",
+      "description_en": "Corrective exercise targeting thoracic_rotation, overhead_readiness.",
+      "description_fr": "Corrective exercise targeting thoracic_rotation, overhead_readiness.",
+      "why_prescribed_en": "This exercise targets thoracic_rotation, overhead_readiness and supports THOR, SHLD movement priorities.",
+      "why_prescribed_fr": "Cet exercice cible thoracic_rotation, overhead_readiness et soutient les priorités THOR, SHLD.",
+      "exercise_priority": "essential",
+      "expected_improvement_window": "2-4 weeks",
+      "instructions": "Corrective exercise targeting thoracic_rotation, overhead_readiness.",
+      "instructions_en": "Corrective exercise targeting thoracic_rotation, overhead_readiness.",
+      "instructions_fr": "Corrective exercise targeting thoracic_rotation, overhead_readiness."
     },
     {
       "id": "THOR005",
@@ -1712,7 +1986,18 @@
       "tags": [
         "overhead",
         "integration"
-      ]
+      ],
+      "name_en": "Tall-Kneeling Overhead Reach",
+      "name_fr": "Tall-Kneeling Overhead Reach",
+      "description_en": "Corrective exercise targeting thoracic_extension, overhead_pattern, rib_cage_control.",
+      "description_fr": "Corrective exercise targeting thoracic_extension, overhead_pattern, rib_cage_control.",
+      "why_prescribed_en": "This exercise targets thoracic_extension, overhead_pattern, rib_cage_control and supports THOR, SHLD, CORE movement priorities.",
+      "why_prescribed_fr": "Cet exercice cible thoracic_extension, overhead_pattern, rib_cage_control et soutient les priorités THOR, SHLD, CORE.",
+      "exercise_priority": "recommended",
+      "expected_improvement_window": "2-4 weeks",
+      "instructions": "Corrective exercise targeting thoracic_extension, overhead_pattern, rib_cage_control.",
+      "instructions_en": "Corrective exercise targeting thoracic_extension, overhead_pattern, rib_cage_control.",
+      "instructions_fr": "Corrective exercise targeting thoracic_extension, overhead_pattern, rib_cage_control."
     },
     {
       "id": "THOR006",
@@ -1774,7 +2059,18 @@
       "tags": [
         "chair",
         "desk"
-      ]
+      ],
+      "name_en": "Seated Thoracic Extension Chair",
+      "name_fr": "Seated Thoracic Extension Chair",
+      "description_en": "Corrective exercise targeting thoracic_extension, desk_posture.",
+      "description_fr": "Corrective exercise targeting thoracic_extension, desk_posture.",
+      "why_prescribed_en": "This exercise targets thoracic_extension, desk_posture and supports THOR, SHLD movement priorities.",
+      "why_prescribed_fr": "Cet exercice cible thoracic_extension, desk_posture et soutient les priorités THOR, SHLD.",
+      "exercise_priority": "essential",
+      "expected_improvement_window": "2-4 weeks",
+      "instructions": "Corrective exercise targeting thoracic_extension, desk_posture.",
+      "instructions_en": "Corrective exercise targeting thoracic_extension, desk_posture.",
+      "instructions_fr": "Corrective exercise targeting thoracic_extension, desk_posture."
     },
     {
       "id": "THOR007",
@@ -1833,7 +2129,18 @@
       "tags": [
         "spine",
         "control"
-      ]
+      ],
+      "name_en": "Cat-Camel Segmental Control",
+      "name_fr": "Cat-Camel Segmental Control",
+      "description_en": "Corrective exercise targeting spinal_segmentation, thoracic_control.",
+      "description_fr": "Corrective exercise targeting spinal_segmentation, thoracic_control.",
+      "why_prescribed_en": "This exercise targets spinal_segmentation, thoracic_control and supports THOR, CORE movement priorities.",
+      "why_prescribed_fr": "Cet exercice cible spinal_segmentation, thoracic_control et soutient les priorités THOR, CORE.",
+      "exercise_priority": "essential",
+      "expected_improvement_window": "2-4 weeks",
+      "instructions": "Corrective exercise targeting spinal_segmentation, thoracic_control.",
+      "instructions_en": "Corrective exercise targeting spinal_segmentation, thoracic_control.",
+      "instructions_fr": "Corrective exercise targeting spinal_segmentation, thoracic_control."
     },
     {
       "id": "THOR008",
@@ -1896,7 +2203,18 @@
       "tags": [
         "wall",
         "angel"
-      ]
+      ],
+      "name_en": "Wall Angel",
+      "name_fr": "Wall Angel",
+      "description_en": "Corrective exercise targeting thoracic_extension, scapular_upward_rotation, shoulder_flexion.",
+      "description_fr": "Corrective exercise targeting thoracic_extension, scapular_upward_rotation, shoulder_flexion.",
+      "why_prescribed_en": "This exercise targets thoracic_extension, scapular_upward_rotation, shoulder_flexion and supports THOR, SHLD, SCAP movement priorities.",
+      "why_prescribed_fr": "Cet exercice cible thoracic_extension, scapular_upward_rotation, shoulder_flexion et soutient les priorités THOR, SHLD, SCAP.",
+      "exercise_priority": "essential",
+      "expected_improvement_window": "2-4 weeks",
+      "instructions": "Corrective exercise targeting thoracic_extension, scapular_upward_rotation, shoulder_flexion.",
+      "instructions_en": "Corrective exercise targeting thoracic_extension, scapular_upward_rotation, shoulder_flexion.",
+      "instructions_fr": "Corrective exercise targeting thoracic_extension, scapular_upward_rotation, shoulder_flexion."
     },
     {
       "id": "THOR009",
@@ -1959,7 +2277,18 @@
       "tags": [
         "half_kneeling",
         "rotation"
-      ]
+      ],
+      "name_en": "Half-Kneeling Thoracic Rotation",
+      "name_fr": "Half-Kneeling Thoracic Rotation",
+      "description_en": "Corrective exercise targeting thoracic_rotation, hip_stability.",
+      "description_fr": "Corrective exercise targeting thoracic_rotation, hip_stability.",
+      "why_prescribed_en": "This exercise targets thoracic_rotation, hip_stability and supports THOR, HIP, CORE movement priorities.",
+      "why_prescribed_fr": "Cet exercice cible thoracic_rotation, hip_stability et soutient les priorités THOR, HIP, CORE.",
+      "exercise_priority": "optional",
+      "expected_improvement_window": "2-4 weeks",
+      "instructions": "Corrective exercise targeting thoracic_rotation, hip_stability.",
+      "instructions_en": "Corrective exercise targeting thoracic_rotation, hip_stability.",
+      "instructions_fr": "Corrective exercise targeting thoracic_rotation, hip_stability."
     },
     {
       "id": "THOR010",
@@ -2021,7 +2350,18 @@
       "tags": [
         "lat",
         "extension"
-      ]
+      ],
+      "name_en": "Bench T-Spine Extension Prayer",
+      "name_fr": "Bench T-Spine Extension Prayer",
+      "description_en": "Corrective exercise targeting thoracic_extension, lat_mobility, shoulder_flexion.",
+      "description_fr": "Corrective exercise targeting thoracic_extension, lat_mobility, shoulder_flexion.",
+      "why_prescribed_en": "This exercise targets thoracic_extension, lat_mobility, shoulder_flexion and supports THOR, SHLD movement priorities.",
+      "why_prescribed_fr": "Cet exercice cible thoracic_extension, lat_mobility, shoulder_flexion et soutient les priorités THOR, SHLD.",
+      "exercise_priority": "essential",
+      "expected_improvement_window": "2-4 weeks",
+      "instructions": "Corrective exercise targeting thoracic_extension, lat_mobility, shoulder_flexion.",
+      "instructions_en": "Corrective exercise targeting thoracic_extension, lat_mobility, shoulder_flexion.",
+      "instructions_fr": "Corrective exercise targeting thoracic_extension, lat_mobility, shoulder_flexion."
     },
     {
       "id": "SHLD001",
@@ -2081,7 +2421,18 @@
       "tags": [
         "lat",
         "stretch"
-      ]
+      ],
+      "name_en": "Child's Pose Lat Stretch",
+      "name_fr": "Child's Pose Lat Stretch",
+      "description_en": "Corrective exercise targeting lat_mobility, shoulder_flexion.",
+      "description_fr": "Corrective exercise targeting lat_mobility, shoulder_flexion.",
+      "why_prescribed_en": "This exercise targets lat_mobility, shoulder_flexion and supports SHLD, THOR movement priorities.",
+      "why_prescribed_fr": "Cet exercice cible lat_mobility, shoulder_flexion et soutient les priorités SHLD, THOR.",
+      "exercise_priority": "essential",
+      "expected_improvement_window": "2-4 weeks",
+      "instructions": "Corrective exercise targeting lat_mobility, shoulder_flexion.",
+      "instructions_en": "Corrective exercise targeting lat_mobility, shoulder_flexion.",
+      "instructions_fr": "Corrective exercise targeting lat_mobility, shoulder_flexion."
     },
     {
       "id": "SHLD002",
@@ -2143,7 +2494,18 @@
       "tags": [
         "wall",
         "scapula"
-      ]
+      ],
+      "name_en": "Wall Slide",
+      "name_fr": "Wall Slide",
+      "description_en": "Corrective exercise targeting shoulder_flexion, scapular_upward_rotation.",
+      "description_fr": "Corrective exercise targeting shoulder_flexion, scapular_upward_rotation.",
+      "why_prescribed_en": "This exercise targets shoulder_flexion, scapular_upward_rotation and supports SHLD, SCAP, THOR movement priorities.",
+      "why_prescribed_fr": "Cet exercice cible shoulder_flexion, scapular_upward_rotation et soutient les priorités SHLD, SCAP, THOR.",
+      "exercise_priority": "essential",
+      "expected_improvement_window": "2-4 weeks",
+      "instructions": "Corrective exercise targeting shoulder_flexion, scapular_upward_rotation.",
+      "instructions_en": "Corrective exercise targeting shoulder_flexion, scapular_upward_rotation.",
+      "instructions_fr": "Corrective exercise targeting shoulder_flexion, scapular_upward_rotation."
     },
     {
       "id": "SHLD003",
@@ -2205,7 +2567,18 @@
       "tags": [
         "pec",
         "stretch"
-      ]
+      ],
+      "name_en": "Doorway Pec Stretch",
+      "name_fr": "Doorway Pec Stretch",
+      "description_en": "Corrective exercise targeting pec_mobility, shoulder_extension.",
+      "description_fr": "Corrective exercise targeting pec_mobility, shoulder_extension.",
+      "why_prescribed_en": "This exercise targets pec_mobility, shoulder_extension and supports SHLD, THOR movement priorities.",
+      "why_prescribed_fr": "Cet exercice cible pec_mobility, shoulder_extension et soutient les priorités SHLD, THOR.",
+      "exercise_priority": "essential",
+      "expected_improvement_window": "2-4 weeks",
+      "instructions": "Corrective exercise targeting pec_mobility, shoulder_extension.",
+      "instructions_en": "Corrective exercise targeting pec_mobility, shoulder_extension.",
+      "instructions_fr": "Corrective exercise targeting pec_mobility, shoulder_extension."
     },
     {
       "id": "SHLD004",
@@ -2262,7 +2635,18 @@
       "thumbnail_url": "",
       "tags": [
         "posterior_shoulder"
-      ]
+      ],
+      "name_en": "Posterior Shoulder Stretch",
+      "name_fr": "Posterior Shoulder Stretch",
+      "description_en": "Corrective exercise targeting posterior_shoulder_mobility.",
+      "description_fr": "Corrective exercise targeting posterior_shoulder_mobility.",
+      "why_prescribed_en": "This exercise targets posterior_shoulder_mobility and supports SHLD, SCAP movement priorities.",
+      "why_prescribed_fr": "Cet exercice cible posterior_shoulder_mobility et soutient les priorités SHLD, SCAP.",
+      "exercise_priority": "essential",
+      "expected_improvement_window": "2-4 weeks",
+      "instructions": "Corrective exercise targeting posterior_shoulder_mobility.",
+      "instructions_en": "Corrective exercise targeting posterior_shoulder_mobility.",
+      "instructions_fr": "Corrective exercise targeting posterior_shoulder_mobility."
     },
     {
       "id": "SHLD005",
@@ -2319,7 +2703,18 @@
       "thumbnail_url": "",
       "tags": [
         "shoulder_ir"
-      ]
+      ],
+      "name_en": "Sleeper Stretch Modified",
+      "name_fr": "Sleeper Stretch Modified",
+      "description_en": "Corrective exercise targeting shoulder_internal_rotation.",
+      "description_fr": "Corrective exercise targeting shoulder_internal_rotation.",
+      "why_prescribed_en": "This exercise targets shoulder_internal_rotation and supports SHLD, SCAP movement priorities.",
+      "why_prescribed_fr": "Cet exercice cible shoulder_internal_rotation et soutient les priorités SHLD, SCAP.",
+      "exercise_priority": "essential",
+      "expected_improvement_window": "2-4 weeks",
+      "instructions": "Corrective exercise targeting shoulder_internal_rotation.",
+      "instructions_en": "Corrective exercise targeting shoulder_internal_rotation.",
+      "instructions_fr": "Corrective exercise targeting shoulder_internal_rotation."
     },
     {
       "id": "SCAP001",
@@ -2379,7 +2774,18 @@
       "tags": [
         "serratus",
         "wall"
-      ]
+      ],
+      "name_en": "Wall Scapular Push-Up",
+      "name_fr": "Wall Scapular Push-Up",
+      "description_en": "Corrective exercise targeting serratus_activation, scapular_protraction.",
+      "description_fr": "Corrective exercise targeting serratus_activation, scapular_protraction.",
+      "why_prescribed_en": "This exercise targets serratus_activation, scapular_protraction and supports SCAP, SHLD movement priorities.",
+      "why_prescribed_fr": "Cet exercice cible serratus_activation, scapular_protraction et soutient les priorités SCAP, SHLD.",
+      "exercise_priority": "essential",
+      "expected_improvement_window": "2-4 weeks",
+      "instructions": "Corrective exercise targeting serratus_activation, scapular_protraction.",
+      "instructions_en": "Corrective exercise targeting serratus_activation, scapular_protraction.",
+      "instructions_fr": "Corrective exercise targeting serratus_activation, scapular_protraction."
     },
     {
       "id": "SCAP002",
@@ -2438,7 +2844,18 @@
       "tags": [
         "serratus",
         "incline"
-      ]
+      ],
+      "name_en": "Scapular Push-Up Incline",
+      "name_fr": "Scapular Push-Up Incline",
+      "description_en": "Corrective exercise targeting serratus_activation, scapular_control.",
+      "description_fr": "Corrective exercise targeting serratus_activation, scapular_control.",
+      "why_prescribed_en": "This exercise targets serratus_activation, scapular_control and supports SCAP, CORE movement priorities.",
+      "why_prescribed_fr": "Cet exercice cible serratus_activation, scapular_control et soutient les priorités SCAP, CORE.",
+      "exercise_priority": "essential",
+      "expected_improvement_window": "2-4 weeks",
+      "instructions": "Corrective exercise targeting serratus_activation, scapular_control.",
+      "instructions_en": "Corrective exercise targeting serratus_activation, scapular_control.",
+      "instructions_fr": "Corrective exercise targeting serratus_activation, scapular_control."
     },
     {
       "id": "SCAP003",
@@ -2499,7 +2916,18 @@
       "tags": [
         "serratus",
         "band"
-      ]
+      ],
+      "name_en": "Serratus Wall Slide",
+      "name_fr": "Serratus Wall Slide",
+      "description_en": "Corrective exercise targeting serratus_activation, scapular_upward_rotation.",
+      "description_fr": "Corrective exercise targeting serratus_activation, scapular_upward_rotation.",
+      "why_prescribed_en": "This exercise targets serratus_activation, scapular_upward_rotation and supports SCAP, SHLD movement priorities.",
+      "why_prescribed_fr": "Cet exercice cible serratus_activation, scapular_upward_rotation et soutient les priorités SCAP, SHLD.",
+      "exercise_priority": "essential",
+      "expected_improvement_window": "2-4 weeks",
+      "instructions": "Corrective exercise targeting serratus_activation, scapular_upward_rotation.",
+      "instructions_en": "Corrective exercise targeting serratus_activation, scapular_upward_rotation.",
+      "instructions_fr": "Corrective exercise targeting serratus_activation, scapular_upward_rotation."
     },
     {
       "id": "SCAP004",
@@ -2559,7 +2987,18 @@
       "tags": [
         "rotator_cuff",
         "band"
-      ]
+      ],
+      "name_en": "Band External Rotation",
+      "name_fr": "Band External Rotation",
+      "description_en": "Corrective exercise targeting rotator_cuff_control, shoulder_stability.",
+      "description_fr": "Corrective exercise targeting rotator_cuff_control, shoulder_stability.",
+      "why_prescribed_en": "This exercise targets rotator_cuff_control, shoulder_stability and supports SCAP, SHLD movement priorities.",
+      "why_prescribed_fr": "Cet exercice cible rotator_cuff_control, shoulder_stability et soutient les priorités SCAP, SHLD.",
+      "exercise_priority": "essential",
+      "expected_improvement_window": "2-4 weeks",
+      "instructions": "Corrective exercise targeting rotator_cuff_control, shoulder_stability.",
+      "instructions_en": "Corrective exercise targeting rotator_cuff_control, shoulder_stability.",
+      "instructions_fr": "Corrective exercise targeting rotator_cuff_control, shoulder_stability."
     },
     {
       "id": "SCAP005",
@@ -2621,7 +3060,18 @@
       "tags": [
         "band",
         "posture"
-      ]
+      ],
+      "name_en": "Band Pull-Apart",
+      "name_fr": "Band Pull-Apart",
+      "description_en": "Corrective exercise targeting scapular_retraction, postural_endurance.",
+      "description_fr": "Corrective exercise targeting scapular_retraction, postural_endurance.",
+      "why_prescribed_en": "This exercise targets scapular_retraction, postural_endurance and supports SCAP, THOR movement priorities.",
+      "why_prescribed_fr": "Cet exercice cible scapular_retraction, postural_endurance et soutient les priorités SCAP, THOR.",
+      "exercise_priority": "recommended",
+      "expected_improvement_window": "2-4 weeks",
+      "instructions": "Corrective exercise targeting scapular_retraction, postural_endurance.",
+      "instructions_en": "Corrective exercise targeting scapular_retraction, postural_endurance.",
+      "instructions_fr": "Corrective exercise targeting scapular_retraction, postural_endurance."
     },
     {
       "id": "SCAP006",
@@ -2682,7 +3132,18 @@
       "tags": [
         "prone",
         "lower_trap"
-      ]
+      ],
+      "name_en": "Prone Y-T-W",
+      "name_fr": "Prone Y-T-W",
+      "description_en": "Corrective exercise targeting lower_trap_activation, scapular_control.",
+      "description_fr": "Corrective exercise targeting lower_trap_activation, scapular_control.",
+      "why_prescribed_en": "This exercise targets lower_trap_activation, scapular_control and supports SCAP, SHLD, THOR movement priorities.",
+      "why_prescribed_fr": "Cet exercice cible lower_trap_activation, scapular_control et soutient les priorités SCAP, SHLD, THOR.",
+      "exercise_priority": "recommended",
+      "expected_improvement_window": "2-4 weeks",
+      "instructions": "Corrective exercise targeting lower_trap_activation, scapular_control.",
+      "instructions_en": "Corrective exercise targeting lower_trap_activation, scapular_control.",
+      "instructions_fr": "Corrective exercise targeting lower_trap_activation, scapular_control."
     },
     {
       "id": "SCAP007",
@@ -2743,7 +3204,18 @@
       "tags": [
         "cobra",
         "posture"
-      ]
+      ],
+      "name_en": "Prone Cobra Hold",
+      "name_fr": "Prone Cobra Hold",
+      "description_en": "Corrective exercise targeting thoracic_extension_endurance, scapular_retraction.",
+      "description_fr": "Corrective exercise targeting thoracic_extension_endurance, scapular_retraction.",
+      "why_prescribed_en": "This exercise targets thoracic_extension_endurance, scapular_retraction and supports SCAP, THOR, CERV movement priorities.",
+      "why_prescribed_fr": "Cet exercice cible thoracic_extension_endurance, scapular_retraction et soutient les priorités SCAP, THOR, CERV.",
+      "exercise_priority": "recommended",
+      "expected_improvement_window": "2-4 weeks",
+      "instructions": "Corrective exercise targeting thoracic_extension_endurance, scapular_retraction.",
+      "instructions_en": "Corrective exercise targeting thoracic_extension_endurance, scapular_retraction.",
+      "instructions_fr": "Corrective exercise targeting thoracic_extension_endurance, scapular_retraction."
     },
     {
       "id": "SCAP008",
@@ -2803,7 +3275,18 @@
       "tags": [
         "half_kneeling",
         "band"
-      ]
+      ],
+      "name_en": "Half-Kneeling Band External Rotation",
+      "name_fr": "Half-Kneeling Band External Rotation",
+      "description_en": "Corrective exercise targeting rotator_cuff_control, trunk_control.",
+      "description_fr": "Corrective exercise targeting rotator_cuff_control, trunk_control.",
+      "why_prescribed_en": "This exercise targets rotator_cuff_control, trunk_control and supports SCAP, CORE movement priorities.",
+      "why_prescribed_fr": "Cet exercice cible rotator_cuff_control, trunk_control et soutient les priorités SCAP, CORE.",
+      "exercise_priority": "recommended",
+      "expected_improvement_window": "2-4 weeks",
+      "instructions": "Corrective exercise targeting rotator_cuff_control, trunk_control.",
+      "instructions_en": "Corrective exercise targeting rotator_cuff_control, trunk_control.",
+      "instructions_fr": "Corrective exercise targeting rotator_cuff_control, trunk_control."
     },
     {
       "id": "CORE001",
@@ -2865,7 +3348,18 @@
       "tags": [
         "dead_bug",
         "core"
-      ]
+      ],
+      "name_en": "Dead Bug Breathing",
+      "name_fr": "Dead Bug Breathing",
+      "description_en": "Corrective exercise targeting anti_extension_control, rib_cage_control.",
+      "description_fr": "Corrective exercise targeting anti_extension_control, rib_cage_control.",
+      "why_prescribed_en": "This exercise targets anti_extension_control, rib_cage_control and supports CORE, PELV movement priorities.",
+      "why_prescribed_fr": "Cet exercice cible anti_extension_control, rib_cage_control et soutient les priorités CORE, PELV.",
+      "exercise_priority": "essential",
+      "expected_improvement_window": "2-4 weeks",
+      "instructions": "Corrective exercise targeting anti_extension_control, rib_cage_control.",
+      "instructions_en": "Corrective exercise targeting anti_extension_control, rib_cage_control.",
+      "instructions_fr": "Corrective exercise targeting anti_extension_control, rib_cage_control."
     },
     {
       "id": "CORE002",
@@ -2927,7 +3421,18 @@
       "thumbnail_url": "",
       "tags": [
         "dead_bug"
-      ]
+      ],
+      "name_en": "Dead Bug Heel Taps",
+      "name_fr": "Dead Bug Heel Taps",
+      "description_en": "Corrective exercise targeting anti_extension_control, pelvic_control.",
+      "description_fr": "Corrective exercise targeting anti_extension_control, pelvic_control.",
+      "why_prescribed_en": "This exercise targets anti_extension_control, pelvic_control and supports CORE, PELV, POST movement priorities.",
+      "why_prescribed_fr": "Cet exercice cible anti_extension_control, pelvic_control et soutient les priorités CORE, PELV, POST.",
+      "exercise_priority": "essential",
+      "expected_improvement_window": "2-4 weeks",
+      "instructions": "Corrective exercise targeting anti_extension_control, pelvic_control.",
+      "instructions_en": "Corrective exercise targeting anti_extension_control, pelvic_control.",
+      "instructions_fr": "Corrective exercise targeting anti_extension_control, pelvic_control."
     },
     {
       "id": "CORE003",
@@ -2988,7 +3493,18 @@
       "tags": [
         "dead_bug",
         "stability"
-      ]
+      ],
+      "name_en": "Dead Bug Diagonal Reach",
+      "name_fr": "Dead Bug Diagonal Reach",
+      "description_en": "Corrective exercise targeting anti_extension_control, cross_body_control.",
+      "description_fr": "Corrective exercise targeting anti_extension_control, cross_body_control.",
+      "why_prescribed_en": "This exercise targets anti_extension_control, cross_body_control and supports CORE, PELV movement priorities.",
+      "why_prescribed_fr": "Cet exercice cible anti_extension_control, cross_body_control et soutient les priorités CORE, PELV.",
+      "exercise_priority": "recommended",
+      "expected_improvement_window": "2-4 weeks",
+      "instructions": "Corrective exercise targeting anti_extension_control, cross_body_control.",
+      "instructions_en": "Corrective exercise targeting anti_extension_control, cross_body_control.",
+      "instructions_fr": "Corrective exercise targeting anti_extension_control, cross_body_control."
     },
     {
       "id": "CORE004",
@@ -3050,7 +3566,18 @@
       "thumbnail_url": "",
       "tags": [
         "bridge"
-      ]
+      ],
+      "name_en": "Glute Bridge",
+      "name_fr": "Glute Bridge",
+      "description_en": "Corrective exercise targeting hip_extension, pelvic_control.",
+      "description_fr": "Corrective exercise targeting hip_extension, pelvic_control.",
+      "why_prescribed_en": "This exercise targets hip_extension, pelvic_control and supports CORE, HIP, PELV movement priorities.",
+      "why_prescribed_fr": "Cet exercice cible hip_extension, pelvic_control et soutient les priorités CORE, HIP, PELV.",
+      "exercise_priority": "essential",
+      "expected_improvement_window": "2-4 weeks",
+      "instructions": "Corrective exercise targeting hip_extension, pelvic_control.",
+      "instructions_en": "Corrective exercise targeting hip_extension, pelvic_control.",
+      "instructions_fr": "Corrective exercise targeting hip_extension, pelvic_control."
     },
     {
       "id": "CORE005",
@@ -3113,7 +3640,18 @@
       "tags": [
         "bridge",
         "march"
-      ]
+      ],
+      "name_en": "Bridge March",
+      "name_fr": "Bridge March",
+      "description_en": "Corrective exercise targeting pelvic_stability, single_leg_control.",
+      "description_fr": "Corrective exercise targeting pelvic_stability, single_leg_control.",
+      "why_prescribed_en": "This exercise targets pelvic_stability, single_leg_control and supports CORE, PELV, HIP movement priorities.",
+      "why_prescribed_fr": "Cet exercice cible pelvic_stability, single_leg_control et soutient les priorités CORE, PELV, HIP.",
+      "exercise_priority": "recommended",
+      "expected_improvement_window": "2-4 weeks",
+      "instructions": "Corrective exercise targeting pelvic_stability, single_leg_control.",
+      "instructions_en": "Corrective exercise targeting pelvic_stability, single_leg_control.",
+      "instructions_fr": "Corrective exercise targeting pelvic_stability, single_leg_control."
     },
     {
       "id": "CORE006",
@@ -3175,7 +3713,18 @@
       "thumbnail_url": "",
       "tags": [
         "bird_dog"
-      ]
+      ],
+      "name_en": "Bird Dog Regression",
+      "name_fr": "Bird Dog Regression",
+      "description_en": "Corrective exercise targeting anti_rotation_control, pelvic_control.",
+      "description_fr": "Corrective exercise targeting anti_rotation_control, pelvic_control.",
+      "why_prescribed_en": "This exercise targets anti_rotation_control, pelvic_control and supports CORE, PELV, THOR movement priorities.",
+      "why_prescribed_fr": "Cet exercice cible anti_rotation_control, pelvic_control et soutient les priorités CORE, PELV, THOR.",
+      "exercise_priority": "essential",
+      "expected_improvement_window": "2-4 weeks",
+      "instructions": "Corrective exercise targeting anti_rotation_control, pelvic_control.",
+      "instructions_en": "Corrective exercise targeting anti_rotation_control, pelvic_control.",
+      "instructions_fr": "Corrective exercise targeting anti_rotation_control, pelvic_control."
     },
     {
       "id": "CORE007",
@@ -3238,7 +3787,18 @@
       "tags": [
         "bird_dog",
         "integration"
-      ]
+      ],
+      "name_en": "Full Bird Dog",
+      "name_fr": "Full Bird Dog",
+      "description_en": "Corrective exercise targeting anti_rotation_control, cross_body_integration.",
+      "description_fr": "Corrective exercise targeting anti_rotation_control, cross_body_integration.",
+      "why_prescribed_en": "This exercise targets anti_rotation_control, cross_body_integration and supports CORE, PELV, SCAP movement priorities.",
+      "why_prescribed_fr": "Cet exercice cible anti_rotation_control, cross_body_integration et soutient les priorités CORE, PELV, SCAP.",
+      "exercise_priority": "recommended",
+      "expected_improvement_window": "2-4 weeks",
+      "instructions": "Corrective exercise targeting anti_rotation_control, cross_body_integration.",
+      "instructions_en": "Corrective exercise targeting anti_rotation_control, cross_body_integration.",
+      "instructions_fr": "Corrective exercise targeting anti_rotation_control, cross_body_integration."
     },
     {
       "id": "CORE008",
@@ -3297,7 +3857,18 @@
       "tags": [
         "pallof",
         "band"
-      ]
+      ],
+      "name_en": "Pallof Press Standing",
+      "name_fr": "Pallof Press Standing",
+      "description_en": "Corrective exercise targeting anti_rotation_control, trunk_stability.",
+      "description_fr": "Corrective exercise targeting anti_rotation_control, trunk_stability.",
+      "why_prescribed_en": "This exercise targets anti_rotation_control, trunk_stability and supports CORE, FUNC movement priorities.",
+      "why_prescribed_fr": "Cet exercice cible anti_rotation_control, trunk_stability et soutient les priorités CORE, FUNC.",
+      "exercise_priority": "recommended",
+      "expected_improvement_window": "2-4 weeks",
+      "instructions": "Corrective exercise targeting anti_rotation_control, trunk_stability.",
+      "instructions_en": "Corrective exercise targeting anti_rotation_control, trunk_stability.",
+      "instructions_fr": "Corrective exercise targeting anti_rotation_control, trunk_stability."
     },
     {
       "id": "CORE009",
@@ -3358,7 +3929,18 @@
       "tags": [
         "pallof",
         "split_stance"
-      ]
+      ],
+      "name_en": "Pallof Press Split Stance",
+      "name_fr": "Pallof Press Split Stance",
+      "description_en": "Corrective exercise targeting anti_rotation_control, split_stance_control.",
+      "description_fr": "Corrective exercise targeting anti_rotation_control, split_stance_control.",
+      "why_prescribed_en": "This exercise targets anti_rotation_control, split_stance_control and supports CORE, HIP, FUNC movement priorities.",
+      "why_prescribed_fr": "Cet exercice cible anti_rotation_control, split_stance_control et soutient les priorités CORE, HIP, FUNC.",
+      "exercise_priority": "optional",
+      "expected_improvement_window": "2-4 weeks",
+      "instructions": "Corrective exercise targeting anti_rotation_control, split_stance_control.",
+      "instructions_en": "Corrective exercise targeting anti_rotation_control, split_stance_control.",
+      "instructions_fr": "Corrective exercise targeting anti_rotation_control, split_stance_control."
     },
     {
       "id": "CORE010",
@@ -3416,7 +3998,18 @@
       "thumbnail_url": "",
       "tags": [
         "side_plank"
-      ]
+      ],
+      "name_en": "Side Plank from Knees",
+      "name_fr": "Side Plank from Knees",
+      "description_en": "Corrective exercise targeting lateral_core_stability.",
+      "description_fr": "Corrective exercise targeting lateral_core_stability.",
+      "why_prescribed_en": "This exercise targets lateral_core_stability and supports CORE, HIP, SCAP movement priorities.",
+      "why_prescribed_fr": "Cet exercice cible lateral_core_stability et soutient les priorités CORE, HIP, SCAP.",
+      "exercise_priority": "recommended",
+      "expected_improvement_window": "2-4 weeks",
+      "instructions": "Corrective exercise targeting lateral_core_stability.",
+      "instructions_en": "Corrective exercise targeting lateral_core_stability.",
+      "instructions_fr": "Corrective exercise targeting lateral_core_stability."
     },
     {
       "id": "CORE011",
@@ -3475,7 +4068,18 @@
       "tags": [
         "side_plank",
         "strength"
-      ]
+      ],
+      "name_en": "Side Plank Full",
+      "name_fr": "Side Plank Full",
+      "description_en": "Corrective exercise targeting lateral_core_strength.",
+      "description_fr": "Corrective exercise targeting lateral_core_strength.",
+      "why_prescribed_en": "This exercise targets lateral_core_strength and supports CORE, HIP, SCAP movement priorities.",
+      "why_prescribed_fr": "Cet exercice cible lateral_core_strength et soutient les priorités CORE, HIP, SCAP.",
+      "exercise_priority": "recommended",
+      "expected_improvement_window": "2-4 weeks",
+      "instructions": "Corrective exercise targeting lateral_core_strength.",
+      "instructions_en": "Corrective exercise targeting lateral_core_strength.",
+      "instructions_fr": "Corrective exercise targeting lateral_core_strength."
     },
     {
       "id": "POST001",
@@ -3536,7 +4140,18 @@
       "tags": [
         "hamstring",
         "aslr"
-      ]
+      ],
+      "name_en": "Supine Hamstring Floss",
+      "name_fr": "Supine Hamstring Floss",
+      "description_en": "Corrective exercise targeting hamstring_mobility, posterior_chain_length.",
+      "description_fr": "Corrective exercise targeting hamstring_mobility, posterior_chain_length.",
+      "why_prescribed_en": "This exercise targets hamstring_mobility, posterior_chain_length and supports POST, HIP movement priorities.",
+      "why_prescribed_fr": "Cet exercice cible hamstring_mobility, posterior_chain_length et soutient les priorités POST, HIP.",
+      "exercise_priority": "essential",
+      "expected_improvement_window": "2-4 weeks",
+      "instructions": "Corrective exercise targeting hamstring_mobility, posterior_chain_length.",
+      "instructions_en": "Corrective exercise targeting hamstring_mobility, posterior_chain_length.",
+      "instructions_fr": "Corrective exercise targeting hamstring_mobility, posterior_chain_length."
     },
     {
       "id": "POST002",
@@ -3598,7 +4213,18 @@
       "tags": [
         "band",
         "aslr"
-      ]
+      ],
+      "name_en": "Band-Assisted Leg Lowering",
+      "name_fr": "Band-Assisted Leg Lowering",
+      "description_en": "Corrective exercise targeting hamstring_mobility, pelvic_control.",
+      "description_fr": "Corrective exercise targeting hamstring_mobility, pelvic_control.",
+      "why_prescribed_en": "This exercise targets hamstring_mobility, pelvic_control and supports POST, PELV, CORE movement priorities.",
+      "why_prescribed_fr": "Cet exercice cible hamstring_mobility, pelvic_control et soutient les priorités POST, PELV, CORE.",
+      "exercise_priority": "essential",
+      "expected_improvement_window": "2-4 weeks",
+      "instructions": "Corrective exercise targeting hamstring_mobility, pelvic_control.",
+      "instructions_en": "Corrective exercise targeting hamstring_mobility, pelvic_control.",
+      "instructions_fr": "Corrective exercise targeting hamstring_mobility, pelvic_control."
     },
     {
       "id": "POST003",
@@ -3660,7 +4286,18 @@
       "tags": [
         "aslr",
         "control"
-      ]
+      ],
+      "name_en": "Active Straight-Leg Raise Hold",
+      "name_fr": "Active Straight-Leg Raise Hold",
+      "description_en": "Corrective exercise targeting active_hip_flexion, aslr_control.",
+      "description_fr": "Corrective exercise targeting active_hip_flexion, aslr_control.",
+      "why_prescribed_en": "This exercise targets active_hip_flexion, aslr_control and supports POST, HIP, CORE movement priorities.",
+      "why_prescribed_fr": "Cet exercice cible active_hip_flexion, aslr_control et soutient les priorités POST, HIP, CORE.",
+      "exercise_priority": "essential",
+      "expected_improvement_window": "2-4 weeks",
+      "instructions": "Corrective exercise targeting active_hip_flexion, aslr_control.",
+      "instructions_en": "Corrective exercise targeting active_hip_flexion, aslr_control.",
+      "instructions_fr": "Corrective exercise targeting active_hip_flexion, aslr_control."
     },
     {
       "id": "POST004",
@@ -3720,7 +4357,18 @@
       "tags": [
         "aslr",
         "band"
-      ]
+      ],
+      "name_en": "Single-Leg Lowering with Band",
+      "name_fr": "Single-Leg Lowering with Band",
+      "description_en": "Corrective exercise targeting posterior_chain_control, pelvic_stability.",
+      "description_fr": "Corrective exercise targeting posterior_chain_control, pelvic_stability.",
+      "why_prescribed_en": "This exercise targets posterior_chain_control, pelvic_stability and supports POST, CORE, PELV movement priorities.",
+      "why_prescribed_fr": "Cet exercice cible posterior_chain_control, pelvic_stability et soutient les priorités POST, CORE, PELV.",
+      "exercise_priority": "optional",
+      "expected_improvement_window": "2-4 weeks",
+      "instructions": "Corrective exercise targeting posterior_chain_control, pelvic_stability.",
+      "instructions_en": "Corrective exercise targeting posterior_chain_control, pelvic_stability.",
+      "instructions_fr": "Corrective exercise targeting posterior_chain_control, pelvic_stability."
     },
     {
       "id": "POST005",
@@ -3780,7 +4428,18 @@
       "tags": [
         "calf",
         "ankle"
-      ]
+      ],
+      "name_en": "Calf Stretch Wall",
+      "name_fr": "Calf Stretch Wall",
+      "description_en": "Corrective exercise targeting calf_mobility, ankle_dorsiflexion.",
+      "description_fr": "Corrective exercise targeting calf_mobility, ankle_dorsiflexion.",
+      "why_prescribed_en": "This exercise targets calf_mobility, ankle_dorsiflexion and supports POST, ANKL movement priorities.",
+      "why_prescribed_fr": "Cet exercice cible calf_mobility, ankle_dorsiflexion et soutient les priorités POST, ANKL.",
+      "exercise_priority": "essential",
+      "expected_improvement_window": "2-4 weeks",
+      "instructions": "Corrective exercise targeting calf_mobility, ankle_dorsiflexion.",
+      "instructions_en": "Corrective exercise targeting calf_mobility, ankle_dorsiflexion.",
+      "instructions_fr": "Corrective exercise targeting calf_mobility, ankle_dorsiflexion."
     },
     {
       "id": "HIP001",
@@ -3839,7 +4498,18 @@
       "thumbnail_url": "",
       "tags": [
         "hip_rotation"
-      ]
+      ],
+      "name_en": "90/90 Hip Switch",
+      "name_fr": "90/90 Hip Switch",
+      "description_en": "Corrective exercise targeting hip_internal_rotation, hip_external_rotation.",
+      "description_fr": "Corrective exercise targeting hip_internal_rotation, hip_external_rotation.",
+      "why_prescribed_en": "This exercise targets hip_internal_rotation, hip_external_rotation and supports HIP, PELV movement priorities.",
+      "why_prescribed_fr": "Cet exercice cible hip_internal_rotation, hip_external_rotation et soutient les priorités HIP, PELV.",
+      "exercise_priority": "essential",
+      "expected_improvement_window": "2-4 weeks",
+      "instructions": "Corrective exercise targeting hip_internal_rotation, hip_external_rotation.",
+      "instructions_en": "Corrective exercise targeting hip_internal_rotation, hip_external_rotation.",
+      "instructions_fr": "Corrective exercise targeting hip_internal_rotation, hip_external_rotation."
     },
     {
       "id": "HIP002",
@@ -3899,7 +4569,18 @@
       "tags": [
         "hip_flexion",
         "squat"
-      ]
+      ],
+      "name_en": "Quadruped Rock-Back",
+      "name_fr": "Quadruped Rock-Back",
+      "description_en": "Corrective exercise targeting hip_flexion, hip_hinge.",
+      "description_fr": "Corrective exercise targeting hip_flexion, hip_hinge.",
+      "why_prescribed_en": "This exercise targets hip_flexion, hip_hinge and supports HIP, CORE movement priorities.",
+      "why_prescribed_fr": "Cet exercice cible hip_flexion, hip_hinge et soutient les priorités HIP, CORE.",
+      "exercise_priority": "essential",
+      "expected_improvement_window": "2-4 weeks",
+      "instructions": "Corrective exercise targeting hip_flexion, hip_hinge.",
+      "instructions_en": "Corrective exercise targeting hip_flexion, hip_hinge.",
+      "instructions_fr": "Corrective exercise targeting hip_flexion, hip_hinge."
     },
     {
       "id": "HIP003",
@@ -3958,7 +4639,18 @@
       "thumbnail_url": "",
       "tags": [
         "adductor"
-      ]
+      ],
+      "name_en": "Adductor Rock-Back",
+      "name_fr": "Adductor Rock-Back",
+      "description_en": "Corrective exercise targeting adductor_mobility, hip_abduction.",
+      "description_fr": "Corrective exercise targeting adductor_mobility, hip_abduction.",
+      "why_prescribed_en": "This exercise targets adductor_mobility, hip_abduction and supports HIP, PELV movement priorities.",
+      "why_prescribed_fr": "Cet exercice cible adductor_mobility, hip_abduction et soutient les priorités HIP, PELV.",
+      "exercise_priority": "essential",
+      "expected_improvement_window": "2-4 weeks",
+      "instructions": "Corrective exercise targeting adductor_mobility, hip_abduction.",
+      "instructions_en": "Corrective exercise targeting adductor_mobility, hip_abduction.",
+      "instructions_fr": "Corrective exercise targeting adductor_mobility, hip_abduction."
     },
     {
       "id": "HIP004",
@@ -4019,7 +4711,18 @@
       "thumbnail_url": "",
       "tags": [
         "hip_flexor"
-      ]
+      ],
+      "name_en": "Half-Kneeling Hip Flexor Stretch",
+      "name_fr": "Half-Kneeling Hip Flexor Stretch",
+      "description_en": "Corrective exercise targeting hip_extension, pelvic_control.",
+      "description_fr": "Corrective exercise targeting hip_extension, pelvic_control.",
+      "why_prescribed_en": "This exercise targets hip_extension, pelvic_control and supports HIP, PELV movement priorities.",
+      "why_prescribed_fr": "Cet exercice cible hip_extension, pelvic_control et soutient les priorités HIP, PELV.",
+      "exercise_priority": "essential",
+      "expected_improvement_window": "2-4 weeks",
+      "instructions": "Corrective exercise targeting hip_extension, pelvic_control.",
+      "instructions_en": "Corrective exercise targeting hip_extension, pelvic_control.",
+      "instructions_fr": "Corrective exercise targeting hip_extension, pelvic_control."
     },
     {
       "id": "HIP005",
@@ -4081,7 +4784,18 @@
       "thumbnail_url": "",
       "tags": [
         "hinge"
-      ]
+      ],
+      "name_en": "Hip Hinge with Dowel",
+      "name_fr": "Hip Hinge with Dowel",
+      "description_en": "Corrective exercise targeting hip_hinge, posterior_chain_integration.",
+      "description_fr": "Corrective exercise targeting hip_hinge, posterior_chain_integration.",
+      "why_prescribed_en": "This exercise targets hip_hinge, posterior_chain_integration and supports HIP, POST, CORE movement priorities.",
+      "why_prescribed_fr": "Cet exercice cible hip_hinge, posterior_chain_integration et soutient les priorités HIP, POST, CORE.",
+      "exercise_priority": "recommended",
+      "expected_improvement_window": "2-4 weeks",
+      "instructions": "Corrective exercise targeting hip_hinge, posterior_chain_integration.",
+      "instructions_en": "Corrective exercise targeting hip_hinge, posterior_chain_integration.",
+      "instructions_fr": "Corrective exercise targeting hip_hinge, posterior_chain_integration."
     },
     {
       "id": "HIP006",
@@ -4140,7 +4854,18 @@
       "tags": [
         "hip_rotation",
         "control"
-      ]
+      ],
+      "name_en": "90/90 Hip Lift-Off",
+      "name_fr": "90/90 Hip Lift-Off",
+      "description_en": "Corrective exercise targeting active_hip_rotation, pelvic_control.",
+      "description_fr": "Corrective exercise targeting active_hip_rotation, pelvic_control.",
+      "why_prescribed_en": "This exercise targets active_hip_rotation, pelvic_control and supports HIP, PELV movement priorities.",
+      "why_prescribed_fr": "Cet exercice cible active_hip_rotation, pelvic_control et soutient les priorités HIP, PELV.",
+      "exercise_priority": "optional",
+      "expected_improvement_window": "2-4 weeks",
+      "instructions": "Corrective exercise targeting active_hip_rotation, pelvic_control.",
+      "instructions_en": "Corrective exercise targeting active_hip_rotation, pelvic_control.",
+      "instructions_fr": "Corrective exercise targeting active_hip_rotation, pelvic_control."
     },
     {
       "id": "POST006",
@@ -4202,7 +4927,18 @@
       "tags": [
         "hinge",
         "strength"
-      ]
+      ],
+      "name_en": "Bodyweight Romanian Deadlift Pattern",
+      "name_fr": "Bodyweight Romanian Deadlift Pattern",
+      "description_en": "Corrective exercise targeting hip_hinge_strength, posterior_chain_control.",
+      "description_fr": "Corrective exercise targeting hip_hinge_strength, posterior_chain_control.",
+      "why_prescribed_en": "This exercise targets hip_hinge_strength, posterior_chain_control and supports POST, HIP, CORE movement priorities.",
+      "why_prescribed_fr": "Cet exercice cible hip_hinge_strength, posterior_chain_control et soutient les priorités POST, HIP, CORE.",
+      "exercise_priority": "recommended",
+      "expected_improvement_window": "2-4 weeks",
+      "instructions": "Corrective exercise targeting hip_hinge_strength, posterior_chain_control.",
+      "instructions_en": "Corrective exercise targeting hip_hinge_strength, posterior_chain_control.",
+      "instructions_fr": "Corrective exercise targeting hip_hinge_strength, posterior_chain_control."
     },
     {
       "id": "POST007",
@@ -4265,7 +5001,18 @@
       "tags": [
         "single_leg",
         "hinge"
-      ]
+      ],
+      "name_en": "Single-Leg RDL Reach Assisted",
+      "name_fr": "Single-Leg RDL Reach Assisted",
+      "description_en": "Corrective exercise targeting single_leg_hinge, posterior_chain_control.",
+      "description_fr": "Corrective exercise targeting single_leg_hinge, posterior_chain_control.",
+      "why_prescribed_en": "This exercise targets single_leg_hinge, posterior_chain_control and supports POST, HIP, CORE movement priorities.",
+      "why_prescribed_fr": "Cet exercice cible single_leg_hinge, posterior_chain_control et soutient les priorités POST, HIP, CORE.",
+      "exercise_priority": "recommended",
+      "expected_improvement_window": "2-4 weeks",
+      "instructions": "Corrective exercise targeting single_leg_hinge, posterior_chain_control.",
+      "instructions_en": "Corrective exercise targeting single_leg_hinge, posterior_chain_control.",
+      "instructions_fr": "Corrective exercise targeting single_leg_hinge, posterior_chain_control."
     },
     {
       "id": "ANKL001",
@@ -4325,7 +5072,18 @@
       "tags": [
         "ankle",
         "dorsiflexion"
-      ]
+      ],
+      "name_en": "Ankle Knee-to-Wall Rocks",
+      "name_fr": "Ankle Knee-to-Wall Rocks",
+      "description_en": "Corrective exercise targeting ankle_dorsiflexion, knee_tracking.",
+      "description_fr": "Corrective exercise targeting ankle_dorsiflexion, knee_tracking.",
+      "why_prescribed_en": "This exercise targets ankle_dorsiflexion, knee_tracking and supports ANKL, KNEE movement priorities.",
+      "why_prescribed_fr": "Cet exercice cible ankle_dorsiflexion, knee_tracking et soutient les priorités ANKL, KNEE.",
+      "exercise_priority": "essential",
+      "expected_improvement_window": "2-4 weeks",
+      "instructions": "Corrective exercise targeting ankle_dorsiflexion, knee_tracking.",
+      "instructions_en": "Corrective exercise targeting ankle_dorsiflexion, knee_tracking.",
+      "instructions_fr": "Corrective exercise targeting ankle_dorsiflexion, knee_tracking."
     },
     {
       "id": "ANKL002",
@@ -4384,7 +5142,18 @@
       "thumbnail_url": "",
       "tags": [
         "ankle"
-      ]
+      ],
+      "name_en": "Half-Kneeling Ankle Dorsiflexion Rock",
+      "name_fr": "Half-Kneeling Ankle Dorsiflexion Rock",
+      "description_en": "Corrective exercise targeting ankle_dorsiflexion, squat_depth.",
+      "description_fr": "Corrective exercise targeting ankle_dorsiflexion, squat_depth.",
+      "why_prescribed_en": "This exercise targets ankle_dorsiflexion, squat_depth and supports ANKL, HIP movement priorities.",
+      "why_prescribed_fr": "Cet exercice cible ankle_dorsiflexion, squat_depth et soutient les priorités ANKL, HIP.",
+      "exercise_priority": "essential",
+      "expected_improvement_window": "2-4 weeks",
+      "instructions": "Corrective exercise targeting ankle_dorsiflexion, squat_depth.",
+      "instructions_en": "Corrective exercise targeting ankle_dorsiflexion, squat_depth.",
+      "instructions_fr": "Corrective exercise targeting ankle_dorsiflexion, squat_depth."
     },
     {
       "id": "ANKL003",
@@ -4443,7 +5212,18 @@
       "tags": [
         "band",
         "ankle"
-      ]
+      ],
+      "name_en": "Banded Ankle Mobilization",
+      "name_fr": "Banded Ankle Mobilization",
+      "description_en": "Corrective exercise targeting ankle_dorsiflexion.",
+      "description_fr": "Corrective exercise targeting ankle_dorsiflexion.",
+      "why_prescribed_en": "This exercise targets ankle_dorsiflexion and supports ANKL, KNEE movement priorities.",
+      "why_prescribed_fr": "Cet exercice cible ankle_dorsiflexion et soutient les priorités ANKL, KNEE.",
+      "exercise_priority": "optional",
+      "expected_improvement_window": "2-4 weeks",
+      "instructions": "Corrective exercise targeting ankle_dorsiflexion.",
+      "instructions_en": "Corrective exercise targeting ankle_dorsiflexion.",
+      "instructions_fr": "Corrective exercise targeting ankle_dorsiflexion."
     },
     {
       "id": "KNEE001",
@@ -4504,7 +5284,18 @@
       "tags": [
         "mini_band",
         "knee"
-      ]
+      ],
+      "name_en": "Mini-Band Squat Hold",
+      "name_fr": "Mini-Band Squat Hold",
+      "description_en": "Corrective exercise targeting knee_tracking, hip_abductor_control.",
+      "description_fr": "Corrective exercise targeting knee_tracking, hip_abductor_control.",
+      "why_prescribed_en": "This exercise targets knee_tracking, hip_abductor_control and supports KNEE, HIP, CORE movement priorities.",
+      "why_prescribed_fr": "Cet exercice cible knee_tracking, hip_abductor_control et soutient les priorités KNEE, HIP, CORE.",
+      "exercise_priority": "recommended",
+      "expected_improvement_window": "2-4 weeks",
+      "instructions": "Corrective exercise targeting knee_tracking, hip_abductor_control.",
+      "instructions_en": "Corrective exercise targeting knee_tracking, hip_abductor_control.",
+      "instructions_fr": "Corrective exercise targeting knee_tracking, hip_abductor_control."
     },
     {
       "id": "KNEE002",
@@ -4564,7 +5355,18 @@
       "tags": [
         "glute_medius",
         "mini_band"
-      ]
+      ],
+      "name_en": "Mini-Band Lateral Walk",
+      "name_fr": "Mini-Band Lateral Walk",
+      "description_en": "Corrective exercise targeting hip_abductor_strength, knee_tracking.",
+      "description_fr": "Corrective exercise targeting hip_abductor_strength, knee_tracking.",
+      "why_prescribed_en": "This exercise targets hip_abductor_strength, knee_tracking and supports KNEE, HIP movement priorities.",
+      "why_prescribed_fr": "Cet exercice cible hip_abductor_strength, knee_tracking et soutient les priorités KNEE, HIP.",
+      "exercise_priority": "recommended",
+      "expected_improvement_window": "2-4 weeks",
+      "instructions": "Corrective exercise targeting hip_abductor_strength, knee_tracking.",
+      "instructions_en": "Corrective exercise targeting hip_abductor_strength, knee_tracking.",
+      "instructions_fr": "Corrective exercise targeting hip_abductor_strength, knee_tracking."
     },
     {
       "id": "KNEE003",
@@ -4624,7 +5426,18 @@
       "thumbnail_url": "",
       "tags": [
         "step_up"
-      ]
+      ],
+      "name_en": "Step-Up Low Box",
+      "name_fr": "Step-Up Low Box",
+      "description_en": "Corrective exercise targeting single_leg_strength, knee_tracking.",
+      "description_fr": "Corrective exercise targeting single_leg_strength, knee_tracking.",
+      "why_prescribed_en": "This exercise targets single_leg_strength, knee_tracking and supports KNEE, HIP, FUNC movement priorities.",
+      "why_prescribed_fr": "Cet exercice cible single_leg_strength, knee_tracking et soutient les priorités KNEE, HIP, FUNC.",
+      "exercise_priority": "recommended",
+      "expected_improvement_window": "2-4 weeks",
+      "instructions": "Corrective exercise targeting single_leg_strength, knee_tracking.",
+      "instructions_en": "Corrective exercise targeting single_leg_strength, knee_tracking.",
+      "instructions_fr": "Corrective exercise targeting single_leg_strength, knee_tracking."
     },
     {
       "id": "SQT001",
@@ -4688,7 +5501,18 @@
       "tags": [
         "squat",
         "integration"
-      ]
+      ],
+      "name_en": "Goblet Counterbalance Squat to Box",
+      "name_fr": "Goblet Counterbalance Squat to Box",
+      "description_en": "Corrective exercise targeting squat_pattern, trunk_control, balance.",
+      "description_fr": "Corrective exercise targeting squat_pattern, trunk_control, balance.",
+      "why_prescribed_en": "This exercise targets squat_pattern, trunk_control, balance and supports FUNC, ANKL, HIP, CORE movement priorities.",
+      "why_prescribed_fr": "Cet exercice cible squat_pattern, trunk_control, balance et soutient les priorités FUNC, ANKL, HIP, CORE.",
+      "exercise_priority": "recommended",
+      "expected_improvement_window": "2-4 weeks",
+      "instructions": "Corrective exercise targeting squat_pattern, trunk_control, balance.",
+      "instructions_en": "Corrective exercise targeting squat_pattern, trunk_control, balance.",
+      "instructions_fr": "Corrective exercise targeting squat_pattern, trunk_control, balance."
     },
     {
       "id": "SQT002",
@@ -4751,7 +5575,18 @@
       "tags": [
         "squat",
         "wall"
-      ]
+      ],
+      "name_en": "Wall Squat Facing Wall",
+      "name_fr": "Wall Squat Facing Wall",
+      "description_en": "Corrective exercise targeting squat_pattern, thoracic_control, hip_ankle_mobility.",
+      "description_fr": "Corrective exercise targeting squat_pattern, thoracic_control, hip_ankle_mobility.",
+      "why_prescribed_en": "This exercise targets squat_pattern, thoracic_control, hip_ankle_mobility and supports FUNC, THOR, HIP, ANKL movement priorities.",
+      "why_prescribed_fr": "Cet exercice cible squat_pattern, thoracic_control, hip_ankle_mobility et soutient les priorités FUNC, THOR, HIP, ANKL.",
+      "exercise_priority": "essential",
+      "expected_improvement_window": "2-4 weeks",
+      "instructions": "Corrective exercise targeting squat_pattern, thoracic_control, hip_ankle_mobility.",
+      "instructions_en": "Corrective exercise targeting squat_pattern, thoracic_control, hip_ankle_mobility.",
+      "instructions_fr": "Corrective exercise targeting squat_pattern, thoracic_control, hip_ankle_mobility."
     },
     {
       "id": "SQT003",
@@ -4812,7 +5647,18 @@
       "tags": [
         "tempo",
         "squat"
-      ]
+      ],
+      "name_en": "Tempo Squat to Box",
+      "name_fr": "Tempo Squat to Box",
+      "description_en": "Corrective exercise targeting squat_strength, trunk_control.",
+      "description_fr": "Corrective exercise targeting squat_strength, trunk_control.",
+      "why_prescribed_en": "This exercise targets squat_strength, trunk_control and supports FUNC, CORE, KNEE movement priorities.",
+      "why_prescribed_fr": "Cet exercice cible squat_strength, trunk_control et soutient les priorités FUNC, CORE, KNEE.",
+      "exercise_priority": "recommended",
+      "expected_improvement_window": "2-4 weeks",
+      "instructions": "Corrective exercise targeting squat_strength, trunk_control.",
+      "instructions_en": "Corrective exercise targeting squat_strength, trunk_control.",
+      "instructions_fr": "Corrective exercise targeting squat_strength, trunk_control."
     },
     {
       "id": "SQT004",
@@ -4876,7 +5722,18 @@
       "tags": [
         "squat",
         "mobility"
-      ]
+      ],
+      "name_en": "Squat-to-Stand Mobility Drill",
+      "name_fr": "Squat-to-Stand Mobility Drill",
+      "description_en": "Corrective exercise targeting squat_depth, posterior_chain_mobility.",
+      "description_fr": "Corrective exercise targeting squat_depth, posterior_chain_mobility.",
+      "why_prescribed_en": "This exercise targets squat_depth, posterior_chain_mobility and supports FUNC, HIP, ANKL, THOR movement priorities.",
+      "why_prescribed_fr": "Cet exercice cible squat_depth, posterior_chain_mobility et soutient les priorités FUNC, HIP, ANKL, THOR.",
+      "exercise_priority": "recommended",
+      "expected_improvement_window": "2-4 weeks",
+      "instructions": "Corrective exercise targeting squat_depth, posterior_chain_mobility.",
+      "instructions_en": "Corrective exercise targeting squat_depth, posterior_chain_mobility.",
+      "instructions_fr": "Corrective exercise targeting squat_depth, posterior_chain_mobility."
     },
     {
       "id": "SQT005",
@@ -4938,7 +5795,18 @@
       "tags": [
         "goblet",
         "strength"
-      ]
+      ],
+      "name_en": "Goblet Squat",
+      "name_fr": "Goblet Squat",
+      "description_en": "Corrective exercise targeting squat_strength, trunk_control.",
+      "description_fr": "Corrective exercise targeting squat_strength, trunk_control.",
+      "why_prescribed_en": "This exercise targets squat_strength, trunk_control and supports FUNC, KNEE, CORE movement priorities.",
+      "why_prescribed_fr": "Cet exercice cible squat_strength, trunk_control et soutient les priorités FUNC, KNEE, CORE.",
+      "exercise_priority": "recommended",
+      "expected_improvement_window": "2-4 weeks",
+      "instructions": "Corrective exercise targeting squat_strength, trunk_control.",
+      "instructions_en": "Corrective exercise targeting squat_strength, trunk_control.",
+      "instructions_fr": "Corrective exercise targeting squat_strength, trunk_control."
     },
     {
       "id": "FUNC001",
@@ -4997,7 +5865,18 @@
       "thumbnail_url": "",
       "tags": [
         "split_squat"
-      ]
+      ],
+      "name_en": "Split Squat Short Range",
+      "name_fr": "Split Squat Short Range",
+      "description_en": "Corrective exercise targeting split_stance_control, hip_mobility.",
+      "description_fr": "Corrective exercise targeting split_stance_control, hip_mobility.",
+      "why_prescribed_en": "This exercise targets split_stance_control, hip_mobility and supports FUNC, HIP, KNEE movement priorities.",
+      "why_prescribed_fr": "Cet exercice cible split_stance_control, hip_mobility et soutient les priorités FUNC, HIP, KNEE.",
+      "exercise_priority": "recommended",
+      "expected_improvement_window": "2-4 weeks",
+      "instructions": "Corrective exercise targeting split_stance_control, hip_mobility.",
+      "instructions_en": "Corrective exercise targeting split_stance_control, hip_mobility.",
+      "instructions_fr": "Corrective exercise targeting split_stance_control, hip_mobility."
     },
     {
       "id": "FUNC002",
@@ -5059,7 +5938,18 @@
       "thumbnail_url": "",
       "tags": [
         "lunge"
-      ]
+      ],
+      "name_en": "Reverse Lunge to Pad",
+      "name_fr": "Reverse Lunge to Pad",
+      "description_en": "Corrective exercise targeting lunge_control, pelvic_control.",
+      "description_fr": "Corrective exercise targeting lunge_control, pelvic_control.",
+      "why_prescribed_en": "This exercise targets lunge_control, pelvic_control and supports FUNC, HIP, KNEE, CORE movement priorities.",
+      "why_prescribed_fr": "Cet exercice cible lunge_control, pelvic_control et soutient les priorités FUNC, HIP, KNEE, CORE.",
+      "exercise_priority": "recommended",
+      "expected_improvement_window": "2-4 weeks",
+      "instructions": "Corrective exercise targeting lunge_control, pelvic_control.",
+      "instructions_en": "Corrective exercise targeting lunge_control, pelvic_control.",
+      "instructions_fr": "Corrective exercise targeting lunge_control, pelvic_control."
     },
     {
       "id": "FUNC003",
@@ -5121,7 +6011,18 @@
       "thumbnail_url": "",
       "tags": [
         "march"
-      ]
+      ],
+      "name_en": "Controlled March with Pause",
+      "name_fr": "Controlled March with Pause",
+      "description_en": "Corrective exercise targeting hip_flexion_control, balance.",
+      "description_fr": "Corrective exercise targeting hip_flexion_control, balance.",
+      "why_prescribed_en": "This exercise targets hip_flexion_control, balance and supports FUNC, HIP, CORE movement priorities.",
+      "why_prescribed_fr": "Cet exercice cible hip_flexion_control, balance et soutient les priorités FUNC, HIP, CORE.",
+      "exercise_priority": "recommended",
+      "expected_improvement_window": "2-4 weeks",
+      "instructions": "Corrective exercise targeting hip_flexion_control, balance.",
+      "instructions_en": "Corrective exercise targeting hip_flexion_control, balance.",
+      "instructions_fr": "Corrective exercise targeting hip_flexion_control, balance."
     },
     {
       "id": "FUNC004",
@@ -5181,7 +6082,18 @@
       "thumbnail_url": "",
       "tags": [
         "carry"
-      ]
+      ],
+      "name_en": "Suitcase Carry",
+      "name_fr": "Suitcase Carry",
+      "description_en": "Corrective exercise targeting anti_lateral_flexion, gait_control.",
+      "description_fr": "Corrective exercise targeting anti_lateral_flexion, gait_control.",
+      "why_prescribed_en": "This exercise targets anti_lateral_flexion, gait_control and supports FUNC, CORE, HIP movement priorities.",
+      "why_prescribed_fr": "Cet exercice cible anti_lateral_flexion, gait_control et soutient les priorités FUNC, CORE, HIP.",
+      "exercise_priority": "recommended",
+      "expected_improvement_window": "2-4 weeks",
+      "instructions": "Corrective exercise targeting anti_lateral_flexion, gait_control.",
+      "instructions_en": "Corrective exercise targeting anti_lateral_flexion, gait_control.",
+      "instructions_fr": "Corrective exercise targeting anti_lateral_flexion, gait_control."
     }
   ]
 }
