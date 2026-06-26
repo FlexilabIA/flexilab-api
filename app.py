@@ -12,6 +12,10 @@ try:
     from engines.prescription_engine import generate_prescription
 except ModuleNotFoundError:
     from prescription_engine import generate_prescription
+try:
+    from score_engine_v2 import attach_score_v2
+except Exception:
+    attach_score_v2 = None
 
 os.environ["YOLO_CONFIG_DIR"] = "/tmp/Ultralytics"
 
@@ -1653,6 +1657,13 @@ def program(session_id: str, lang: str = "fr"):
             "sections": [],
             "fallback_reason": report_data.get("error")
         }
+
+    # FlexiLab Score 2.0: movement-quality score with 6 weighted domains.
+    try:
+        if attach_score_v2:
+            report_data = attach_score_v2(report_data, lang=lang)
+    except Exception as e:
+        report_data["score_v2_error"] = str(e)
 
     try:
         program_data = generate_program_from_report(report=report_data, lang=lang)
