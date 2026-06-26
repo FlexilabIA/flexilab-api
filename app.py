@@ -1570,6 +1570,57 @@ def report(session_id: str, lang: str = "fr"):
         "debug": {"tests_found": tests_found}
     }
 
+
+
+def save_screening_history(user_email: str, session_id: str, result: dict):
+    """
+    Save a completed screening snapshot to Supabase screening_history.
+    This is non-blocking: if saving fails, the report still returns normally.
+    """
+    try:
+        if not supabase:
+            return {"saved": False, "reason": "supabase_not_configured"}
+
+        report_data = result.get("report", {}) if isinstance(result, dict) else {}
+        score = report_data.get("flexilab_score")
+        risk = report_data.get("risk_category", {})
+        risk_level = risk.get("label") if isinstance(risk, dict) else None
+
+        payload = {
+            "user_email": str(user_email or report_data.get("user_email") or "anonymous").strip(),
+            "session_id": str(session_id),
+            "flexilab_score": score,
+            "risk_level": risk_level,
+            "result": result
+        }
+
+        if not payload["user_email"]:
+            payload["user_email"] = "anonymous"
+
+        supabase.table("screening_history").insert(payload).execute()
+        return {"saved": True}
+    except Exception as e:
+        return {"saved": False, "reason": str(e)}
+
+
+def get_session_user_email(session_id: str, report_data: dict | None = None):
+    """
+    Best-effort user email/name lookup for history saving.
+    """
+    try:
+        if isinstance(report_data, dict) and report_data.get("user_email"):
+            return report_data.get("user_email")
+
+        if supabase:
+            res = supabase.table("sessions").select("user_email").eq("id", session_id).limit(1).execute()
+            rows = getattr(res, "data", None) or []
+            if rows and rows[0].get("user_email"):
+                return rows[0].get("user_email")
+    except Exception:
+        pass
+
+    return "anonymous"
+
 @app.get("/program")
 def program(session_id: str, lang: str = "fr"):
     """
@@ -1626,12 +1677,75 @@ def program(session_id: str, lang: str = "fr"):
             "weeks": []
         }
 
-    return {
+    result_payload = {
         "session_id": session_id,
         "language": lang,
         "report": report_data,
         "program": program_data,
         "prescription": prescription_data
     }
+
+    user_email = get_session_user_email(session_id, report_data)
+    history_status = save_screening_history(user_email=user_email, session_id=session_id, result=result_payload)
+    result_payload["history_status"] = history_status
+
+    return result_payload
+
+
+
+@app.get("/history/{user_email}")
+def history(user_email: str, limit: int = 20):
+    """
+    Return screening history for one user, newest first.
+    """
+    try:
+        if not supabase:
+            return {"user_email": user_email, "items": [], "error": "supabase_not_configured"}
+
+        res = (
+            supabase.table("screening_history")
+            .select("id, user_email, session_id, created_at, flexilab_score, risk_level")
+            .eq("user_email", user_email)
+            .order("created_at", desc=True)
+            .limit(limit)
+            .execute()
+        )
+        rows = getattr(res, "data", None) or []
+        return {"user_email": user_email, "count": len(rows), "items": rows}
+    except Exception as e:
+        return {"user_email": user_email, "items": [], "error": str(e)}
+
+
+@app.get("/history/{user_email}/latest")
+def latest_history(user_email: str):
+    """
+    Return latest and previous screening for comparison.
+    """
+    try:
+        if not supabase:
+            return {"user_email": user_email, "latest": None, "previous": None, "error": "supabase_not_configured"}
+
+        res = (
+            supabase.table("screening_history")
+            .select("id, user_email, session_id, created_at, flexilab_score, risk_level, result")
+            .eq("user_email", user_email)
+            .order("created_at", desc=True)
+            .limit(2)
+            .execute()
+        )
+        rows = getattr(res, "data", None) or []
+        latest = rows[0] if len(rows) >= 1 else None
+        previous = rows[1] if len(rows) >= 2 else None
+
+        delta = None
+        if latest and previous:
+            try:
+                delta = round(float(latest.get("flexilab_score") or 0) - float(previous.get("flexilab_score") or 0), 1)
+            except Exception:
+                delta = None
+
+        return {"user_email": user_email, "latest": latest, "previous": previous, "score_delta": delta}
+    except Exception as e:
+        return {"user_email": user_email, "latest": None, "previous": None, "error": str(e)}
 
 
