@@ -1,0 +1,927 @@
+{
+  "version": "FlexiLab Movement Pattern Database v1.0",
+  "pattern_count": 25,
+  "patterns": [
+    {
+      "pattern_id": "P01",
+      "name_en": "Thoracic Dominant Restriction",
+      "name_fr": "Restriction thoracique dominante",
+      "primary_domains": [
+        "thoracic_mobility"
+      ],
+      "secondary_domains": [
+        "shoulder_mobility",
+        "cervical_control"
+      ],
+      "rules": [
+        "thoracic_mobility < 70",
+        "shoulder_mobility <= 80 OR cervical_control <= 80"
+      ],
+      "clinical_priority_en": "Restore thoracic extension and rotation before increasing shoulder loading.",
+      "clinical_priority_fr": "Restaurer l’extension et la rotation thoraciques avant d’augmenter la charge sur l’épaule.",
+      "typical_consequences_en": [
+        "reduced overhead reach",
+        "neck fatigue",
+        "shoulder compensation"
+      ],
+      "typical_consequences_fr": [
+        "réduction du reach au-dessus de la tête",
+        "fatigue cervicale",
+        "compensation de l’épaule"
+      ],
+      "recommended_pathway": [
+        "restore_thoracic",
+        "control_scapula",
+        "integrate_overhead"
+      ],
+      "exercise_bias": [
+        "TM",
+        "SH",
+        "CC",
+        "RB"
+      ]
+    },
+    {
+      "pattern_id": "P02",
+      "name_en": "Desk Worker Postural Pattern",
+      "name_fr": "Profil postural travail de bureau",
+      "primary_domains": [
+        "cervical_control",
+        "thoracic_mobility",
+        "shoulder_mobility"
+      ],
+      "secondary_domains": [
+        "core_stability"
+      ],
+      "rules": [
+        "cervical_control < 80",
+        "thoracic_mobility < 80",
+        "shoulder_mobility < 80"
+      ],
+      "clinical_priority_en": "Reduce neck load by restoring thoracic mobility and scapular mechanics.",
+      "clinical_priority_fr": "Réduire la charge cervicale en restaurant la mobilité thoracique et la mécanique scapulaire.",
+      "typical_consequences_en": [
+        "forward head posture",
+        "rounded shoulders",
+        "postural fatigue"
+      ],
+      "typical_consequences_fr": [
+        "projection de tête",
+        "épaules enroulées",
+        "fatigue posturale"
+      ],
+      "recommended_pathway": [
+        "breathing_reset",
+        "thoracic_restore",
+        "cervical_control",
+        "scapular_activation"
+      ],
+      "exercise_bias": [
+        "RB",
+        "TM",
+        "CC",
+        "SH",
+        "CS"
+      ]
+    },
+    {
+      "pattern_id": "P03",
+      "name_en": "Overhead Mobility Restriction",
+      "name_fr": "Restriction de mobilité au-dessus de la tête",
+      "primary_domains": [
+        "shoulder_mobility"
+      ],
+      "secondary_domains": [
+        "thoracic_mobility",
+        "scapular_control"
+      ],
+      "rules": [
+        "shoulder_mobility < 75",
+        "thoracic_mobility < 80"
+      ],
+      "clinical_priority_en": "Restore thoracic and shoulder mobility before overhead strengthening.",
+      "clinical_priority_fr": "Restaurer la mobilité thoracique et de l’épaule avant le renforcement au-dessus de la tête.",
+      "typical_consequences_en": [
+        "rib flare",
+        "lumbar extension compensation",
+        "shoulder overload"
+      ],
+      "typical_consequences_fr": [
+        "ouverture costale",
+        "compensation lombaire",
+        "surcharge de l’épaule"
+      ],
+      "recommended_pathway": [
+        "thoracic_restore",
+        "shoulder_mobility",
+        "scapular_control",
+        "overhead_integration"
+      ],
+      "exercise_bias": [
+        "TM",
+        "SH",
+        "CS"
+      ]
+    },
+    {
+      "pattern_id": "P04",
+      "name_en": "Hip Mobility Restriction",
+      "name_fr": "Restriction de mobilité de hanche",
+      "primary_domains": [
+        "hip_mobility",
+        "hamstring_mobility"
+      ],
+      "secondary_domains": [
+        "core_stability"
+      ],
+      "rules": [
+        "hip_mobility < 75 OR hamstring_mobility < 75",
+        "squat_depth limited OR ASLR limited"
+      ],
+      "clinical_priority_en": "Restore hip flexion/rotation and posterior chain mobility before loaded squat progression.",
+      "clinical_priority_fr": "Restaurer la flexion/rotation de hanche et la chaîne postérieure avant la progression du squat chargé.",
+      "typical_consequences_en": [
+        "posterior pelvic compensation",
+        "limited squat depth",
+        "lumbar rounding"
+      ],
+      "typical_consequences_fr": [
+        "compensation du bassin",
+        "profondeur de squat limitée",
+        "arrondi lombaire"
+      ],
+      "recommended_pathway": [
+        "hip_restore",
+        "posterior_chain_mobility",
+        "pelvic_control",
+        "squat_integration"
+      ],
+      "exercise_bias": [
+        "HM",
+        "HS",
+        "CS",
+        "FI"
+      ]
+    },
+    {
+      "pattern_id": "P05",
+      "name_en": "Lower Cross Control Pattern",
+      "name_fr": "Profil de contrôle lombo-pelvien",
+      "primary_domains": [
+        "core_stability",
+        "hip_mobility"
+      ],
+      "secondary_domains": [
+        "functional_integration"
+      ],
+      "rules": [
+        "core_stability < 75",
+        "hip_mobility < 80",
+        "squat_trunk_lean red/yellow"
+      ],
+      "clinical_priority_en": "Improve lumbopelvic control before increasing functional movement complexity.",
+      "clinical_priority_fr": "Améliorer le contrôle lombo-pelvien avant d’augmenter la complexité fonctionnelle.",
+      "typical_consequences_en": [
+        "excessive trunk lean",
+        "poor pelvic control",
+        "low-back compensation"
+      ],
+      "typical_consequences_fr": [
+        "inclinaison excessive du tronc",
+        "contrôle du bassin insuffisant",
+        "compensation lombaire"
+      ],
+      "recommended_pathway": [
+        "core_control",
+        "hip_restore",
+        "anti_extension",
+        "squat_integration"
+      ],
+      "exercise_bias": [
+        "CS",
+        "HM",
+        "FI",
+        "RB"
+      ]
+    },
+    {
+      "pattern_id": "P06",
+      "name_en": "Global Mobility Deficit",
+      "name_fr": "Déficit global de mobilité",
+      "primary_domains": [
+        "thoracic_mobility",
+        "shoulder_mobility",
+        "hip_mobility",
+        "ankle_mobility"
+      ],
+      "secondary_domains": [
+        "recovery_breathing"
+      ],
+      "rules": [
+        "three or more mobility domains < 75"
+      ],
+      "clinical_priority_en": "Use broad mobility exposure with low complexity before targeted strengthening.",
+      "clinical_priority_fr": "Utiliser une exposition globale à la mobilité avec faible complexité avant le renforcement ciblé.",
+      "typical_consequences_en": [
+        "restricted movement options",
+        "compensation during functional tasks"
+      ],
+      "typical_consequences_fr": [
+        "options de mouvement limitées",
+        "compensations dans les tâches fonctionnelles"
+      ],
+      "recommended_pathway": [
+        "breathing_reset",
+        "global_mobility",
+        "active_control",
+        "functional_integration"
+      ],
+      "exercise_bias": [
+        "RB",
+        "TM",
+        "SH",
+        "HM",
+        "AM"
+      ]
+    },
+    {
+      "pattern_id": "P07",
+      "name_en": "Asymmetrical Mobility Pattern",
+      "name_fr": "Profil de mobilité asymétrique",
+      "primary_domains": [
+        "shoulder_mobility",
+        "hamstring_mobility",
+        "hip_mobility"
+      ],
+      "secondary_domains": [
+        "balance_proprioception"
+      ],
+      "rules": [
+        "side-to-side asymmetry > 10% in shoulder or ASLR"
+      ],
+      "clinical_priority_en": "Correct side-to-side mobility/control asymmetry before symmetrical loading.",
+      "clinical_priority_fr": "Corriger l’asymétrie de mobilité/contrôle avant le chargement symétrique.",
+      "typical_consequences_en": [
+        "unilateral compensation",
+        "higher load on one side",
+        "reduced efficiency"
+      ],
+      "typical_consequences_fr": [
+        "compensation unilatérale",
+        "charge accrue d’un côté",
+        "efficacité réduite"
+      ],
+      "recommended_pathway": [
+        "restricted_side_volume",
+        "symmetry_control",
+        "bilateral_integration"
+      ],
+      "exercise_bias": [
+        "SH",
+        "HS",
+        "HM",
+        "BP",
+        "FI"
+      ]
+    },
+    {
+      "pattern_id": "P08",
+      "name_en": "Mobility Without Stability",
+      "name_fr": "Mobilité sans stabilité",
+      "primary_domains": [
+        "core_stability",
+        "functional_integration"
+      ],
+      "secondary_domains": [
+        "shoulder_mobility",
+        "hip_mobility"
+      ],
+      "rules": [
+        "mobility domains >= 80",
+        "core_stability < 75 OR functional_integration < 75"
+      ],
+      "clinical_priority_en": "Maintain mobility but prioritize motor control, anti-rotation and stability.",
+      "clinical_priority_fr": "Maintenir la mobilité mais prioriser le contrôle moteur, l’anti-rotation et la stabilité.",
+      "typical_consequences_en": [
+        "excessive range without control",
+        "poor movement consistency"
+      ],
+      "typical_consequences_fr": [
+        "amplitude excessive sans contrôle",
+        "mouvement peu constant"
+      ],
+      "recommended_pathway": [
+        "motor_control",
+        "stability",
+        "functional_patterning"
+      ],
+      "exercise_bias": [
+        "CS",
+        "FI",
+        "BP"
+      ]
+    },
+    {
+      "pattern_id": "P09",
+      "name_en": "Stability Without Mobility",
+      "name_fr": "Stabilité sans mobilité",
+      "primary_domains": [
+        "thoracic_mobility",
+        "hip_mobility",
+        "ankle_mobility"
+      ],
+      "secondary_domains": [
+        "core_stability"
+      ],
+      "rules": [
+        "core_stability >= 80",
+        "two or more mobility domains < 75"
+      ],
+      "clinical_priority_en": "Reduce rigidity and restore mobility without overloading stability exercises.",
+      "clinical_priority_fr": "Réduire la rigidité et restaurer la mobilité sans surcharger les exercices de stabilité.",
+      "typical_consequences_en": [
+        "rigid strategy",
+        "restricted squat/overhead mechanics"
+      ],
+      "typical_consequences_fr": [
+        "stratégie rigide",
+        "mécanique squat/overhead limitée"
+      ],
+      "recommended_pathway": [
+        "mobility_restore",
+        "breathing",
+        "active_range"
+      ],
+      "exercise_bias": [
+        "TM",
+        "HM",
+        "AM",
+        "RB"
+      ]
+    },
+    {
+      "pattern_id": "P10",
+      "name_en": "Balanced Mover",
+      "name_fr": "Profil équilibré",
+      "primary_domains": [],
+      "secondary_domains": [],
+      "rules": [
+        "all domains >= 80",
+        "no significant asymmetry",
+        "pain <= 3"
+      ],
+      "clinical_priority_en": "Maintain mobility and progress toward performance-oriented movement.",
+      "clinical_priority_fr": "Maintenir la mobilité et progresser vers un mouvement orienté performance.",
+      "typical_consequences_en": [
+        "low restriction profile"
+      ],
+      "typical_consequences_fr": [
+        "profil peu limité"
+      ],
+      "recommended_pathway": [
+        "maintenance",
+        "performance_integration"
+      ],
+      "exercise_bias": [
+        "FI",
+        "BP",
+        "CS"
+      ]
+    },
+    {
+      "pattern_id": "P11",
+      "name_en": "Squat Mechanics Limitation",
+      "name_fr": "Limitation mécanique du squat",
+      "primary_domains": [
+        "ankle_mobility",
+        "hip_mobility",
+        "core_stability"
+      ],
+      "secondary_domains": [
+        "functional_integration"
+      ],
+      "rules": [
+        "squat depth limited OR trunk lean red/yellow",
+        "ankle_mobility < 80 OR hip_mobility < 80"
+      ],
+      "clinical_priority_en": "Restore ankle/hip mobility and trunk control before increasing squat loading.",
+      "clinical_priority_fr": "Restaurer la mobilité cheville/hanche et le contrôle du tronc avant de charger le squat.",
+      "typical_consequences_en": [
+        "heel lift",
+        "forward trunk lean",
+        "knee tracking compensation"
+      ],
+      "typical_consequences_fr": [
+        "talon qui se lève",
+        "inclinaison du tronc",
+        "compensation du genou"
+      ],
+      "recommended_pathway": [
+        "ankle_restore",
+        "hip_restore",
+        "core_control",
+        "squat_pattern"
+      ],
+      "exercise_bias": [
+        "AM",
+        "HM",
+        "CS",
+        "FI"
+      ]
+    },
+    {
+      "pattern_id": "P12",
+      "name_en": "Pain-Limited Corrective Readiness",
+      "name_fr": "Readiness corrective limitée par la douleur",
+      "primary_domains": [
+        "recovery_breathing"
+      ],
+      "secondary_domains": [
+        "motor_control"
+      ],
+      "rules": [
+        "pain_score >= 4 OR red_flags present"
+      ],
+      "clinical_priority_en": "Prioritize symptom-safe recovery and recommend medical advice when needed.",
+      "clinical_priority_fr": "Prioriser la récupération sans provocation des symptômes et recommander un avis médical si nécessaire.",
+      "typical_consequences_en": [
+        "reduced readiness",
+        "exercise selection must be conservative"
+      ],
+      "typical_consequences_fr": [
+        "readiness réduite",
+        "sélection d’exercices conservatrice"
+      ],
+      "recommended_pathway": [
+        "recovery_only",
+        "pain_free_rom",
+        "medical_advice_if_needed"
+      ],
+      "exercise_bias": [
+        "RB",
+        "CC",
+        "CS"
+      ]
+    },
+    {
+      "pattern_id": "P13",
+      "name_en": "Cervical Dominant Compensation",
+      "name_fr": "Compensation cervicale dominante",
+      "primary_domains": [
+        "cervical_control"
+      ],
+      "secondary_domains": [
+        "thoracic_mobility"
+      ],
+      "rules": [
+        "pattern-specific rule to be refined with validation data"
+      ],
+      "clinical_priority_en": "Restore thoracic support and deep neck control.",
+      "clinical_priority_fr": "Restaurer le support thoracique et le contrôle cervical profond.",
+      "typical_consequences_en": [
+        "movement compensation risk",
+        "reduced movement efficiency"
+      ],
+      "typical_consequences_fr": [
+        "risque de compensation",
+        "efficacité du mouvement réduite"
+      ],
+      "recommended_pathway": [
+        "restore",
+        "control",
+        "stabilize",
+        "integrate"
+      ],
+      "exercise_bias": [
+        "CC",
+        "TM",
+        "RB"
+      ]
+    },
+    {
+      "pattern_id": "P14",
+      "name_en": "Scapular Control Limitation",
+      "name_fr": "Limitation du contrôle scapulaire",
+      "primary_domains": [
+        "shoulder_mobility"
+      ],
+      "secondary_domains": [
+        "core_stability"
+      ],
+      "rules": [
+        "pattern-specific rule to be refined with validation data"
+      ],
+      "clinical_priority_en": "Improve scapular control before loaded shoulder work.",
+      "clinical_priority_fr": "Améliorer le contrôle scapulaire avant le travail chargé de l’épaule.",
+      "typical_consequences_en": [
+        "movement compensation risk",
+        "reduced movement efficiency"
+      ],
+      "typical_consequences_fr": [
+        "risque de compensation",
+        "efficacité du mouvement réduite"
+      ],
+      "recommended_pathway": [
+        "restore",
+        "control",
+        "stabilize",
+        "integrate"
+      ],
+      "exercise_bias": [
+        "SH",
+        "CS",
+        "TM"
+      ]
+    },
+    {
+      "pattern_id": "P15",
+      "name_en": "Posterior Chain Restriction",
+      "name_fr": "Restriction de la chaîne postérieure",
+      "primary_domains": [
+        "hamstring_mobility"
+      ],
+      "secondary_domains": [
+        "hip_mobility"
+      ],
+      "rules": [
+        "pattern-specific rule to be refined with validation data"
+      ],
+      "clinical_priority_en": "Restore posterior chain mobility and active hip control.",
+      "clinical_priority_fr": "Restaurer la mobilité de la chaîne postérieure et le contrôle actif de hanche.",
+      "typical_consequences_en": [
+        "movement compensation risk",
+        "reduced movement efficiency"
+      ],
+      "typical_consequences_fr": [
+        "risque de compensation",
+        "efficacité du mouvement réduite"
+      ],
+      "recommended_pathway": [
+        "restore",
+        "control",
+        "stabilize",
+        "integrate"
+      ],
+      "exercise_bias": [
+        "HS",
+        "HM",
+        "CS"
+      ]
+    },
+    {
+      "pattern_id": "P16",
+      "name_en": "Ankle Dorsiflexion Restriction",
+      "name_fr": "Restriction de dorsiflexion de cheville",
+      "primary_domains": [
+        "ankle_mobility"
+      ],
+      "secondary_domains": [
+        "functional_integration"
+      ],
+      "rules": [
+        "pattern-specific rule to be refined with validation data"
+      ],
+      "clinical_priority_en": "Restore dorsiflexion before squat/lunge progression.",
+      "clinical_priority_fr": "Restaurer la dorsiflexion avant la progression squat/fente.",
+      "typical_consequences_en": [
+        "movement compensation risk",
+        "reduced movement efficiency"
+      ],
+      "typical_consequences_fr": [
+        "risque de compensation",
+        "efficacité du mouvement réduite"
+      ],
+      "recommended_pathway": [
+        "restore",
+        "control",
+        "stabilize",
+        "integrate"
+      ],
+      "exercise_bias": [
+        "AM",
+        "FI",
+        "BP"
+      ]
+    },
+    {
+      "pattern_id": "P17",
+      "name_en": "Functional Integration Deficit",
+      "name_fr": "Déficit d’intégration fonctionnelle",
+      "primary_domains": [
+        "functional_integration"
+      ],
+      "secondary_domains": [
+        "core_stability"
+      ],
+      "rules": [
+        "pattern-specific rule to be refined with validation data"
+      ],
+      "clinical_priority_en": "Transfer mobility and control gains into functional movement.",
+      "clinical_priority_fr": "Transférer les gains de mobilité et de contrôle vers le mouvement fonctionnel.",
+      "typical_consequences_en": [
+        "movement compensation risk",
+        "reduced movement efficiency"
+      ],
+      "typical_consequences_fr": [
+        "risque de compensation",
+        "efficacité du mouvement réduite"
+      ],
+      "recommended_pathway": [
+        "restore",
+        "control",
+        "stabilize",
+        "integrate"
+      ],
+      "exercise_bias": [
+        "FI",
+        "CS",
+        "BP"
+      ]
+    },
+    {
+      "pattern_id": "P18",
+      "name_en": "Balance Control Limitation",
+      "name_fr": "Limitation d’équilibre et contrôle",
+      "primary_domains": [
+        "balance_proprioception"
+      ],
+      "secondary_domains": [
+        "ankle_mobility"
+      ],
+      "rules": [
+        "pattern-specific rule to be refined with validation data"
+      ],
+      "clinical_priority_en": "Improve foot-ankle proprioception and single-leg control.",
+      "clinical_priority_fr": "Améliorer la proprioception pied-cheville et le contrôle unipodal.",
+      "typical_consequences_en": [
+        "movement compensation risk",
+        "reduced movement efficiency"
+      ],
+      "typical_consequences_fr": [
+        "risque de compensation",
+        "efficacité du mouvement réduite"
+      ],
+      "recommended_pathway": [
+        "restore",
+        "control",
+        "stabilize",
+        "integrate"
+      ],
+      "exercise_bias": [
+        "BP",
+        "AM",
+        "FI"
+      ]
+    },
+    {
+      "pattern_id": "P19",
+      "name_en": "Respiratory Control Limitation",
+      "name_fr": "Limitation du contrôle respiratoire",
+      "primary_domains": [
+        "recovery_breathing"
+      ],
+      "secondary_domains": [
+        "core_stability"
+      ],
+      "rules": [
+        "pattern-specific rule to be refined with validation data"
+      ],
+      "clinical_priority_en": "Use breathing to reduce tone and improve trunk/rib mechanics.",
+      "clinical_priority_fr": "Utiliser la respiration pour réduire le tonus et améliorer la mécanique tronc/côtes.",
+      "typical_consequences_en": [
+        "movement compensation risk",
+        "reduced movement efficiency"
+      ],
+      "typical_consequences_fr": [
+        "risque de compensation",
+        "efficacité du mouvement réduite"
+      ],
+      "recommended_pathway": [
+        "restore",
+        "control",
+        "stabilize",
+        "integrate"
+      ],
+      "exercise_bias": [
+        "RB",
+        "CS",
+        "TM"
+      ]
+    },
+    {
+      "pattern_id": "P20",
+      "name_en": "Overhead Athlete Asymmetry",
+      "name_fr": "Asymétrie sportif overhead",
+      "primary_domains": [
+        "shoulder_mobility"
+      ],
+      "secondary_domains": [
+        "scapular_control"
+      ],
+      "rules": [
+        "pattern-specific rule to be refined with validation data"
+      ],
+      "clinical_priority_en": "Correct shoulder asymmetry and scapular control before high-speed overhead work.",
+      "clinical_priority_fr": "Corriger l’asymétrie d’épaule et le contrôle scapulaire avant le travail overhead rapide.",
+      "typical_consequences_en": [
+        "movement compensation risk",
+        "reduced movement efficiency"
+      ],
+      "typical_consequences_fr": [
+        "risque de compensation",
+        "efficacité du mouvement réduite"
+      ],
+      "recommended_pathway": [
+        "restore",
+        "control",
+        "stabilize",
+        "integrate"
+      ],
+      "exercise_bias": [
+        "SH",
+        "TM",
+        "CS"
+      ]
+    },
+    {
+      "pattern_id": "P21",
+      "name_en": "Runner Hip-Ankle Pattern",
+      "name_fr": "Profil coureur hanche-cheville",
+      "primary_domains": [
+        "hip_mobility",
+        "ankle_mobility"
+      ],
+      "secondary_domains": [
+        "balance_proprioception"
+      ],
+      "rules": [
+        "pattern-specific rule to be refined with validation data"
+      ],
+      "clinical_priority_en": "Restore hip/ankle mobility and single-leg control.",
+      "clinical_priority_fr": "Restaurer mobilité hanche/cheville et contrôle unipodal.",
+      "typical_consequences_en": [
+        "movement compensation risk",
+        "reduced movement efficiency"
+      ],
+      "typical_consequences_fr": [
+        "risque de compensation",
+        "efficacité du mouvement réduite"
+      ],
+      "recommended_pathway": [
+        "restore",
+        "control",
+        "stabilize",
+        "integrate"
+      ],
+      "exercise_bias": [
+        "HM",
+        "AM",
+        "BP",
+        "FI"
+      ]
+    },
+    {
+      "pattern_id": "P22",
+      "name_en": "Recovery-Low Readiness Pattern",
+      "name_fr": "Profil faible récupération/readiness",
+      "primary_domains": [
+        "recovery_breathing"
+      ],
+      "secondary_domains": [
+        "global"
+      ],
+      "rules": [
+        "pattern-specific rule to be refined with validation data"
+      ],
+      "clinical_priority_en": "Reduce intensity and emphasize recovery, breathing, and gentle mobility.",
+      "clinical_priority_fr": "Réduire l’intensité et prioriser récupération, respiration et mobilité douce.",
+      "typical_consequences_en": [
+        "movement compensation risk",
+        "reduced movement efficiency"
+      ],
+      "typical_consequences_fr": [
+        "risque de compensation",
+        "efficacité du mouvement réduite"
+      ],
+      "recommended_pathway": [
+        "restore",
+        "control",
+        "stabilize",
+        "integrate"
+      ],
+      "exercise_bias": [
+        "RB",
+        "TM",
+        "HM"
+      ]
+    },
+    {
+      "pattern_id": "P23",
+      "name_en": "High Mobility Performance Pattern",
+      "name_fr": "Profil haute mobilité performance",
+      "primary_domains": [
+        "functional_integration"
+      ],
+      "secondary_domains": [
+        "core_stability"
+      ],
+      "rules": [
+        "pattern-specific rule to be refined with validation data"
+      ],
+      "clinical_priority_en": "Maintain mobility while increasing strength and stability.",
+      "clinical_priority_fr": "Maintenir la mobilité tout en augmentant force et stabilité.",
+      "typical_consequences_en": [
+        "movement compensation risk",
+        "reduced movement efficiency"
+      ],
+      "typical_consequences_fr": [
+        "risque de compensation",
+        "efficacité du mouvement réduite"
+      ],
+      "recommended_pathway": [
+        "restore",
+        "control",
+        "stabilize",
+        "integrate"
+      ],
+      "exercise_bias": [
+        "CS",
+        "FI",
+        "BP"
+      ]
+    },
+    {
+      "pattern_id": "P24",
+      "name_en": "Sedentary Global Control Pattern",
+      "name_fr": "Profil sédentaire contrôle global",
+      "primary_domains": [
+        "core_stability",
+        "thoracic_mobility"
+      ],
+      "secondary_domains": [
+        "hip_mobility"
+      ],
+      "rules": [
+        "pattern-specific rule to be refined with validation data"
+      ],
+      "clinical_priority_en": "Use low-complexity global control and daily mobility exposure.",
+      "clinical_priority_fr": "Utiliser un contrôle global simple et une exposition quotidienne à la mobilité.",
+      "typical_consequences_en": [
+        "movement compensation risk",
+        "reduced movement efficiency"
+      ],
+      "typical_consequences_fr": [
+        "risque de compensation",
+        "efficacité du mouvement réduite"
+      ],
+      "recommended_pathway": [
+        "restore",
+        "control",
+        "stabilize",
+        "integrate"
+      ],
+      "exercise_bias": [
+        "RB",
+        "TM",
+        "CS",
+        "HM"
+      ]
+    },
+    {
+      "pattern_id": "P25",
+      "name_en": "Maintenance / Prevention Pattern",
+      "name_fr": "Profil maintenance / prévention",
+      "primary_domains": [
+        "maintenance"
+      ],
+      "secondary_domains": [
+        "performance"
+      ],
+      "rules": [
+        "pattern-specific rule to be refined with validation data"
+      ],
+      "clinical_priority_en": "Maintain movement quality and prevent regression.",
+      "clinical_priority_fr": "Maintenir la qualité de mouvement et prévenir la régression.",
+      "typical_consequences_en": [
+        "movement compensation risk",
+        "reduced movement efficiency"
+      ],
+      "typical_consequences_fr": [
+        "risque de compensation",
+        "efficacité du mouvement réduite"
+      ],
+      "recommended_pathway": [
+        "restore",
+        "control",
+        "stabilize",
+        "integrate"
+      ],
+      "exercise_bias": [
+        "FI",
+        "BP",
+        "CS",
+        "RB"
+      ]
+    }
+  ]
+}
