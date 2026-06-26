@@ -1,0 +1,246 @@
+{
+  "engine_version": "FlexiLab Clinical Prescription Engine v1.0",
+  "library_version_required": "FlexiLab Exercise Library v1.0",
+  "principles": {
+    "pain_is_gatekeeper": "Pain does not directly reduce movement score; it creates clinical readiness and modifies the program.",
+    "priority_weighting": "Exercise volume is driven by the lowest movement domains, not equal distribution.",
+    "cumulative_progression": "High-value corrective drills are maintained until the related domain reaches >=80 twice or reassessment confirms improvement.",
+    "replacement_model": "Do not let programs grow indefinitely; keep 5-8 exercises/session by replacing low-value drills when progression is appropriate.",
+    "symmetry_rule": "When side-to-side asymmetry is >10%, add extra volume or hold time to the restricted side."
+  },
+  "domain_map": {
+    "cervical_control": {
+      "category_codes": [
+        "CC",
+        "RB"
+      ],
+      "label_en": "Cervical Control",
+      "label_fr": "Contrôle cervical"
+    },
+    "thoracic_mobility": {
+      "category_codes": [
+        "TM",
+        "RB"
+      ],
+      "label_en": "Thoracic Mobility",
+      "label_fr": "Mobilité thoracique"
+    },
+    "shoulder_mobility": {
+      "category_codes": [
+        "SH",
+        "TM"
+      ],
+      "label_en": "Shoulder Mobility",
+      "label_fr": "Mobilité des épaules"
+    },
+    "core_stability": {
+      "category_codes": [
+        "CS",
+        "RB"
+      ],
+      "label_en": "Core Stability",
+      "label_fr": "Stabilité du tronc"
+    },
+    "hip_mobility": {
+      "category_codes": [
+        "HM",
+        "HS"
+      ],
+      "label_en": "Hip Mobility",
+      "label_fr": "Mobilité de hanche"
+    },
+    "hamstring_mobility": {
+      "category_codes": [
+        "HS",
+        "HM"
+      ],
+      "label_en": "Hamstring Mobility",
+      "label_fr": "Mobilité ischio-jambiers"
+    },
+    "ankle_mobility": {
+      "category_codes": [
+        "AM",
+        "BP"
+      ],
+      "label_en": "Ankle Mobility",
+      "label_fr": "Mobilité de cheville"
+    },
+    "functional_integration": {
+      "category_codes": [
+        "FI",
+        "CS",
+        "BP"
+      ],
+      "label_en": "Functional Integration",
+      "label_fr": "Intégration fonctionnelle"
+    },
+    "balance_proprioception": {
+      "category_codes": [
+        "BP",
+        "FI"
+      ],
+      "label_en": "Balance & Proprioception",
+      "label_fr": "Équilibre & proprioception"
+    },
+    "recovery_breathing": {
+      "category_codes": [
+        "RB"
+      ],
+      "label_en": "Recovery & Breathing",
+      "label_fr": "Récupération & respiration"
+    }
+  },
+  "score_bands": {
+    "red": {
+      "max": 59,
+      "label_en": "Limited",
+      "label_fr": "Limité"
+    },
+    "orange": {
+      "min": 60,
+      "max": 69,
+      "label_en": "Needs improvement",
+      "label_fr": "À améliorer"
+    },
+    "yellow": {
+      "min": 70,
+      "max": 79,
+      "label_en": "Fair",
+      "label_fr": "Correct"
+    },
+    "green": {
+      "min": 80,
+      "label_en": "Good",
+      "label_fr": "Bon"
+    }
+  },
+  "pain_readiness": {
+    "none": {
+      "min": 0,
+      "max": 0,
+      "readiness": "normal",
+      "program_mode": "corrective"
+    },
+    "mild": {
+      "min": 1,
+      "max": 3,
+      "readiness": "caution",
+      "program_mode": "pain_free_corrective"
+    },
+    "moderate": {
+      "min": 4,
+      "max": 6,
+      "readiness": "limited",
+      "program_mode": "recovery_control",
+      "recommend_medical_advice": true
+    },
+    "severe": {
+      "min": 7,
+      "max": 10,
+      "readiness": "medical_clearance_recommended",
+      "program_mode": "recovery_only",
+      "recommend_medical_advice": true
+    }
+  },
+  "weekly_progression": [
+    {
+      "week": 1,
+      "phase": "Restore",
+      "phase_fr": "Restaurer",
+      "difficulty_max": 2,
+      "objectives": [
+        "recovery",
+        "mobility",
+        "motor_control"
+      ],
+      "session_target_exercises": [
+        5,
+        6
+      ]
+    },
+    {
+      "week": 2,
+      "phase": "Control",
+      "phase_fr": "Contrôler",
+      "difficulty_max": 3,
+      "objectives": [
+        "mobility",
+        "motor_control",
+        "activation"
+      ],
+      "session_target_exercises": [
+        6,
+        7
+      ]
+    },
+    {
+      "week": 3,
+      "phase": "Stabilize",
+      "phase_fr": "Stabiliser",
+      "difficulty_max": 4,
+      "objectives": [
+        "mobility",
+        "stability",
+        "activation",
+        "integration"
+      ],
+      "session_target_exercises": [
+        6,
+        8
+      ]
+    },
+    {
+      "week": 4,
+      "phase": "Integrate",
+      "phase_fr": "Intégrer",
+      "difficulty_max": 5,
+      "objectives": [
+        "stability",
+        "integration",
+        "functional_strength"
+      ],
+      "session_target_exercises": [
+        6,
+        8
+      ]
+    }
+  ],
+  "session_structure": {
+    "day_1": {
+      "focus_en": "Mobility / Restore",
+      "focus_fr": "Mobilité / restauration",
+      "bias": [
+        "mobility",
+        "recovery"
+      ]
+    },
+    "day_2": {
+      "focus_en": "Control / Stability",
+      "focus_fr": "Contrôle / stabilité",
+      "bias": [
+        "motor_control",
+        "stability",
+        "activation"
+      ]
+    },
+    "day_3": {
+      "focus_en": "Integration / Movement Pattern",
+      "focus_fr": "Intégration / schéma moteur",
+      "bias": [
+        "integration",
+        "functional_strength",
+        "stability"
+      ]
+    }
+  },
+  "selection_rules": {
+    "priority_1_volume_multiplier": 1.5,
+    "priority_2_volume_multiplier": 1.2,
+    "priority_3_volume_multiplier": 1.0,
+    "minimum_recovery_exercises_per_session": 1,
+    "maximum_same_category_per_session": 3,
+    "keep_foundational_mobility_until_domain_score": 80,
+    "minimum_session_duration_min": 15,
+    "maximum_session_duration_min": 30
+  }
+}
