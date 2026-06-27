@@ -7,15 +7,30 @@ import os
 import json
 import base64
 from datetime import datetime, timezone
-from program_engine import generate_program_from_report
+# FlexiLab V2 backend architecture imports.
+# Old engines remain in the repository for rollback, but /program now uses:
+# score_engine_v2 -> Movement DNA / CKB -> Clinical Prescription Engine.
 try:
-    from engines.prescription_engine import generate_prescription
-except ModuleNotFoundError:
-    from prescription_engine import generate_prescription
-try:
-    from score_engine_v2 import attach_score_v2
+    from engines.score_engine_v2 import attach_score_v2
 except Exception:
     attach_score_v2 = None
+
+try:
+    from engines.flexilab_ckb_engine_v1 import generate_movement_dna, load_json as load_ckb_json
+except Exception:
+    generate_movement_dna = None
+    load_ckb_json = None
+
+try:
+    from engines.clinical_prescription_engine_v1 import (
+        generate_clinical_prescription,
+        load_exercise_library,
+        load_json as load_prescription_json,
+    )
+except Exception:
+    generate_clinical_prescription = None
+    load_exercise_library = None
+    load_prescription_json = None
 
 os.environ["YOLO_CONFIG_DIR"] = "/tmp/Ultralytics"
 
@@ -30,18 +45,59 @@ if SUPABASE_URL and SUPABASE_SERVICE_KEY:
     supabase = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 
 
-def prescription_library_path():
-    """Return the first valid location for the prescription exercise library."""
-    candidates = [
-        "data/exercise_knowledge_base_v1.json",
-        "exercise_knowledge_base_v1.json",
-        "./data/exercise_knowledge_base_v1.json",
-        "./exercise_knowledge_base_v1.json",
-    ]
-    for p in candidates:
-        if os.path.exists(p):
-            return p
-    return "data/exercise_knowledge_base_v1.json"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_DIR = os.path.join(BASE_DIR, "data")
+
+MOVEMENT_PATTERNS_PATH = os.path.join(DATA_DIR, "movement_patterns_v1.json")
+PRESCRIPTION_RULES_PATH = os.path.join(DATA_DIR, "prescription_rules_v1.json")
+EXERCISE_LIBRARY_PATH = os.path.join(DATA_DIR, "flexilab_exercise_library_v1.json")
+
+MOVEMENT_PATTERNS = None
+PRESCRIPTION_RULES = None
+EXERCISE_LIBRARY = None
+RESOURCE_LOAD_ERRORS = {}
+
+
+def load_clinical_resources():
+    """
+    Load FlexiLab V2 clinical resources once at startup.
+
+    The server must stay alive even if one resource is temporarily missing,
+    so errors are stored in RESOURCE_LOAD_ERRORS and returned inside /program.
+    """
+    global MOVEMENT_PATTERNS, PRESCRIPTION_RULES, EXERCISE_LIBRARY, RESOURCE_LOAD_ERRORS
+
+    RESOURCE_LOAD_ERRORS = {}
+
+    if load_ckb_json:
+        try:
+            MOVEMENT_PATTERNS = load_ckb_json(MOVEMENT_PATTERNS_PATH)
+        except Exception as e:
+            MOVEMENT_PATTERNS = None
+            RESOURCE_LOAD_ERRORS["movement_patterns"] = str(e)
+    else:
+        RESOURCE_LOAD_ERRORS["movement_patterns"] = "flexilab_ckb_engine_v1 import failed"
+
+    if load_prescription_json:
+        try:
+            PRESCRIPTION_RULES = load_prescription_json(PRESCRIPTION_RULES_PATH)
+        except Exception as e:
+            PRESCRIPTION_RULES = None
+            RESOURCE_LOAD_ERRORS["prescription_rules"] = str(e)
+    else:
+        RESOURCE_LOAD_ERRORS["prescription_rules"] = "clinical_prescription_engine_v1 import failed"
+
+    if load_exercise_library:
+        try:
+            EXERCISE_LIBRARY = load_exercise_library(EXERCISE_LIBRARY_PATH)
+        except Exception as e:
+            EXERCISE_LIBRARY = None
+            RESOURCE_LOAD_ERRORS["exercise_library"] = str(e)
+    else:
+        RESOURCE_LOAD_ERRORS["exercise_library"] = "load_exercise_library import failed"
+
+
+load_clinical_resources()
 
 app = FastAPI()
 app.add_middleware(
@@ -1625,18 +1681,153 @@ def get_session_user_email(session_id: str, report_data: dict | None = None):
 
     return "anonymous"
 
+
+def extract_pain_score_from_report(report_data: dict) -> float:
+    """
+    Best-effort pain extraction from intake_context.
+    Pain changes clinical readiness, not movement score.
+    """
+    try:
+        intake = report_data.get("intake_context") or {}
+        if not isinstance(intake, dict):
+            return 0.0
+        for key in ["pain_score", "pain_level", "pain", "painIntensity"]:
+            if key in intake and intake.get(key) is not None:
+                return float(intake.get(key) or 0)
+    except Exception:
+        pass
+    return 0.0
+
+
+def extract_symmetry_status_from_report(report_data: dict) -> tuple[float, bool]:
+    """
+    Estimate symmetry index from shoulder and ASLR asymmetry objects when present.
+    Returns (symmetry_index, asymmetry_significant).
+    """
+    asym_diffs = []
+    try:
+        for section in report_data.get("sections", []) or []:
+            asym = section.get("asymmetry")
+            if isinstance(asym, dict) and asym.get("value_deg") is not None:
+                asym_diffs.append(float(asym.get("value_deg") or 0))
+    except Exception:
+        pass
+
+    if not asym_diffs:
+        return 100.0, False
+
+    max_diff = max(asym_diffs)
+    # Simple readable index for now. Can be replaced by a validated formula later.
+    symmetry_index = max(0.0, min(100.0, 100.0 - max_diff * 2.0))
+    return round(symmetry_index, 1), bool(max_diff >= 10.0)
+
+
+def attach_movement_dna_to_report(report_data: dict, lang: str = "fr") -> dict:
+    """
+    Attach Movement DNA and clinical pattern recognition to the report.
+    Non-blocking: if CKB fails, the report still works.
+    """
+    if not isinstance(report_data, dict):
+        return report_data
+
+    pain_score = extract_pain_score_from_report(report_data)
+    symmetry_index, asymmetry_significant = extract_symmetry_status_from_report(report_data)
+
+    if generate_movement_dna and MOVEMENT_PATTERNS:
+        try:
+            movement_dna = generate_movement_dna(
+                {"report": report_data},
+                MOVEMENT_PATTERNS,
+                language=lang,
+                pain_score=pain_score,
+                symmetry_index=symmetry_index,
+                asymmetry_significant=asymmetry_significant,
+            )
+            report_data["movement_dna"] = movement_dna
+            report_data["clinical_patterns"] = movement_dna.get("matched_patterns", [])
+            report_data["clinical_priority"] = movement_dna.get("clinical_priority")
+        except Exception as e:
+            report_data["movement_dna_error"] = str(e)
+    else:
+        report_data["movement_dna_error"] = "CKB engine or movement_patterns not loaded"
+
+    return report_data
+
+
+def normalize_clinical_program_for_frontend(program_data: dict, report_data: dict, lang: str = "fr") -> dict:
+    """
+    Add a few legacy-compatible fields so the current frontend can read the new engine output.
+    """
+    if not isinstance(program_data, dict):
+        return {
+            "engine_version": "FlexiLab Clinical Prescription Engine unavailable",
+            "weeks": [],
+            "error": "program_data_not_dict",
+        }
+
+    priorities = program_data.get("main_priorities", []) or []
+    movement_dna = report_data.get("movement_dna", {}) if isinstance(report_data, dict) else {}
+
+    headline_fr = "Programme correctif basé sur le Movement DNA."
+    headline_en = "Corrective program based on Movement DNA."
+    if movement_dna.get("primary_profile"):
+        headline_fr = f"Profil principal : {movement_dna.get('primary_profile')}."
+        headline_en = f"Primary profile: {movement_dna.get('primary_profile')}."
+
+    program_data.setdefault("report_ready_summary", {
+        "headline": headline_en if lang == "en" else headline_fr,
+        "total_sessions": sum(len(w.get("sessions", [])) for w in program_data.get("weeks", []) or []),
+        "average_session_duration_minutes": 20,
+        "next_action": "Follow the 4-week corrective plan, then repeat the same screening." if lang == "en" else "Suivre le plan correctif 4 semaines, puis refaire le même screening.",
+        "top_systems": [
+            {
+                "system": p.get("id"),
+                "label": p.get("label_en") if lang == "en" else p.get("label"),
+                "priority_score": round(100 - float(p.get("score", 100)), 1)
+            }
+            for p in priorities[:3]
+        ]
+    })
+
+    program_data.setdefault("root_cause_analysis", [
+        {
+            "fault": p.get("id"),
+            "label": p.get("label_en") if lang == "en" else p.get("label"),
+            "priority_score": round(100 - float(p.get("score", 100)), 1),
+            "contributors": [],
+            "evidence": [f"{p.get('id')} domain score: {p.get('score')}"]
+        }
+        for p in priorities[:3]
+    ])
+
+    program_data.setdefault("top_priority_systems", [
+        {
+            "system": p.get("id"),
+            "system_label": p.get("label_en") if lang == "en" else p.get("label"),
+            "priority_score": round(100 - float(p.get("score", 100)), 1),
+            "pain_status": program_data.get("clinical_readiness", {}).get("label"),
+            "pain_limited": program_data.get("clinical_readiness", {}).get("readiness") in ["limited", "medical_clearance_recommended"]
+        }
+        for p in priorities[:5]
+    ])
+
+    return program_data
+
+
 @app.get("/program")
 def program(session_id: str, lang: str = "fr"):
     """
-    Generate a FlexiLab corrective program from an existing screening session.
+    FlexiLab V2 clinical program endpoint.
 
-    V15.5:
-    - Keeps the previous Program Engine output.
-    - Adds the new Prescription Engine output.
-    - Frontend should use:
-        response["program"] for dashboard/root-cause summary
-        response["prescription"] for the detailed 4-week corrective PDF
+    Flow:
+    1) Build report from existing session.
+    2) Attach Score V2.
+    3) Attach Movement DNA + clinical pattern recognition.
+    4) Generate the 4-week clinical prescription program.
+    5) Return legacy-compatible keys: report, program, prescription.
     """
+    lang = "en" if str(lang).lower().startswith("en") else "fr"
+
     try:
         report_data = report(session_id=session_id, lang=lang)
     except Exception as e:
@@ -1658,42 +1849,59 @@ def program(session_id: str, lang: str = "fr"):
             "fallback_reason": report_data.get("error")
         }
 
-    # FlexiLab Score 2.0: movement-quality score with 6 weighted domains.
+    # Score V2: movement-quality score with weighted domains.
     try:
         if attach_score_v2:
             report_data = attach_score_v2(report_data, lang=lang)
+        else:
+            report_data["score_v2_error"] = "attach_score_v2 not loaded"
     except Exception as e:
         report_data["score_v2_error"] = str(e)
 
-    try:
-        program_data = generate_program_from_report(report=report_data, lang=lang)
-        if not isinstance(program_data, dict) or not program_data.get("weeks"):
-            raise RuntimeError("program_engine returned no weeks")
-    except Exception as e:
-        program_data = generate_flexilab_fallback_program(lang=lang, reason=str(e))
+    # Movement DNA + clinical pattern recognition.
+    report_data = attach_movement_dna_to_report(report_data, lang=lang)
 
+    # Clinical Prescription Engine V1.
     try:
-        prescription_data = generate_prescription(
-            findings=program_data.get("root_cause_analysis", []),
-            pain_clearance=None,
-            library_path=prescription_library_path(),
-            client_name="",
-            score=report_data.get("flexilab_score")
+        if not generate_clinical_prescription:
+            raise RuntimeError("generate_clinical_prescription not loaded")
+        if not EXERCISE_LIBRARY:
+            raise RuntimeError("exercise library not loaded")
+        if not PRESCRIPTION_RULES:
+            raise RuntimeError("prescription rules not loaded")
+
+        clinical_program = generate_clinical_prescription(
+            {"report": report_data, "intake_context": report_data.get("intake_context")},
+            exercise_library=EXERCISE_LIBRARY,
+            rules=PRESCRIPTION_RULES,
+            language=lang,
         )
+        clinical_program = normalize_clinical_program_for_frontend(clinical_program, report_data, lang=lang)
+
     except Exception as e:
-        # Keep endpoint alive even if the new engine has a temporary issue.
-        prescription_data = {
-            "engine_version": "FlexiLab Prescription Engine unavailable",
+        clinical_program = {
+            "engine_version": "FlexiLab Clinical Prescription Engine unavailable",
             "error": str(e),
-            "weeks": []
+            "resource_load_errors": RESOURCE_LOAD_ERRORS,
+            "weeks": [],
+            "report_ready_summary": {
+                "headline": "Clinical prescription engine unavailable." if lang == "en" else "Moteur de prescription clinique indisponible.",
+                "total_sessions": 0,
+                "average_session_duration_minutes": 0,
+                "next_action": "Check server logs and resource paths." if lang == "en" else "Vérifier les logs serveur et les chemins des fichiers."
+            }
         }
 
     result_payload = {
         "session_id": session_id,
         "language": lang,
         "report": report_data,
-        "program": program_data,
-        "prescription": prescription_data
+        "movement_dna": report_data.get("movement_dna"),
+        "clinical_patterns": report_data.get("clinical_patterns", []),
+        "program": clinical_program,
+        # Legacy alias: current frontend may still read response["prescription"].
+        "prescription": clinical_program,
+        "resource_load_errors": RESOURCE_LOAD_ERRORS
     }
 
     user_email = get_session_user_email(session_id, report_data)
@@ -1758,5 +1966,4 @@ def latest_history(user_email: str):
         return {"user_email": user_email, "latest": latest, "previous": previous, "score_delta": delta}
     except Exception as e:
         return {"user_email": user_email, "latest": None, "previous": None, "error": str(e)}
-
 
