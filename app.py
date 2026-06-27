@@ -1861,7 +1861,7 @@ def program(session_id: str, lang: str = "fr"):
     # Movement DNA + clinical pattern recognition.
     report_data = attach_movement_dna_to_report(report_data, lang=lang)
 
-    # Clinical Prescription Engine V2.1: balanced block-based program generation.
+    # Clinical Prescription Engine v2.1.1: balanced block-based program generation.
     try:
         if not generate_clinical_prescription_v21:
             raise RuntimeError("generate_clinical_prescription_v21 not loaded")
@@ -1902,7 +1902,12 @@ def program(session_id: str, lang: str = "fr"):
         "program": clinical_program,
         # Legacy alias: current frontend may still read response["prescription"].
         "prescription": clinical_program,
-        "resource_load_errors": RESOURCE_LOAD_ERRORS
+        "resource_load_errors": RESOURCE_LOAD_ERRORS,
+        "api_contract_note": {
+            "program_is_canonical": True,
+            "prescription_is_legacy_alias": True,
+            "clinical_engine_expected": "FlexiLab Clinical Prescription Engine v2.1.1"
+        }
     }
 
     user_email = get_session_user_email(session_id, report_data)
