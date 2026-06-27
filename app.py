@@ -9,7 +9,7 @@ import base64
 from datetime import datetime, timezone
 # FlexiLab V2 backend architecture imports.
 # Old engines remain in the repository for rollback, but /program now uses:
-# score_engine_v2 -> Movement DNA / CKB -> Clinical Prescription Engine.
+# score_engine_v2 -> Movement DNA / CKB -> Clinical Prescription Engine v2.
 try:
     from engines.score_engine_v2 import attach_score_v2
 except Exception:
@@ -22,13 +22,13 @@ except Exception:
     load_ckb_json = None
 
 try:
-    from engines.clinical_prescription_engine_v1 import (
-        generate_clinical_prescription,
+    from engines.clinical_prescription_engine_v2 import (
+        generate_clinical_prescription_v2,
         load_exercise_library,
         load_json as load_prescription_json,
     )
 except Exception:
-    generate_clinical_prescription = None
+    generate_clinical_prescription_v2 = None
     load_exercise_library = None
     load_prescription_json = None
 
@@ -85,7 +85,7 @@ def load_clinical_resources():
             PRESCRIPTION_RULES = None
             RESOURCE_LOAD_ERRORS["prescription_rules"] = str(e)
     else:
-        RESOURCE_LOAD_ERRORS["prescription_rules"] = "clinical_prescription_engine_v1 import failed"
+        RESOURCE_LOAD_ERRORS["prescription_rules"] = "clinical_prescription_engine_v2 import failed"
 
     if load_exercise_library:
         try:
@@ -1823,7 +1823,7 @@ def program(session_id: str, lang: str = "fr"):
     1) Build report from existing session.
     2) Attach Score V2.
     3) Attach Movement DNA + clinical pattern recognition.
-    4) Generate the 4-week clinical prescription program.
+    4) Generate the 4-week block-based clinical prescription program.
     5) Return legacy-compatible keys: report, program, prescription.
     """
     lang = "en" if str(lang).lower().startswith("en") else "fr"
@@ -1861,19 +1861,20 @@ def program(session_id: str, lang: str = "fr"):
     # Movement DNA + clinical pattern recognition.
     report_data = attach_movement_dna_to_report(report_data, lang=lang)
 
-    # Clinical Prescription Engine V1.
+    # Clinical Prescription Engine V2: block-based program generation.
     try:
-        if not generate_clinical_prescription:
-            raise RuntimeError("generate_clinical_prescription not loaded")
+        if not generate_clinical_prescription_v2:
+            raise RuntimeError("generate_clinical_prescription_v2 not loaded")
         if not EXERCISE_LIBRARY:
             raise RuntimeError("exercise library not loaded")
         if not PRESCRIPTION_RULES:
             raise RuntimeError("prescription rules not loaded")
 
-        clinical_program = generate_clinical_prescription(
+        clinical_program = generate_clinical_prescription_v2(
             {"report": report_data, "intake_context": report_data.get("intake_context")},
             exercise_library=EXERCISE_LIBRARY,
             rules=PRESCRIPTION_RULES,
+            movement_dna=report_data.get("movement_dna"),
             language=lang,
         )
         clinical_program = normalize_clinical_program_for_frontend(clinical_program, report_data, lang=lang)
@@ -1966,4 +1967,3 @@ def latest_history(user_email: str):
         return {"user_email": user_email, "latest": latest, "previous": previous, "score_delta": delta}
     except Exception as e:
         return {"user_email": user_email, "latest": None, "previous": None, "error": str(e)}
-
