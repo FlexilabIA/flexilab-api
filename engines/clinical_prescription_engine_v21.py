@@ -246,6 +246,236 @@ def loc(ex, slot, priorities, lang):
         "video_url":ex.get("video_url",""),"vimeo_url":ex.get("vimeo_url",""),"mp4_url":ex.get("mp4_url",""),"thumbnail_url":ex.get("thumbnail_url","")
     }
 
+
+ENGINE_VERSION = "FlexiLab Clinical Prescription Engine v2.1.1"
+
+def build_measured_alerts(screening_payload, lang="fr", limit=5):
+    report = screening_payload.get("report", screening_payload) or {}
+    alerts = []
+    severity_rank = {"red": 0, "orange": 1, "yellow": 2, "green": 3}
+
+    for section in report.get("sections", []) or []:
+        for item in section.get("items", []) or []:
+            rating = str(item.get("rating", "")).lower()
+            if rating not in ["red", "orange", "yellow"]:
+                continue
+            alerts.append({
+                "id": item.get("id"),
+                "label": item.get("label") or item.get("label_fr") or item.get("label_en"),
+                "label_fr": item.get("label_fr"),
+                "label_en": item.get("label_en"),
+                "value": item.get("value"),
+                "unit": item.get("unit"),
+                "severity": rating,
+                "rating_label": item.get("rating_label"),
+                "interpretation": item.get("short_insight") or item.get("short_insight_fr") or item.get("short_insight_en"),
+                "thresholds": item.get("thresholds"),
+            })
+
+    alerts.sort(key=lambda x: severity_rank.get(x.get("severity"), 99))
+    return alerts[:limit]
+
+
+def recompute_clinical_balance(session):
+    exercises = session.get("exercises", []) or []
+    return {
+        "categories": sorted(list({e.get("category_code") for e in exercises if e.get("category_code")})),
+        "exercise_count": len(exercises),
+    }
+
+
+def _candidate_cc_for_week(exercise_library, week, readiness_payload):
+    max_diff = WEEK_META.get(week, WEEK_META[1])[2]
+    candidates = [
+        e for e in exercise_library
+        if cat(e) == "CC"
+        and pain_ok(e, readiness_payload)
+        and diff(e) <= max_diff
+    ]
+    candidates.sort(key=lambda e: (diff(e), e.get("exercise_id", "")))
+    if not candidates:
+        return None
+    # Gradual exposure: earlier weeks use easiest options; later weeks can move further in the chain.
+    idx = min(max(week - 1, 0), len(candidates) - 1)
+    return candidates[idx]
+
+
+def _replace_with_cervical(session, cc_exercise, priorities, lang, week):
+    exercises = session.get("exercises", []) or []
+    if any(e.get("category_code") == "CC" for e in exercises):
+        return False
+
+    # Preserve primary thoracic and core exposure. Replace secondary/redundant SH/RB first.
+    candidate_indices = []
+
+    for idx, ex in enumerate(exercises):
+        c = ex.get("category_code")
+        b = ex.get("block")
+        if b == "reset":
+            continue
+        if c == "RB" and b == "recovery":
+            candidate_indices.append((0, idx))
+        elif c == "SH" and b in ["mobility_secondary", "activation", "stability"]:
+            candidate_indices.append((1, idx))
+        elif c == "FI" and week <= 2:
+            candidate_indices.append((2, idx))
+        elif c == "RB":
+            candidate_indices.append((3, idx))
+
+    if not candidate_indices:
+        return False
+
+    candidate_indices.sort(key=lambda x: x[0])
+    _, idx = candidate_indices[0]
+    old_block = exercises[idx].get("block", "activation")
+    new_block = old_block if old_block in ["activation", "stability"] else "activation"
+    exercises[idx] = loc(cc_exercise, new_block, priorities, lang)
+    session["exercises"] = exercises
+    session["clinical_balance"] = recompute_clinical_balance(session)
+    session["blocks"] = [e.get("block") for e in exercises]
+    session["estimated_duration_minutes"] = max(15, min(35, 5 + len(exercises) * 3))
+    return True
+
+
+def enforce_cervical_priority_protection(program, exercise_library, priorities, readiness_payload, lang="fr"):
+    priority_ids = [p.get("id") for p in priorities[:3]]
+    detected = "cervical_control" in priority_ids
+    if not detected:
+        return program
+
+    min_per_week = 2
+    total_added_or_present = 0
+    weeks_failed = []
+
+    for week in program.get("weeks", []) or []:
+        week_number = int(week.get("week", 1))
+        sessions = week.get("sessions", []) or []
+        current = sum(
+            1
+            for s in sessions
+            for e in s.get("exercises", []) or []
+            if e.get("category_code") == "CC"
+        )
+
+        while current < min_per_week:
+            cc_exercise = _candidate_cc_for_week(exercise_library, week_number, readiness_payload)
+            if not cc_exercise:
+                weeks_failed.append(week_number)
+                break
+
+            replaced = False
+            for session in sessions:
+                if current >= min_per_week:
+                    break
+                if _replace_with_cervical(session, cc_exercise, priorities, lang, week_number):
+                    current += 1
+                    replaced = True
+                    total_added_or_present += 1
+
+            if not replaced:
+                weeks_failed.append(week_number)
+                break
+
+        week["sessions"] = sessions
+
+    program.setdefault("validation_flags", {})
+    program["validation_flags"]["cervical_priority_protection"] = {
+        "detected": detected,
+        "min_exposures_per_week": min_per_week,
+        "weeks_failed": weeks_failed,
+        "passed": len(weeks_failed) == 0,
+        "note": "Direct CC exposure is required when cervical_control is a top-three clinical priority."
+    }
+    return program
+
+
+def personalize_exercise_rationale(exercise, clinical_priorities, movement_dna, measured_alerts, lang="fr"):
+    c = exercise.get("category_code")
+    priority_ids = [p.get("id") for p in clinical_priorities or []]
+    profile = (movement_dna or {}).get("primary_profile", "")
+
+    if lang == "fr":
+        if c == "TM":
+            return "Inclus car la mobilité thoracique fait partie des priorités cliniques. L’objectif est d’améliorer la mobilité du haut du dos pour réduire les compensations cervicales, scapulaires et le contrôle excessif du tronc."
+        if c == "CS":
+            return "Inclus car la stabilité du tronc fait partie des priorités cliniques. Il vise le contrôle lombo-pelvien et la capacité à stabiliser le tronc pendant les mouvements fonctionnels."
+        if c == "CC":
+            return "Inclus car le contrôle cervical est une priorité de votre profil. L’objectif est un travail léger de positionnement cervical, d’endurance posturale et de réduction des tensions inutiles."
+        if c == "SH":
+            return "Inclus pour soutenir la mobilité des épaules et la mécanique scapulaire, en complément du travail thoracique et cervical."
+        if c == "FI":
+            return "Inclus pour transférer les gains de mobilité et de contrôle vers un mouvement fonctionnel proche des gestes quotidiens."
+        if c == "RB":
+            return "Inclus pour améliorer la respiration, diminuer les tensions inutiles et préparer un meilleur contrôle postural."
+    else:
+        if c == "TM":
+            return "Included because thoracic mobility is one of the clinical priorities. The goal is to improve upper-back mobility and reduce cervical, scapular, and trunk compensations."
+        if c == "CS":
+            return "Included because core stability is one of the clinical priorities. It targets lumbopelvic control and trunk stability during functional movement."
+        if c == "CC":
+            return "Included because cervical control is a priority in this profile. The goal is low-load cervical positioning, postural endurance, and unnecessary tension reduction."
+        if c == "SH":
+            return "Included to support shoulder mobility and scapular mechanics alongside thoracic and cervical work."
+        if c == "FI":
+            return "Included to transfer mobility and control gains into functional movement."
+        if c == "RB":
+            return "Included to improve breathing mechanics, reduce unnecessary tension, and prepare better postural control."
+
+    return exercise.get("why_in_this_program") or exercise.get("clinical_rationale") or ""
+
+
+def enrich_program_rationales(program, lang="fr"):
+    clinical_priorities = program.get("clinical_priorities") or program.get("main_priorities") or []
+    movement_dna = program.get("movement_dna_summary") or {}
+    measured_alerts = program.get("measured_alerts") or []
+    for week in program.get("weeks", []) or []:
+        for session in week.get("sessions", []) or []:
+            for exercise in session.get("exercises", []) or []:
+                exercise["why_in_this_program"] = personalize_exercise_rationale(
+                    exercise, clinical_priorities, movement_dna, measured_alerts, lang
+                )
+    return program
+
+
+def build_validation_flags(program):
+    weeks = program.get("weeks", []) or []
+    sessions = [s for w in weeks for s in (w.get("sessions", []) or [])]
+    exercises = [e for s in sessions for e in (s.get("exercises", []) or [])]
+
+    category_counts = {}
+    for e in exercises:
+        c = e.get("category_code")
+        if c:
+            category_counts[c] = category_counts.get(c, 0) + 1
+
+    priority_ids = [p.get("id") for p in (program.get("clinical_priorities") or program.get("main_priorities") or [])]
+
+    flags = {
+        "engine_version": program.get("engine_version"),
+        "has_weeks": bool(weeks),
+        "week_count": len(weeks),
+        "sessions_per_week": [len(w.get("sessions", []) or []) for w in weeks],
+        "total_exercise_exposures": len(exercises),
+        "category_counts": category_counts,
+        "has_clinical_balance": all("clinical_balance" in s for s in sessions),
+        "has_why_in_this_program": all(bool(e.get("why_in_this_program")) for e in exercises),
+        "cervical_priority_detected": "cervical_control" in priority_ids[:3],
+        "cervical_exposure_count_total": category_counts.get("CC", 0),
+        "cervical_priority_protection_passed": (
+            "cervical_control" not in priority_ids[:3] or category_counts.get("CC", 0) >= 6
+        ),
+        "core_priority_detected": "core_stability" in priority_ids[:3],
+        "core_exposure_count_total": category_counts.get("CS", 0),
+        "functional_integration_count_total": category_counts.get("FI", 0),
+        "measured_alerts_present": bool(program.get("measured_alerts")),
+        "clinical_priorities_present": bool(program.get("clinical_priorities")),
+    }
+
+    # Preserve any earlier validation details, such as protection-rule notes.
+    existing = program.get("validation_flags") or {}
+    existing.update(flags)
+    return existing
+
 def generate_clinical_prescription_v21(screening_payload, exercise_library, rules=None, movement_dna=None, language="fr"):
     report=screening_payload.get("report",screening_payload) or {}
     movement_score=fnum(report.get("flexilab_score", report.get("score",0)),0)
@@ -276,6 +506,60 @@ def generate_clinical_prescription_v21(screening_payload, exercise_library, rule
             focus_en=["Mobility / restore","Control / stability","Integration / movement"][day-1]
             sessions.append({"day":day,"focus":focus_fr if language=="fr" else focus_en,"session_model":"balanced_block_based_v2_1","clinical_balance":{"categories":sorted(list({e["category_code"] for e in selected})),"exercise_count":len(selected)},"blocks":template,"estimated_duration_minutes":max(15,min(35,5+len(selected)*3)),"exercises":selected})
         weeks.append({"week":week,"phase":meta[0] if language=="fr" else meta[1],"objective":meta[3] if language=="fr" else meta[4],"difficulty_max":meta[2],"progression_logic":("Maintenir les fondations, ajouter progressivement contrôle, stabilité et intégration." if language=="fr" else "Maintain foundations while progressively adding control, stability, and integration."),"clinical_goal":strategy["strategy_text"],"sessions":sessions})
-    return {"engine_version":"FlexiLab Clinical Prescription Engine v2.1","created_at":datetime.now(timezone.utc).isoformat(),"language":language,"movement_score":movement_score,"movement_score_band":band(movement_score,language),"clinical_readiness":r,"movement_dna_summary":movement_dna or {},"clinical_strategy":strategy,"foundation_carryover":anch,"main_priorities":pri[:3],"monitor_domains":pri[3:],"asymmetries":asymmetries(screening_payload,language),"program_summary":{"duration":"4 semaines" if language=="fr" else "4 weeks","frequency":"3 séances/semaine" if language=="fr" else "3 sessions/week","session_duration":"15-35 min","model":"balanced block-based carryover + progression","medical_advice_recommended":r.get("medical_advice_recommended",False)},"weeks":weeks,"safety_notes":["Aucun exercice ne doit provoquer ou augmenter la douleur.","La qualité du mouvement prime sur le nombre de répétitions.","Réduire l’amplitude si une compensation apparaît."] if language=="fr" else ["No exercise should provoke or increase pain.","Movement quality is more important than reps.","Reduce range if compensation appears."],"reassessment_plan":{"when":"après 4 semaines" if language=="fr" else "after 4 weeks","what":"Refaire le même screening et comparer les domaines, la symétrie et la douleur." if language=="fr" else "Repeat the same screening and compare domains, symmetry and pain."},"integration_notes":{"import":"from engines.clinical_prescription_engine_v21 import generate_clinical_prescription_v21, load_exercise_library","call":"generate_clinical_prescription_v21(screening_payload, EXERCISE_LIBRARY, PRESCRIPTION_RULES, movement_dna=movement_dna, language=lang)"}}
+    clinical_priorities = pri[:3]
+    measured_alerts = build_measured_alerts(screening_payload, language)
+    program = {
+        "engine_version": ENGINE_VERSION,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "language": language,
+        "movement_score": movement_score,
+        "movement_score_band": band(movement_score, language),
+        "clinical_readiness": r,
+        "movement_dna_summary": movement_dna or {},
+        "clinical_strategy": strategy,
+        "foundation_carryover": anch,
+        "measured_alerts": measured_alerts,
+        "clinical_priorities": clinical_priorities,
+        # Backward-compatible alias. Frontend can migrate to clinical_priorities later.
+        "main_priorities": clinical_priorities,
+        "monitor_domains": pri[3:],
+        "asymmetries": asymmetries(screening_payload, language),
+        "program_summary": {
+            "duration": "4 semaines" if language == "fr" else "4 weeks",
+            "frequency": "3 séances/semaine" if language == "fr" else "3 sessions/week",
+            "session_duration": "15-35 min",
+            "model": "balanced block-based carryover + progression",
+            "medical_advice_recommended": r.get("medical_advice_recommended", False),
+        },
+        "weeks": weeks,
+        "safety_notes": [
+            "Aucun exercice ne doit provoquer ou augmenter la douleur.",
+            "La qualité du mouvement prime sur le nombre de répétitions.",
+            "Réduire l’amplitude si une compensation apparaît.",
+        ] if language == "fr" else [
+            "No exercise should provoke or increase pain.",
+            "Movement quality is more important than reps.",
+            "Reduce range if compensation appears.",
+        ],
+        "reassessment_plan": {
+            "when": "après 4 semaines" if language == "fr" else "after 4 weeks",
+            "what": "Refaire le même screening et comparer les domaines, la symétrie et la douleur." if language == "fr" else "Repeat the same screening and compare domains, symmetry and pain.",
+        },
+        "integration_notes": {
+            "import": "from engines.clinical_prescription_engine_v21 import generate_clinical_prescription_v21, load_exercise_library",
+            "call": "generate_clinical_prescription_v21(screening_payload, EXERCISE_LIBRARY, PRESCRIPTION_RULES, movement_dna=movement_dna, language=lang)",
+        },
+    }
+
+    program = enforce_cervical_priority_protection(
+        program=program,
+        exercise_library=exercise_library,
+        priorities=clinical_priorities,
+        readiness_payload=r,
+        lang=language,
+    )
+    program = enrich_program_rationales(program, language)
+    program["validation_flags"] = build_validation_flags(program)
+    return program
 
 generate_clinical_prescription = generate_clinical_prescription_v21
