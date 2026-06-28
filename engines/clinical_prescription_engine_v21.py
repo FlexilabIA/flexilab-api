@@ -563,3 +563,589 @@ def generate_clinical_prescription_v21(screening_payload, exercise_library, rule
     return program
 
 generate_clinical_prescription = generate_clinical_prescription_v21
+
+# -----------------------------------------------------------------------------
+# FlexiLab v2.2 Clinical Reasoning Patch
+# Purpose:
+# - Do not present untested domains as measured strengths.
+# - Add squat-compensation reasoning when trunk lean is red.
+# - Add ankle support when trunk lean is red and ankle was not directly assessed.
+# - Reduce breathing overuse.
+# - Keep the existing public function name for app.py compatibility.
+# -----------------------------------------------------------------------------
+_generate_clinical_prescription_v211_base = generate_clinical_prescription_v21
+ENGINE_VERSION = "FlexiLab Clinical Prescription Engine v2.2 Clinical Reasoning"
+
+DIRECT_DOMAIN_TESTS = {
+    "cervical_control": ["neck_angle"],
+    "thoracic_mobility": ["thoracic_angle", "squat_trunk_lean"],
+    "shoulder_mobility": ["shoulder_right_flexion", "shoulder_left_flexion"],
+    "hip_mobility": ["aslr_right_angle", "aslr_left_angle", "squat_knee_angle"],
+    "hamstring_mobility": ["aslr_right_angle", "aslr_left_angle"],
+    "core_stability": ["squat_trunk_lean"],
+    "ankle_mobility": ["ankle_dorsiflexion", "knee_to_wall", "ankle_right_dorsiflexion", "ankle_left_dorsiflexion"],
+    "balance_proprioception": ["single_leg_balance", "balance_right", "balance_left"],
+}
+
+SUPPORT_DOMAIN_LABELS = {
+    "ankle_mobility": {"fr": "Mobilité de cheville", "en": "Ankle Mobility"},
+    "balance_proprioception": {"fr": "Équilibre & proprioception", "en": "Balance & Proprioception"},
+}
+
+TM_PROGRESSIONS = {1: ["TM001", "TM002"], 2: ["TM004", "TM006", "TM005"], 3: ["TM003", "TM006", "TM009"], 4: ["TM004", "TM008", "TM010"]}
+CS_PROGRESSIONS = {1: ["CS001"], 2: ["CS002", "CS001"], 3: ["CS003", "CS004"], 4: ["CS004", "CS005", "CS006"]}
+CC_PROGRESSIONS = {1: ["CC001"], 2: ["CC002"], 3: ["CC003", "CC009"], 4: ["CC004", "CC006"]}
+AM_PROGRESSIONS = {1: ["AM001"], 2: ["AM002"], 3: ["AM003"], 4: ["AM004", "AM005"]}
+RB_PROGRESSIONS = {1: ["RB001"], 2: ["RB002"], 3: ["RB003"], 4: ["RB004"]}
+
+
+def _report_items(screening_payload):
+    report = screening_payload.get("report", screening_payload) or {}
+    out = {}
+    for section in report.get("sections", []) or []:
+        for item in section.get("items", []) or []:
+            if item.get("id"):
+                out[item.get("id")] = item
+    return out
+
+
+def _domain_is_directly_assessed(domain_id, screening_payload):
+    items = _report_items(screening_payload)
+    return any(test_id in items for test_id in DIRECT_DOMAIN_TESTS.get(domain_id, []))
+
+
+def _split_assessed_domains(domains_list, screening_payload, lang="fr"):
+    assessed, not_assessed = [], []
+    for domain in domains_list or []:
+        domain_id = domain.get("id")
+        if _domain_is_directly_assessed(domain_id, screening_payload):
+            assessed.append(domain)
+        else:
+            if domain_id in ["ankle_mobility", "balance_proprioception"]:
+                labels = SUPPORT_DOMAIN_LABELS.get(domain_id, {})
+                not_assessed.append({
+                    "id": domain_id,
+                    "label": labels.get("fr") if lang == "fr" else labels.get("en"),
+                    "label_fr": labels.get("fr"),
+                    "label_en": labels.get("en"),
+                    "assessment_status": "not_assessed",
+                    "score": None,
+                    "reason": "Aucun test direct de ce domaine n’a été réalisé." if lang == "fr" else "No direct test for this domain was performed.",
+                })
+            else:
+                assessed.append(domain)
+    return assessed, not_assessed
+
+
+def _metric_rating(screening_payload, metric_id):
+    item = _report_items(screening_payload).get(metric_id) or {}
+    return str(item.get("rating", "")).lower(), fnum(item.get("value"), 0)
+
+
+def _squat_trunk_lean_red(screening_payload):
+    rating, _ = _metric_rating(screening_payload, "squat_trunk_lean")
+    return rating == "red"
+
+
+def _extract_movement_pain_flags(screening_payload, lang="fr"):
+    report = screening_payload.get("report", screening_payload) or {}
+    flags = []
+    for section in report.get("sections", []) or []:
+        for item in section.get("items", []) or []:
+            pain_value = None
+            for key in ["pain_score", "pain", "discomfort_score", "discomfort"]:
+                if key in item:
+                    pain_value = item.get(key)
+                    break
+            pain_value = fnum(pain_value, 0)
+            pain_flag = item.get("pain_flag") or item.get("discomfort_flag")
+            if pain_value > 0 or pain_flag:
+                level = "mild" if pain_value <= 3 else "moderate" if pain_value <= 6 else "severe"
+                flags.append({
+                    "test_id": item.get("id"),
+                    "label": item.get("label") or item.get("label_fr") or item.get("label_en"),
+                    "pain_score": pain_value,
+                    "level": level,
+                    "interpretation": (
+                        "La douleur peut influencer la stratégie de mouvement; l’interprétation doit rester prudente."
+                        if lang == "fr" else
+                        "Pain can influence movement strategy; interpretation should remain cautious."
+                    ),
+                })
+    return flags
+
+
+def _build_reasoning(screening_payload, not_assessed_domains, lang="fr"):
+    trunk_red = _squat_trunk_lean_red(screening_payload)
+    pain_flags = _extract_movement_pain_flags(screening_payload, lang)
+    reasoning = {
+        "version": "FlexiLab Clinical Reasoning v2.2",
+        "pain_is_gatekeeper": True,
+        "movement_pain_flags": pain_flags,
+        "not_assessed_domains": not_assessed_domains,
+        "compensation_rules_applied": [],
+    }
+    if trunk_red:
+        reasoning["compensation_rules_applied"].append({
+            "id": "squat_trunk_lean_red",
+            "measured_finding": "Inclinaison du tronc excessive en squat" if lang == "fr" else "Excessive trunk lean during squat",
+            "possible_contributors": [
+                "stabilité du tronc" if lang == "fr" else "trunk/core stability",
+                "mobilité thoracique" if lang == "fr" else "thoracic mobility",
+                "mobilité de hanche" if lang == "fr" else "hip mobility",
+                "mobilité de cheville non confirmée" if lang == "fr" else "unconfirmed ankle mobility",
+                "stratégie motrice / équilibre" if lang == "fr" else "motor strategy / balance",
+            ],
+            "prescription_logic": (
+                "Renforcer le contrôle du tronc, maintenir la mobilité thoracique, ajouter un soutien cheville non diagnostique, puis intégrer dans des mouvements fonctionnels."
+                if lang == "fr" else
+                "Prioritize trunk control, maintain thoracic mobility, add non-diagnostic ankle support, then integrate into functional movement."
+            ),
+        })
+    if pain_flags:
+        reasoning["compensation_rules_applied"].append({
+            "id": "pain_aware_interpretation",
+            "prescription_logic": (
+                "Les mouvements douloureux ne sont pas interprétés comme de simples déficits de mobilité ou stabilité; le programme reste sans douleur et à faible charge."
+                if lang == "fr" else
+                "Painful movements are not interpreted as simple mobility or stability deficits; the program remains pain-free and low-load."
+            ),
+        })
+    return reasoning
+
+
+def _by_id(exercise_library):
+    return {e.get("exercise_id"): e for e in exercise_library or [] if e.get("exercise_id")}
+
+
+def _candidate_from_ids(exercise_library, ids, fallback_cat, week, readiness_payload):
+    byid = _by_id(exercise_library)
+    max_diff = WEEK_META.get(int(week), WEEK_META[1])[2]
+    for eid in ids:
+        ex = byid.get(eid)
+        if ex and pain_ok(ex, readiness_payload) and diff(ex) <= max_diff:
+            return ex
+    fallback = [e for e in exercise_library or [] if cat(e) == fallback_cat and pain_ok(e, readiness_payload) and diff(e) <= max_diff]
+    fallback.sort(key=lambda e: (diff(e), e.get("exercise_id", "")))
+    return fallback[0] if fallback else None
+
+
+def _pick_progression_exercise(exercise_library, category_code, week, readiness_payload):
+    table = {"TM": TM_PROGRESSIONS, "CS": CS_PROGRESSIONS, "CC": CC_PROGRESSIONS, "AM": AM_PROGRESSIONS, "RB": RB_PROGRESSIONS}.get(category_code, {})
+    ids = table.get(int(week), [])
+    return _candidate_from_ids(exercise_library, ids, category_code, week, readiness_payload)
+
+
+def _replace_low_value_exercise(session, new_exercise, priorities, lang, preferred_block="activation", protected=("TM", "CS"), allow_replace=("RB", "SH", "FI")):
+    exercises = session.get("exercises", []) or []
+    if not exercises or not new_exercise:
+        return False
+    new_cat = cat(new_exercise)
+    if any(e.get("category_code") == new_cat and e.get("id") == new_exercise.get("exercise_id") for e in exercises):
+        return True
+    candidates = []
+    rb_count = sum(1 for e in exercises if e.get("category_code") == "RB")
+    sh_count = sum(1 for e in exercises if e.get("category_code") == "SH")
+    for idx, ex in enumerate(exercises):
+        c = ex.get("category_code")
+        b = ex.get("block")
+        if c in protected:
+            continue
+        if c == "RB" and rb_count > 1:
+            candidates.append((0, idx))
+        elif c == "SH" and sh_count > 1:
+            candidates.append((1, idx))
+        elif c in allow_replace and b in ["recovery", "mobility_secondary", "activation", "stability"]:
+            candidates.append((2, idx))
+        elif c in allow_replace:
+            candidates.append((3, idx))
+    if not candidates:
+        return False
+    candidates.sort(key=lambda x: x[0])
+    _, idx = candidates[0]
+    old_block = exercises[idx].get("block") or preferred_block
+    block = preferred_block if new_cat in ["AM", "CC", "CS"] else old_block
+    exercises[idx] = loc(new_exercise, block, priorities, lang)
+    session["exercises"] = exercises
+    session["clinical_balance"] = recompute_clinical_balance(session)
+    session["blocks"] = [e.get("block") for e in exercises]
+    session["estimated_duration_minutes"] = max(15, min(35, 5 + len(exercises) * 3))
+    return True
+
+
+def _limit_breathing_volume(program, exercise_library, priorities, readiness_payload, lang="fr"):
+    for week in program.get("weeks", []) or []:
+        week_number = int(week.get("week", 1))
+        for session in week.get("sessions", []) or []:
+            exercises = session.get("exercises", []) or []
+            rb_indices = [i for i, e in enumerate(exercises) if e.get("category_code") == "RB"]
+            if len(rb_indices) <= 1:
+                continue
+            # Keep the first breathing/reset drill; replace additional breathing exposure.
+            for idx in rb_indices[1:]:
+                replacement = None
+                if _squat_trunk_lean_red({"report": {}}):
+                    replacement = None
+                # Prefer trunk/ankle/functional replacement over another breathing drill.
+                for cat_code in ["CS", "AM", "FI", "SH"]:
+                    candidate = _pick_progression_exercise(exercise_library, cat_code, week_number, readiness_payload)
+                    if candidate and not any(e.get("id") == candidate.get("exercise_id") for e in exercises):
+                        replacement = candidate
+                        break
+                if replacement:
+                    block = "activation" if cat(replacement) in ["AM", "CS"] else "integration" if cat(replacement) == "FI" else "mobility_secondary"
+                    exercises[idx] = loc(replacement, block, priorities, lang)
+            session["exercises"] = exercises
+            session["clinical_balance"] = recompute_clinical_balance(session)
+            session["blocks"] = [e.get("block") for e in exercises]
+    return program
+
+
+def _enforce_weekly_category_minimum(program, exercise_library, priorities, readiness_payload, lang, category_code, min_per_week, preferred_block="activation", protected=("TM", "CS")):
+    failed = []
+    for week in program.get("weeks", []) or []:
+        week_number = int(week.get("week", 1))
+        sessions = week.get("sessions", []) or []
+        current = sum(1 for s in sessions for e in (s.get("exercises", []) or []) if e.get("category_code") == category_code)
+        while current < min_per_week:
+            candidate = _pick_progression_exercise(exercise_library, category_code, week_number, readiness_payload)
+            if not candidate:
+                failed.append(week_number)
+                break
+            replaced = False
+            for session in sessions:
+                if current >= min_per_week:
+                    break
+                if any(e.get("id") == candidate.get("exercise_id") for e in session.get("exercises", []) or []):
+                    continue
+                if _replace_low_value_exercise(session, candidate, priorities, lang, preferred_block=preferred_block, protected=protected):
+                    current += 1
+                    replaced = True
+            if not replaced:
+                failed.append(week_number)
+                break
+    return failed
+
+
+def _enforce_progression_variety(program, exercise_library, priorities, readiness_payload, lang="fr"):
+    # Replace excessive early repetitions with week-appropriate progressions for major domains.
+    for week in program.get("weeks", []) or []:
+        week_number = int(week.get("week", 1))
+        for session in week.get("sessions", []) or []:
+            exercises = session.get("exercises", []) or []
+            for idx, ex in enumerate(exercises):
+                c = ex.get("category_code")
+                if c not in ["TM", "CS", "CC", "AM", "RB"]:
+                    continue
+                candidate = _pick_progression_exercise(exercise_library, c, week_number, readiness_payload)
+                if not candidate:
+                    continue
+                # Keep variety inside same week by not duplicating the exact same candidate in every session when alternatives exist.
+                if ex.get("id") == candidate.get("exercise_id"):
+                    continue
+                if c == "TM" and week_number >= 2:
+                    exercises[idx] = loc(candidate, ex.get("block") or "mobility_primary", priorities, lang)
+                elif c in ["CS", "CC", "AM"]:
+                    exercises[idx] = loc(candidate, ex.get("block") or "activation", priorities, lang)
+                elif c == "RB" and week_number >= 2:
+                    exercises[idx] = loc(candidate, ex.get("block") or "reset", priorities, lang)
+            session["exercises"] = exercises
+            session["clinical_balance"] = recompute_clinical_balance(session)
+            session["blocks"] = [e.get("block") for e in exercises]
+    return program
+
+
+def _update_v22_rationales(program, lang="fr"):
+    reasoning = program.get("clinical_reasoning", {})
+    trunk_rule = any(r.get("id") == "squat_trunk_lean_red" for r in reasoning.get("compensation_rules_applied", []) or [])
+    for week in program.get("weeks", []) or []:
+        for session in week.get("sessions", []) or []:
+            for exercise in session.get("exercises", []) or []:
+                c = exercise.get("category_code")
+                if c == "AM" and trunk_rule:
+                    exercise["why_in_this_program"] = (
+                        "Ajouté comme soutien non diagnostique: une mobilité de cheville limitée peut contribuer à une inclinaison excessive du tronc en squat. Ce travail aide à explorer l’amplitude de cheville sans conclure qu’elle est déficitaire."
+                        if lang == "fr" else
+                        "Added as non-diagnostic support: limited ankle mobility can contribute to excessive trunk lean during squats. This explores ankle range without claiming an ankle deficit."
+                    )
+                elif c == "CS" and trunk_rule:
+                    exercise["why_in_this_program"] = (
+                        "Inclus car le squat montre une inclinaison excessive du tronc. L’objectif est d’améliorer le contrôle du tronc et du bassin avant d’augmenter la complexité du mouvement."
+                        if lang == "fr" else
+                        "Included because the squat shows excessive trunk lean. The goal is to improve trunk and pelvic control before increasing movement complexity."
+                    )
+                elif c == "RB":
+                    exercise["why_in_this_program"] = (
+                        "Utilisé brièvement comme reset pour diminuer les tensions inutiles et préparer un mouvement contrôlé."
+                        if lang == "fr" else
+                        "Used briefly as a reset to reduce unnecessary tension and prepare controlled movement."
+                    )
+    return program
+
+
+def _build_program_quality_flags_v22(program):
+    flags = build_validation_flags(program)
+    category_counts = flags.get("category_counts", {}) or {}
+    reasoning = program.get("clinical_reasoning", {}) or {}
+    trunk_rule = any(r.get("id") == "squat_trunk_lean_red" for r in reasoning.get("compensation_rules_applied", []) or [])
+    flags.update({
+        "engine_version": program.get("engine_version"),
+        "not_assessed_domains_present": bool(program.get("not_assessed_domains")),
+        "ankle_not_assessed_handled": any(d.get("id") == "ankle_mobility" for d in program.get("not_assessed_domains", []) or []),
+        "squat_compensation_reasoning_present": trunk_rule,
+        "ankle_support_exposure_count_total": category_counts.get("AM", 0),
+        "breathing_exposure_count_total": category_counts.get("RB", 0),
+        "breathing_volume_reduced": category_counts.get("RB", 0) <= 10,
+        "core_trunk_exposure_count_total": category_counts.get("CS", 0),
+    })
+    return flags
+
+
+def generate_clinical_prescription_v21(screening_payload, exercise_library, rules=None, movement_dna=None, language="fr"):
+    base_program = _generate_clinical_prescription_v211_base(screening_payload, exercise_library, rules=rules, movement_dna=movement_dna, language=language)
+    original_domains = domains(screening_payload, language)
+    assessed_domains, not_assessed_domains = _split_assessed_domains(original_domains, screening_payload, language)
+
+    # Re-rank using only assessed domains. Untested domains remain visible as not assessed, never as strengths.
+    base_program["engine_version"] = ENGINE_VERSION
+    base_program["clinical_priorities"] = assessed_domains[:3]
+    base_program["main_priorities"] = assessed_domains[:3]
+    base_program["monitor_domains"] = assessed_domains[3:]
+    base_program["not_assessed_domains"] = not_assessed_domains
+
+    trunk_red = _squat_trunk_lean_red(screening_payload)
+    base_program["clinical_reasoning"] = _build_reasoning(screening_payload, not_assessed_domains, language)
+
+    # Update strategy labels.
+    if base_program.get("clinical_strategy"):
+        if language == "fr":
+            base_program["clinical_strategy"]["strategy_text"] = "Stratégie v2.2 : raisonner à partir des compensations observées, distinguer les domaines mesurés des domaines non évalués, renforcer le contrôle du tronc, maintenir la mobilité thoracique, ajouter un soutien cheville si le squat montre une inclinaison excessive du tronc, puis intégrer progressivement."
+        else:
+            base_program["clinical_strategy"]["strategy_text"] = "v2.2 strategy: reason from observed compensations, separate measured from unassessed domains, prioritize trunk control, maintain thoracic mobility, add ankle support when squat trunk lean is excessive, then progressively integrate."
+
+    readiness_payload = base_program.get("clinical_readiness") or readiness((screening_payload.get("report", screening_payload) or {}).get("intake_context") or {}, language)
+    priorities = base_program.get("clinical_priorities") or []
+
+    # Reduce excessive breathing before adding support work.
+    base_program = _limit_breathing_volume(base_program, exercise_library, priorities, readiness_payload, language)
+
+    failed_rules = {}
+    if trunk_red:
+        # Trunk lean red requires trunk stability, thoracic mobility, ankle support if ankle was not directly assessed.
+        failed_rules["core_minimum"] = _enforce_weekly_category_minimum(base_program, exercise_library, priorities, readiness_payload, language, "CS", 2, preferred_block="stability", protected=("TM", "CC"))
+        failed_rules["ankle_support_minimum"] = _enforce_weekly_category_minimum(base_program, exercise_library, priorities, readiness_payload, language, "AM", 1, preferred_block="activation", protected=("TM", "CS", "CC"))
+
+    # Progress exercises by week rather than repeating the same entry drill too often.
+    base_program = _enforce_progression_variety(base_program, exercise_library, priorities, readiness_payload, language)
+    base_program = _update_v22_rationales(base_program, language)
+
+    if failed_rules:
+        base_program.setdefault("clinical_reasoning", {})["rule_failures"] = failed_rules
+
+    base_program["program_summary"]["model"] = "compensation-aware clinical reasoning + progressive load model"
+    base_program["program_summary"]["session_duration"] = "15-30 min"
+    base_program["safety_notes"] = [
+        "Aucun exercice ne doit provoquer ou augmenter la douleur.",
+        "Si un mouvement est douloureux, réduire l’amplitude ou passer à l’option plus facile.",
+        "Les domaines non testés ne sont pas présentés comme déficits confirmés.",
+        "La qualité du mouvement prime sur le nombre de répétitions.",
+    ] if language == "fr" else [
+        "No exercise should provoke or increase pain.",
+        "If a movement is painful, reduce range or switch to the easier option.",
+        "Untested domains are not presented as confirmed deficits.",
+        "Movement quality is more important than reps.",
+    ]
+    base_program["validation_flags"] = _build_program_quality_flags_v22(base_program)
+    return base_program
+
+generate_clinical_prescription = generate_clinical_prescription_v21
+
+# Final v2.2 wrapper: reduce breathing dose by week after all protection rules.
+_generate_clinical_prescription_v22_before_breathing_budget = generate_clinical_prescription_v21
+
+
+def _reduce_breathing_by_week_budget(program, exercise_library, priorities, readiness_payload, lang="fr"):
+    weekly_budget = {1: 3, 2: 2, 3: 2, 4: 1}
+    for week in program.get("weeks", []) or []:
+        week_number = int(week.get("week", 1))
+        max_rb = weekly_budget.get(week_number, 1)
+        rb_locations = []
+        for si, session in enumerate(week.get("sessions", []) or []):
+            for ei, exercise in enumerate(session.get("exercises", []) or []):
+                if exercise.get("category_code") == "RB":
+                    rb_locations.append((si, ei))
+        # Keep earlier RBs only; replace later breathing drills with active support work.
+        for si, ei in rb_locations[max_rb:]:
+            session = week.get("sessions", [])[si]
+            exercises = session.get("exercises", []) or []
+            replacement = None
+            for cat_code in ["AM", "CS", "FI", "SH"]:
+                candidate = _pick_progression_exercise(exercise_library, cat_code, week_number, readiness_payload)
+                if candidate and not any(e.get("id") == candidate.get("exercise_id") for e in exercises):
+                    replacement = candidate
+                    break
+            if replacement:
+                block = "activation" if cat(replacement) in ["AM", "CS"] else "integration" if cat(replacement) == "FI" else "mobility_secondary"
+                exercises[ei] = loc(replacement, block, priorities, lang)
+                session["exercises"] = exercises
+                session["clinical_balance"] = recompute_clinical_balance(session)
+                session["blocks"] = [e.get("block") for e in exercises]
+                session["estimated_duration_minutes"] = max(15, min(30, 5 + len(exercises) * 3))
+    return program
+
+
+def generate_clinical_prescription_v21(screening_payload, exercise_library, rules=None, movement_dna=None, language="fr"):
+    program = _generate_clinical_prescription_v22_before_breathing_budget(screening_payload, exercise_library, rules=rules, movement_dna=movement_dna, language=language)
+    readiness_payload = program.get("clinical_readiness") or readiness((screening_payload.get("report", screening_payload) or {}).get("intake_context") or {}, language)
+    priorities = program.get("clinical_priorities") or []
+    program = _reduce_breathing_by_week_budget(program, exercise_library, priorities, readiness_payload, language)
+    program = _update_v22_rationales(program, language)
+    program["validation_flags"] = _build_program_quality_flags_v22(program)
+    return program
+
+generate_clinical_prescription = generate_clinical_prescription_v21
+
+# Final v2.2 wrapper: keep shoulder support proportional when shoulder limitation is mild.
+_generate_clinical_prescription_v22_before_shoulder_budget = generate_clinical_prescription_v21
+
+
+def _reduce_category_by_week_budget(program, exercise_library, priorities, readiness_payload, lang="fr", category_code="SH", weekly_budget=None, replacement_order=None):
+    weekly_budget = weekly_budget or {1: 3, 2: 2, 3: 2, 4: 1}
+    replacement_order = replacement_order or ["AM", "CS", "FI"]
+    for week in program.get("weeks", []) or []:
+        week_number = int(week.get("week", 1))
+        max_cat = weekly_budget.get(week_number, 1)
+        locations = []
+        for si, session in enumerate(week.get("sessions", []) or []):
+            for ei, exercise in enumerate(session.get("exercises", []) or []):
+                if exercise.get("category_code") == category_code:
+                    locations.append((si, ei))
+        for si, ei in locations[max_cat:]:
+            session = week.get("sessions", [])[si]
+            exercises = session.get("exercises", []) or []
+            replacement = None
+            for cat_code in replacement_order:
+                candidate = _pick_progression_exercise(exercise_library, cat_code, week_number, readiness_payload)
+                if candidate and not any(e.get("id") == candidate.get("exercise_id") for e in exercises):
+                    replacement = candidate
+                    break
+            if replacement:
+                block = "activation" if cat(replacement) in ["AM", "CS"] else "integration" if cat(replacement) == "FI" else "mobility_secondary"
+                exercises[ei] = loc(replacement, block, priorities, lang)
+                session["exercises"] = exercises
+                session["clinical_balance"] = recompute_clinical_balance(session)
+                session["blocks"] = [e.get("block") for e in exercises]
+                session["estimated_duration_minutes"] = max(15, min(30, 5 + len(exercises) * 3))
+    return program
+
+
+def generate_clinical_prescription_v21(screening_payload, exercise_library, rules=None, movement_dna=None, language="fr"):
+    program = _generate_clinical_prescription_v22_before_shoulder_budget(screening_payload, exercise_library, rules=rules, movement_dna=movement_dna, language=language)
+    readiness_payload = program.get("clinical_readiness") or readiness((screening_payload.get("report", screening_payload) or {}).get("intake_context") or {}, language)
+    priorities = program.get("clinical_priorities") or []
+    # Mild shoulder findings should support the plan, not dominate it.
+    program = _reduce_category_by_week_budget(program, exercise_library, priorities, readiness_payload, language, category_code="SH", weekly_budget={1: 3, 2: 2, 3: 2, 4: 1}, replacement_order=["AM", "CS", "FI"])
+    program = _update_v22_rationales(program, language)
+    program["validation_flags"] = _build_program_quality_flags_v22(program)
+    program["validation_flags"]["shoulder_support_exposure_count_total"] = program["validation_flags"].get("category_counts", {}).get("SH", 0)
+    program["validation_flags"]["shoulder_support_volume_controlled"] = program["validation_flags"]["shoulder_support_exposure_count_total"] <= 8
+    return program
+
+generate_clinical_prescription = generate_clinical_prescription_v21
+
+# Final v2.2 wrapper: robust category budget using alternative exercises within a category.
+_generate_clinical_prescription_v22_before_robust_budget = generate_clinical_prescription_v21
+
+
+def _candidate_any_category(exercise_library, category_code, week, readiness_payload, session_exercises):
+    max_diff = WEEK_META.get(int(week), WEEK_META[1])[2]
+    used_ids = {e.get("id") for e in session_exercises or []}
+    candidates = [e for e in exercise_library or [] if cat(e) == category_code and pain_ok(e, readiness_payload) and diff(e) <= max_diff and e.get("exercise_id") not in used_ids]
+    candidates.sort(key=lambda e: (diff(e), e.get("exercise_id", "")))
+    return candidates[0] if candidates else None
+
+
+def _reduce_shoulder_robust(program, exercise_library, priorities, readiness_payload, lang="fr"):
+    weekly_budget = {1: 3, 2: 2, 3: 2, 4: 1}
+    for week in program.get("weeks", []) or []:
+        week_number = int(week.get("week", 1))
+        locations = []
+        for si, session in enumerate(week.get("sessions", []) or []):
+            for ei, exercise in enumerate(session.get("exercises", []) or []):
+                if exercise.get("category_code") == "SH":
+                    locations.append((si, ei))
+        for si, ei in locations[weekly_budget.get(week_number, 1):]:
+            session = week.get("sessions", [])[si]
+            exercises = session.get("exercises", []) or []
+            replacement = None
+            for cat_code in ["AM", "CS", "FI"]:
+                replacement = _candidate_any_category(exercise_library, cat_code, week_number, readiness_payload, exercises)
+                if replacement:
+                    break
+            if replacement:
+                block = "activation" if cat(replacement) in ["AM", "CS"] else "integration"
+                exercises[ei] = loc(replacement, block, priorities, lang)
+                session["exercises"] = exercises
+                session["clinical_balance"] = recompute_clinical_balance(session)
+                session["blocks"] = [e.get("block") for e in exercises]
+                session["estimated_duration_minutes"] = max(15, min(30, 5 + len(exercises) * 3))
+    return program
+
+
+def generate_clinical_prescription_v21(screening_payload, exercise_library, rules=None, movement_dna=None, language="fr"):
+    program = _generate_clinical_prescription_v22_before_robust_budget(screening_payload, exercise_library, rules=rules, movement_dna=movement_dna, language=language)
+    readiness_payload = program.get("clinical_readiness") or readiness((screening_payload.get("report", screening_payload) or {}).get("intake_context") or {}, language)
+    priorities = program.get("clinical_priorities") or []
+    program = _reduce_shoulder_robust(program, exercise_library, priorities, readiness_payload, language)
+    program = _update_v22_rationales(program, language)
+    program["validation_flags"] = _build_program_quality_flags_v22(program)
+    program["validation_flags"]["shoulder_support_exposure_count_total"] = program["validation_flags"].get("category_counts", {}).get("SH", 0)
+    program["validation_flags"]["shoulder_support_volume_controlled"] = program["validation_flags"]["shoulder_support_exposure_count_total"] <= 8
+    return program
+
+generate_clinical_prescription = generate_clinical_prescription_v21
+
+# Final v2.2 wrapper: ankle is support, not dominant.
+_generate_clinical_prescription_v22_before_ankle_budget = generate_clinical_prescription_v21
+
+
+def _reduce_ankle_support_budget(program, exercise_library, priorities, readiness_payload, lang="fr"):
+    weekly_budget = {1: 1, 2: 1, 3: 1, 4: 2}
+    for week in program.get("weeks", []) or []:
+        week_number = int(week.get("week", 1))
+        locations = []
+        for si, session in enumerate(week.get("sessions", []) or []):
+            for ei, exercise in enumerate(session.get("exercises", []) or []):
+                if exercise.get("category_code") == "AM":
+                    locations.append((si, ei))
+        for si, ei in locations[weekly_budget.get(week_number, 1):]:
+            session = week.get("sessions", [])[si]
+            exercises = session.get("exercises", []) or []
+            replacement = None
+            for cat_code in ["CS", "FI", "SH"]:
+                replacement = _candidate_any_category(exercise_library, cat_code, week_number, readiness_payload, exercises)
+                if replacement:
+                    break
+            if replacement:
+                block = "stability" if cat(replacement) == "CS" else "integration" if cat(replacement) == "FI" else "mobility_secondary"
+                exercises[ei] = loc(replacement, block, priorities, lang)
+                session["exercises"] = exercises
+                session["clinical_balance"] = recompute_clinical_balance(session)
+                session["blocks"] = [e.get("block") for e in exercises]
+                session["estimated_duration_minutes"] = max(15, min(30, 5 + len(exercises) * 3))
+    return program
+
+
+def generate_clinical_prescription_v21(screening_payload, exercise_library, rules=None, movement_dna=None, language="fr"):
+    program = _generate_clinical_prescription_v22_before_ankle_budget(screening_payload, exercise_library, rules=rules, movement_dna=movement_dna, language=language)
+    readiness_payload = program.get("clinical_readiness") or readiness((screening_payload.get("report", screening_payload) or {}).get("intake_context") or {}, language)
+    priorities = program.get("clinical_priorities") or []
+    program = _reduce_ankle_support_budget(program, exercise_library, priorities, readiness_payload, language)
+    program = _update_v22_rationales(program, language)
+    program["validation_flags"] = _build_program_quality_flags_v22(program)
+    program["validation_flags"]["shoulder_support_exposure_count_total"] = program["validation_flags"].get("category_counts", {}).get("SH", 0)
+    program["validation_flags"]["shoulder_support_volume_controlled"] = program["validation_flags"]["shoulder_support_exposure_count_total"] <= 8
+    program["validation_flags"]["ankle_support_volume_controlled"] = 4 <= program["validation_flags"].get("category_counts", {}).get("AM", 0) <= 6
+    return program
+
+generate_clinical_prescription = generate_clinical_prescription_v21
