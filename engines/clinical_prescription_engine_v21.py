@@ -1857,3 +1857,299 @@ def generate_clinical_prescription_v21(screening_payload, exercise_library, rule
 
 
 generate_clinical_prescription = generate_clinical_prescription_v21
+
+# -----------------------------------------------------------------------------
+# FlexiLab V55 Clinical Reasoning Engine refinement
+# Stronger material/equipment progression layer.
+# This patch intentionally keeps the frontend stable. It changes only backend
+# program generation so the existing program table can display meaningful
+# material choices when clinically appropriate.
+# -----------------------------------------------------------------------------
+_generate_clinical_prescription_v55_base = generate_clinical_prescription_v21
+ENGINE_VERSION = "FlexiLab Clinical Prescription Engine v5.5 Material-Aware Clinical Reasoning"
+
+V55_LOADED_EQUIPMENT = {"elastic_band", "light_weight", "trx", "balance_pad"}
+V55_VISIBLE_MATERIALS = {"elastic_band", "light_weight", "trx", "balance_pad", "foam_roller", "stick_or_pvc"}
+
+
+def _v55_equipment_allowed_for_domain(domain_id, week_number, pain_status, domain_scores, eq):
+    """Score/pain-based loading permission, using the user's 3 pain states."""
+    severity = _v54_domain_severity(domain_id, domain_scores)
+    week_number = int(week_number or 1)
+    eq = _v54_equipment({"equipment": eq})
+
+    if eq in ["none", "bodyweight"]:
+        return True
+
+    # Pain: no external load. Recovery tools only.
+    if pain_status == "pain":
+        return eq in ["foam_roller", "stick_or_pvc"]
+
+    # Discomfort: no weights/TRX. Band/balance only late and only if not red.
+    if pain_status == "discomfort":
+        if eq in ["light_weight", "trx"]:
+            return False
+        if eq in ["elastic_band", "balance_pad"]:
+            return week_number >= 4 and severity in ["yellow", "green", "support", "unassessed"]
+        return True
+
+    # No pain: controlled progression by severity.
+    if severity == "red":
+        # Red domains earn external resistance only at the end, and usually band/balance first.
+        if eq in ["elastic_band", "balance_pad"]:
+            return week_number >= 4
+        if eq in ["light_weight", "trx"]:
+            return week_number >= 4 and domain_id in ["core_stability", "functional_integration"]
+        return True
+
+    if severity == "yellow":
+        if eq in ["elastic_band", "balance_pad"]:
+            return week_number >= 3
+        if eq in ["light_weight", "trx"]:
+            return week_number >= 4
+        return True
+
+    # Green / support / unassessed supportive domains.
+    if eq in ["elastic_band", "balance_pad"]:
+        return week_number >= 2
+    if eq in ["light_weight", "trx"]:
+        return week_number >= 3
+    return True
+
+
+def _v55_candidate_pool(exercise_library, week_number, pain_status, domain_scores, preferred_categories=None, preferred_equipment=None):
+    preferred_categories = preferred_categories or []
+    preferred_equipment = preferred_equipment or []
+    max_diff = WEEK_META.get(int(week_number), WEEK_META[1])[2]
+    pool = []
+    for e in exercise_library or []:
+        eq = _v54_equipment(e)
+        if preferred_equipment and eq not in preferred_equipment:
+            continue
+        if preferred_categories and cat(e) not in preferred_categories:
+            continue
+        if diff(e) > max_diff:
+            continue
+        domain_id = _v54_exercise_domain(e)
+        if not _v55_equipment_allowed_for_domain(domain_id, week_number, pain_status, domain_scores, eq):
+            continue
+        if not pain_ok(e, {"program_mode": "corrective" if pain_status == "no_pain" else "recovery_control" if pain_status == "pain" else "pain_free_corrective"}):
+            continue
+        pool.append(e)
+    return pool
+
+
+def _v55_priority_categories(priorities):
+    cats = []
+    for p in (priorities or [])[:5]:
+        for c in DOMAIN_TO_CATS.get(p.get("id"), []):
+            if c not in cats:
+                cats.append(c)
+    # Add categories where materials exist and are useful for stability/integration.
+    for c in ["CS", "SH", "FI", "HM", "AM", "BP", "TM", "RB"]:
+        if c not in cats:
+            cats.append(c)
+    return cats
+
+
+def _v55_replace_index_for_material(session_exercises):
+    """Prefer replacing a stability/integration/activation slot, not reset/recovery."""
+    preferred_blocks = ["stability", "integration", "activation", "mobility_secondary", "mobility_primary"]
+    for block in preferred_blocks:
+        for i, ex in enumerate(session_exercises or []):
+            if ex.get("block") == block and _v54_equipment({"equipment": ex.get("equipment")}) not in V55_VISIBLE_MATERIALS:
+                return i
+    for i, ex in enumerate(session_exercises or []):
+        if ex.get("block") not in ["reset", "recovery"] and _v54_equipment({"equipment": ex.get("equipment")}) not in V55_VISIBLE_MATERIALS:
+            return i
+    return None
+
+
+def _v55_select_material_candidate(exercise_library, week_number, pain_status, domain_scores, priorities, existing_ids):
+    priority_categories = _v55_priority_categories(priorities)
+
+    if pain_status == "pain":
+        equipment_order = ["foam_roller", "stick_or_pvc"]
+        category_order = [c for c in priority_categories if c in ["RB", "TM", "HM", "HS", "AM", "CC"]] or priority_categories
+    elif pain_status == "discomfort":
+        equipment_order = ["elastic_band", "balance_pad", "foam_roller", "stick_or_pvc"]
+        category_order = [c for c in priority_categories if c in ["CS", "SH", "AM", "BP", "TM", "HM", "FI", "RB"]]
+    else:
+        if int(week_number) <= 1:
+            equipment_order = ["foam_roller", "stick_or_pvc"]
+        elif int(week_number) == 2:
+            equipment_order = ["elastic_band", "balance_pad", "foam_roller", "stick_or_pvc"]
+        elif int(week_number) == 3:
+            equipment_order = ["elastic_band", "balance_pad", "light_weight", "trx"]
+        else:
+            equipment_order = ["elastic_band", "light_weight", "trx", "balance_pad"]
+        category_order = [c for c in priority_categories if c in ["CS", "SH", "FI", "HM", "AM", "BP", "TM", "RB"]]
+
+    pool = _v55_candidate_pool(
+        exercise_library,
+        week_number,
+        pain_status,
+        domain_scores,
+        preferred_categories=category_order,
+        preferred_equipment=equipment_order,
+    )
+    if not pool:
+        return None
+
+    existing_ids = set(existing_ids or [])
+
+    def score(e):
+        eq = _v54_equipment(e)
+        c = cat(e)
+        o = obj(e)
+        sc = 0
+        # Prefer first available equipment type by week/pain policy.
+        try:
+            sc += (len(equipment_order) - equipment_order.index(eq)) * 30
+        except ValueError:
+            pass
+        try:
+            sc += (len(category_order) - category_order.index(c)) * 6
+        except ValueError:
+            pass
+        if e.get("exercise_id") in existing_ids:
+            sc -= 100
+        if "stability" in o or "activation_stability" in o:
+            sc += 22
+        if "functional" in o or "integration" in o:
+            sc += 10
+        if int(week_number) <= 2 and ("mobility" in o or "recovery" in o):
+            sc += 8
+        sc -= abs(diff(e) - min(int(week_number), 4)) * 2
+        return sc
+
+    pool.sort(key=lambda e: (score(e), -diff(e), e.get("exercise_id", "")), reverse=True)
+    return pool[0]
+
+
+def _v55_force_visible_materials(program, exercise_library, priorities, pain_status, domain_scores, lang="fr"):
+    """
+    Ensure at least some clinically appropriate materials appear in the 4-week plan.
+    This does not add material blindly; it follows severity + pain + week rules.
+    """
+    if not program or not exercise_library:
+        return program
+
+    global_ids = set()
+    material_sessions = 0
+    for week in program.get("weeks", []) or []:
+        week_number = int(week.get("week", 1))
+        # Desired material exposure by week. Week 1 can still be no-equipment.
+        if pain_status == "pain":
+            desired_sessions = 1 if week_number >= 1 else 0  # recovery tools only, when available
+        elif pain_status == "discomfort":
+            desired_sessions = 1 if week_number >= 4 else 0
+        else:
+            desired_sessions = 0 if week_number == 1 else 1 if week_number == 2 else 2
+
+        week_material_count = 0
+        for session in week.get("sessions", []) or []:
+            exercises = session.get("exercises", []) or []
+            for ex in exercises:
+                global_ids.add(ex.get("id"))
+            if any(_v54_equipment({"equipment": ex.get("equipment")}) in V55_VISIBLE_MATERIALS for ex in exercises):
+                week_material_count += 1
+
+        if week_material_count >= desired_sessions:
+            continue
+
+        for session in week.get("sessions", []) or []:
+            if week_material_count >= desired_sessions:
+                break
+            exercises = session.get("exercises", []) or []
+            if any(_v54_equipment({"equipment": ex.get("equipment")}) in V55_VISIBLE_MATERIALS for ex in exercises):
+                continue
+            replace_idx = _v55_replace_index_for_material(exercises)
+            if replace_idx is None:
+                continue
+            candidate = _v55_select_material_candidate(
+                exercise_library,
+                week_number,
+                pain_status,
+                domain_scores,
+                priorities,
+                global_ids | {ex.get("id") for ex in exercises},
+            )
+            if not candidate:
+                continue
+            old_block = exercises[replace_idx].get("block") or _v54_block_for_category(cat(candidate), "stability")
+            exercises[replace_idx] = loc(candidate, old_block, priorities, lang)
+            global_ids.add(candidate.get("exercise_id"))
+            session["exercises"] = exercises
+            _v54_recompute_session(session)
+            week_material_count += 1
+            material_sessions += 1
+
+    program["v55_material_sessions_forced"] = material_sessions
+    return program
+
+
+def _v55_enrich_material_fields(program, lang="fr"):
+    for week in program.get("weeks", []) or []:
+        for session in week.get("sessions", []) or []:
+            for exercise in session.get("exercises", []) or []:
+                eq = _v54_equipment(exercise)
+                exercise["equipment"] = eq
+                exercise["equipment_label"] = _v54_equipment_label(eq, lang)
+                # Extra aliases for frontend display compatibility.
+                exercise["material"] = exercise["equipment_label"]
+                exercise["material_label"] = exercise["equipment_label"]
+    return program
+
+
+def generate_clinical_prescription_v21(screening_payload, exercise_library, rules=None, movement_dna=None, language="fr"):
+    lang = _v54_normalize_lang(language)
+    program = _generate_clinical_prescription_v55_base(
+        screening_payload,
+        exercise_library,
+        rules=rules,
+        movement_dna=movement_dna,
+        language=lang,
+    )
+    priorities = program.get("clinical_priorities") or program.get("main_priorities") or []
+    domain_scores = _v54_domain_scores(program, screening_payload)
+    pain_status = _v54_pain_status(screening_payload)
+
+    program = _v55_force_visible_materials(program, exercise_library, priorities, pain_status, domain_scores, lang)
+    program = _v54_reduce_week_duplicates(program, exercise_library, priorities, pain_status, domain_scores, lang)
+    program = _v54_clean_user_fields(program, pain_status, domain_scores, lang)
+    program = _v55_enrich_material_fields(program, lang)
+    program = _v54_update_readiness(program, pain_status, lang)
+
+    equipment_counts = {}
+    for week in program.get("weeks", []) or []:
+        for session in week.get("sessions", []) or []:
+            for exercise in session.get("exercises", []) or []:
+                eq = _v54_equipment(exercise)
+                equipment_counts[eq] = equipment_counts.get(eq, 0) + 1
+
+    program["engine_version"] = ENGINE_VERSION
+    program["clinical_reasoning_version"] = "v55_material_aware"
+    program["validation_flags"] = _v54_quality_flags(program, pain_status, domain_scores)
+    program["validation_flags"]["v55_equipment_counts"] = equipment_counts
+    program["validation_flags"]["v55_material_sessions_forced"] = program.get("v55_material_sessions_forced", 0)
+    program["selection_strategy"] = {
+        "type": "v55_material_aware_clinical_reasoning",
+        "pain_states": ["no_pain", "discomfort", "pain"],
+        "principles": [
+            "pain blocks bands, weights, TRX and loaded stability",
+            "discomfort delays loading and avoids weights",
+            "red domains receive external resistance late",
+            "yellow domains can receive band work from week 3 when pain-free",
+            "materials are intentionally introduced when clinically appropriate",
+        ],
+        "user_facing_summary": _v54_text(
+            lang,
+            "Votre programme progresse de la mobilité vers le contrôle, puis vers la stabilité et l’intégration fonctionnelle avec du matériel uniquement lorsque c’est approprié.",
+            "Your program progresses from mobility to control, then to stability and functional integration, using equipment only when appropriate."
+        ),
+    }
+    return program
+
+
+generate_clinical_prescription = generate_clinical_prescription_v21
