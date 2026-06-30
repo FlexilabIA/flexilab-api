@@ -1225,8 +1225,8 @@ def report(session_id: str, lang: str = "fr"):
         return en if lang == "en" else fr
 
     LABELS = {
-        "neck_angle": ("Angle cervical", "Cervical alignment"),
-        "thoracic_angle": ("Angle thoracique", "Thoracic alignment"),
+        "neck_angle": ("Angle cervical", "Cervical angle"),
+        "thoracic_angle": ("Angle thoracique", "Thoracic angle"),
         "pelvic_proxy_angle": ("Alignement tronc-bassin", "Trunk-pelvis alignment"),
         "shoulder_right_flexion": ("Flexion épaule droite", "Right shoulder flexion"),
         "shoulder_left_flexion": ("Flexion épaule gauche", "Left shoulder flexion"),
@@ -1234,7 +1234,7 @@ def report(session_id: str, lang: str = "fr"):
         "squat_trunk_lean": ("Inclinaison du tronc", "Trunk lean"),
         "aslr_right_angle": ("ASLR jambe droite", "Right ASLR"),
         "aslr_left_angle": ("ASLR jambe gauche", "Left ASLR"),
-        "aslr_title": ("Active Straight Leg Raise", "Active Straight Leg Raise"),
+        "aslr_title": ("Élévation active de jambe", "Active Straight Leg Raise"),
         "posture_title": ("Posture (vue de profil)", "Posture (side view)"),
         "shoulders_title": ("Mobilité des épaules", "Shoulder mobility"),
         "squat_title": ("Squat (contrôle et mobilité)", "Squat (control and mobility)"),
@@ -1754,6 +1754,39 @@ def attach_movement_dna_to_report(report_data: dict, lang: str = "fr") -> dict:
     return report_data
 
 
+
+# -----------------------------------------------------------------------------
+# V45 frontend-contract i18n normalizer
+# Ensures /program returns selected-language strings for all visible program fields.
+# This is dictionary/string cleanup only; it does not run AI and has negligible CPU cost.
+# -----------------------------------------------------------------------------
+def _v45_lang(lang: str) -> str:
+    return "en" if str(lang).lower().startswith("en") else "fr"
+
+def _v45_walk_program_i18n(program_data: dict, lang: str = "fr") -> dict:
+    lang = _v45_lang(lang)
+    if not isinstance(program_data, dict):
+        return program_data
+    program_data["language"] = lang
+    for week in program_data.get("weeks", []) or []:
+        for session in week.get("sessions", []) or week.get("days", []) or []:
+            for e in session.get("exercises", []) or []:
+                if not isinstance(e, dict):
+                    continue
+                # Prefer backend-engine bilingual fields. These are filled by the V45 engine patch.
+                e["name"] = e.get(f"name_{lang}") or e.get("name") or e.get("id") or e.get("exercise_id") or ""
+                e["target"] = e.get(f"target_{lang}") or e.get("target") or ""
+                e["equipment"] = e.get(f"equipment_{lang}") or e.get(f"material_{lang}") or e.get("equipment") or e.get("material") or ""
+                e["material"] = e.get(f"material_{lang}") or e.get(f"equipment_{lang}") or e.get("material") or e.get("equipment") or ""
+                e["coaching_cues"] = e.get(f"coaching_cues_{lang}") or e.get(f"tips_{lang}") or e.get("coaching_cues") or e.get("tips") or ""
+                e["tips"] = e.get(f"tips_{lang}") or e.get(f"coaching_cues_{lang}") or e.get("tips") or e.get("coaching_cues") or ""
+                e["clinical_rationale"] = e.get(f"clinical_rationale_{lang}") or e.get("clinical_rationale") or ""
+                e["why_in_this_program"] = e.get(f"why_in_this_program_{lang}") or e.get("why_in_this_program") or e.get("clinical_rationale") or ""
+                e["reps_time"] = e.get(f"reps_time_{lang}") or e.get("reps_time") or ""
+                e["tempo"] = e.get(f"tempo_{lang}") or e.get("tempo") or ""
+                e["rest"] = e.get(f"rest_{lang}") or e.get("rest") or ""
+    return program_data
+
 def normalize_clinical_program_for_frontend(program_data: dict, report_data: dict, lang: str = "fr") -> dict:
     """
     Add a few legacy-compatible fields so the current frontend can read the new engine output.
@@ -1811,7 +1844,7 @@ def normalize_clinical_program_for_frontend(program_data: dict, report_data: dic
         for p in priorities[:5]
     ])
 
-    return program_data
+    return _v45_walk_program_i18n(program_data, lang)
 
 
 @app.get("/program")
@@ -1906,7 +1939,8 @@ def program(session_id: str, lang: str = "fr"):
         "api_contract_note": {
             "program_is_canonical": True,
             "prescription_is_legacy_alias": True,
-            "clinical_engine_expected": "FlexiLab Clinical Prescription Engine v2.1.1"
+            "clinical_engine_expected": "FlexiLab Clinical Prescription Engine v2.1.1",
+            "i18n_contract": "v46 backend program + results language-lock active"
         }
     }
 
