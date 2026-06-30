@@ -224,279 +224,26 @@ def select(library, slot, week, priorities, strategy, r, anch, used, sess_counts
     scored.sort(key=lambda x:x[0], reverse=True)
     return scored[0][1] if scored else None
 
-
-# -----------------------------------------------------------------------------
-# FlexiLab V45 i18n language lock
-# Lightweight dictionary-based localization. This is CPU-cheap: simple dict lookup
-# and string replacement only. No ML translation, no external calls.
-# -----------------------------------------------------------------------------
-CATEGORY_LABELS_I18N = {
-    "RB": {"fr": "Respiration / récupération", "en": "Breathing / recovery"},
-    "TM": {"fr": "Mobilité thoracique", "en": "Thoracic mobility"},
-    "SH": {"fr": "Mobilité des épaules", "en": "Shoulder mobility"},
-    "CC": {"fr": "Contrôle cervical", "en": "Cervical control"},
-    "CS": {"fr": "Stabilité du tronc", "en": "Core stability"},
-    "HM": {"fr": "Mobilité de hanche", "en": "Hip mobility"},
-    "HS": {"fr": "Mobilité ischio-jambiers", "en": "Hamstring mobility"},
-    "AM": {"fr": "Mobilité de cheville", "en": "Ankle mobility"},
-    "BP": {"fr": "Équilibre / proprioception", "en": "Balance / proprioception"},
-    "FI": {"fr": "Intégration fonctionnelle", "en": "Functional integration"},
-}
-
-OBJECTIVE_LABELS_I18N = {
-    "recovery": {"fr": "Récupération", "en": "Recovery"},
-    "breathing": {"fr": "Respiration", "en": "Breathing"},
-    "mobility": {"fr": "Mobilité", "en": "Mobility"},
-    "mobility_control": {"fr": "Mobilité contrôlée", "en": "Mobility control"},
-    "motor_control": {"fr": "Contrôle moteur", "en": "Motor control"},
-    "control": {"fr": "Contrôle", "en": "Control"},
-    "activation": {"fr": "Activation", "en": "Activation"},
-    "activation_stability": {"fr": "Activation / stabilité", "en": "Activation / stability"},
-    "stability": {"fr": "Stabilité", "en": "Stability"},
-    "functional_strength": {"fr": "Force fonctionnelle", "en": "Functional strength"},
-    "dynamic_balance": {"fr": "Équilibre dynamique", "en": "Dynamic balance"},
-    "integration": {"fr": "Intégration", "en": "Integration"},
-}
-
-PHASE_LABELS_I18N = {
-    "0_recovery": {"fr": "Récupération", "en": "Recovery"},
-    "1_restore": {"fr": "Restaurer", "en": "Restore"},
-    "2_control": {"fr": "Contrôler", "en": "Control"},
-    "3_stabilize": {"fr": "Stabiliser", "en": "Stabilize"},
-    "4_integrate": {"fr": "Intégrer", "en": "Integrate"},
-}
-
-EQUIPMENT_LABELS_I18N = {
-    "": {"fr": "Aucun matériel", "en": "No equipment"},
-    "none": {"fr": "Aucun matériel", "en": "No equipment"},
-    "no equipment": {"fr": "Aucun matériel", "en": "No equipment"},
-    "mat": {"fr": "Tapis", "en": "Mat"},
-    "exercise mat": {"fr": "Tapis", "en": "Exercise mat"},
-    "wall": {"fr": "Mur", "en": "Wall"},
-    "chair": {"fr": "Chaise", "en": "Chair"},
-    "box": {"fr": "Box / chaise", "en": "Box / chair"},
-    "stick_or_pvc": {"fr": "Bâton ou PVC", "en": "Stick or PVC"},
-    "pvc": {"fr": "Bâton PVC", "en": "PVC dowel"},
-    "pvc dowel": {"fr": "Bâton PVC", "en": "PVC dowel"},
-    "foam roller": {"fr": "Foam roller", "en": "Foam roller"},
-    "mini band": {"fr": "Mini-bande élastique", "en": "Mini band"},
-    "resistance band": {"fr": "Élastique", "en": "Resistance band"},
-    "light dumbbell": {"fr": "Haltère léger", "en": "Light dumbbell"},
-    "dumbbell": {"fr": "Haltère", "en": "Dumbbell"},
-    "kettlebell": {"fr": "Kettlebell", "en": "Kettlebell"},
-}
-
-EXERCISE_NAME_I18N = {
-    "RB001": {"fr": "Respiration crocodile", "en": "Crocodile breathing"},
-    "RB002": {"fr": "Respiration allongée", "en": "Supine breathing"},
-    "RB003": {"fr": "Respiration diaphragmatique", "en": "Diaphragmatic breathing"},
-    "RB004": {"fr": "Respiration 90/90", "en": "90/90 breathing"},
-    "TM001": {"fr": "Ouverture du livre", "en": "Open book rotation"},
-    "TM002": {"fr": "Dos rond / dos creux", "en": "Cat-camel"},
-    "TM003": {"fr": "Extension thoracique sur foam roller", "en": "Foam roller thoracic extension"},
-    "TM004": {"fr": "Thread the needle", "en": "Thread the needle"},
-    "SH001": {"fr": "Pass-through avec bâton PVC", "en": "PVC pass-through"},
-    "SH002": {"fr": "Glissement mural", "en": "Wall slide"},
-    "SH011": {"fr": "Glissement mural serratus", "en": "Serratus wall slide"},
-    "CC001": {"fr": "Double menton allongé", "en": "Supine chin tuck"},
-    "CC002": {"fr": "Maintien des fléchisseurs profonds du cou", "en": "Deep neck flexor hold"},
-    "CC003": {"fr": "Hochement cervical contrôlé", "en": "Chin nod"},
-    "CC004": {"fr": "Rétraction cervicale au mur", "en": "Wall chin retraction"},
-    "CS001": {"fr": "Dead bug", "en": "Dead bug"},
-    "CS002": {"fr": "Bird dog", "en": "Bird dog"},
-    "CS003": {"fr": "Curl-up de McGill", "en": "McGill curl-up"},
-    "CS004": {"fr": "Planche latérale", "en": "Side plank"},
-    "HM001": {"fr": "Étirement fléchisseur de hanche", "en": "Hip flexor stretch"},
-    "HM002": {"fr": "Mobilité 90/90 de hanche", "en": "90/90 hip mobility"},
-    "AM001": {"fr": "Mobilisation cheville genou-au-mur", "en": "Knee-to-wall ankle mobilization"},
-    "AM002": {"fr": "Mobilisation cheville en demi-genou", "en": "Half-kneeling ankle mobilization"},
-    "AM003": {"fr": "Mobilisation cheville en squat profond", "en": "Deep squat ankle rock"},
-    "AM004": {"fr": "Élévation des talons", "en": "Heel raise"},
-    "FI001": {"fr": "Goblet squat vers box", "en": "Goblet squat to box"},
-    "FI002": {"fr": "Squat vers box", "en": "Squat to box"},
-    "FI006": {"fr": "Soulevé de terre unipodal avec reach", "en": "Single-leg RDL reach"},
-    "FI011": {"fr": "Fente arrière", "en": "Reverse lunge"},
-    "FI012": {"fr": "Assis-debout", "en": "Sit to stand"},
-}
-
-TIP_I18N_BY_CATEGORY = {
-    "RB": {"fr": "Respirez lentement par le nez, relâchez les épaules et allongez l’expiration.", "en": "Breathe slowly through the nose, relax the shoulders and lengthen the exhale."},
-    "TM": {"fr": "Bougez depuis le haut du dos, gardez le bassin stable et restez dans une amplitude confortable.", "en": "Move from the upper back, keep the pelvis stable and stay in a comfortable range."},
-    "SH": {"fr": "Gardez les côtes abaissées, les épaules détendues et évitez de cambrer le dos.", "en": "Keep the ribs down, shoulders relaxed and avoid arching the back."},
-    "CC": {"fr": "Gardez la nuque longue, la mâchoire détendue et évitez de lever la tête.", "en": "Keep the neck long, jaw relaxed and avoid lifting the head."},
-    "CS": {"fr": "Gardez le bassin stable, respirez et privilégiez la qualité du contrôle.", "en": "Keep the pelvis stable, breathe and prioritize control quality."},
-    "HM": {"fr": "Gardez une amplitude sans douleur et évitez de compenser avec le bas du dos.", "en": "Use a pain-free range and avoid compensating with the lower back."},
-    "HS": {"fr": "Gardez le genou tendu sans forcer et respirez dans l’amplitude.", "en": "Keep the knee straight without forcing and breathe into the range."},
-    "AM": {"fr": "Gardez le talon au sol et avancez le genou progressivement sans douleur.", "en": "Keep the heel down and move the knee forward progressively without pain."},
-    "BP": {"fr": "Bougez lentement, gardez l’alignement et recherchez la stabilité avant l’amplitude.", "en": "Move slowly, keep alignment and prioritize stability before range."},
-    "FI": {"fr": "Contrôlez l’alignement, bougez lentement et gardez une respiration régulière.", "en": "Control alignment, move slowly and keep steady breathing."},
-}
-
-RATIONALE_I18N_BY_CATEGORY = {
-    "RB": {"fr": "Inclus pour améliorer la respiration, réduire les tensions inutiles et préparer un meilleur contrôle postural.", "en": "Included to improve breathing mechanics, reduce unnecessary tension and prepare better postural control."},
-    "TM": {"fr": "Inclus pour améliorer la mobilité du haut du dos et réduire les compensations cervicales, scapulaires et du tronc.", "en": "Included to improve upper-back mobility and reduce cervical, scapular and trunk compensations."},
-    "SH": {"fr": "Inclus pour soutenir la mobilité des épaules et la mécanique scapulaire en complément du travail thoracique et cervical.", "en": "Included to support shoulder mobility and scapular mechanics alongside thoracic and cervical work."},
-    "CC": {"fr": "Inclus pour renforcer le contrôle cervical, l’endurance posturale et limiter les tensions inutiles au niveau du cou.", "en": "Included to reinforce cervical control, postural endurance and reduce unnecessary neck tension."},
-    "CS": {"fr": "Inclus pour améliorer le contrôle lombo-pelvien et la stabilité du tronc pendant les mouvements fonctionnels.", "en": "Included to improve lumbopelvic control and trunk stability during functional movement."},
-    "HM": {"fr": "Inclus pour soutenir la mobilité de hanche et réduire les compensations du bassin et du bas du dos.", "en": "Included to support hip mobility and reduce pelvic and lower-back compensation."},
-    "HS": {"fr": "Inclus pour améliorer la mobilité active hanche/ischio-jambiers et l’équilibre gauche-droite.", "en": "Included to improve active hip/hamstring mobility and left-right balance."},
-    "AM": {"fr": "Inclus comme soutien au squat car la mobilité de cheville peut influencer l’inclinaison du tronc.", "en": "Included as squat support because ankle mobility can influence trunk lean."},
-    "BP": {"fr": "Inclus pour améliorer le contrôle postural, l’équilibre et la coordination du mouvement.", "en": "Included to improve postural control, balance and movement coordination."},
-    "FI": {"fr": "Inclus pour transférer les gains de mobilité et de contrôle vers des mouvements fonctionnels du quotidien.", "en": "Included to transfer mobility and control gains into daily functional movement."},
-}
-
-DYNAMIC_TEXT_REPLACEMENTS = {
-    "fr": {
-        "Reset / breathing": "Reset / respiration",
-        "Primary mobility": "Mobilité principale",
-        "Secondary mobility": "Mobilité secondaire",
-        "Activation / control": "Activation / contrôle",
-        "Functional integration": "Intégration fonctionnelle",
-        "Cool-down": "Retour au calme",
-        "Restore": "Restaurer", "Control": "Contrôler", "Stabilize": "Stabiliser", "Integrate": "Intégrer",
-        "controlled": "contrôlé", "slow breathing": "respiration lente", "as needed": "selon besoin",
-        "reps / side": "répétitions de chaque côté", "reps": "répétitions", "sec holds": "secondes de maintien", "sec": "secondes",
-    },
-    "en": {
-        "Reset / respiration": "Reset / breathing",
-        "Mobilité principale": "Primary mobility",
-        "Mobilité secondaire": "Secondary mobility",
-        "Activation / contrôle": "Activation / control",
-        "Intégration fonctionnelle": "Functional integration",
-        "Retour au calme": "Cool-down",
-        "Restaurer": "Restore", "Contrôler": "Control", "Stabiliser": "Stabilize", "Intégrer": "Integrate",
-        "contrôlé": "controlled", "respiration lente": "slow breathing", "selon besoin": "as needed",
-        "répétitions de chaque côté": "reps / side", "répétitions": "reps", "secondes de maintien": "sec holds", "secondes": "sec",
-    }
-}
-
-def _lng(lang: str) -> str:
-    return "en" if str(lang).lower().startswith("en") else "fr"
-
-def _replace_dynamic_text(value: Any, lang: str) -> str:
-    lang = _lng(lang)
-    s = str(value or "")
-    for src, dst in DYNAMIC_TEXT_REPLACEMENTS.get(lang, {}).items():
-        s = s.replace(src, dst)
-    return s
-
-def _equipment_i18n(value: Any, lang: str) -> str:
-    lang = _lng(lang)
-    raw = str(value or "").strip()
-    if not raw:
-        return EQUIPMENT_LABELS_I18N[""][lang]
-    parts = [p.strip() for p in raw.replace(";", ",").split(",") if p.strip()]
-    out = []
-    for p in parts:
-        key = p.lower().strip()
-        out.append(EQUIPMENT_LABELS_I18N.get(key, {"fr": p, "en": p}).get(lang, p))
-    return ", ".join(out) if out else EQUIPMENT_LABELS_I18N[""][lang]
-
-def _exercise_name_i18n(ex: dict, lang: str) -> str:
-    lang = _lng(lang)
-    eid = str(ex.get("exercise_id") or ex.get("id") or "").upper()
-    if eid in EXERCISE_NAME_I18N:
-        return EXERCISE_NAME_I18N[eid][lang]
-    return ex.get(f"name_{lang}") or ex.get("name_fr") or ex.get("name_en") or ex.get("name") or eid
-
-def _category_i18n(code: str, lang: str) -> str:
-    lang = _lng(lang)
-    code = str(code or "").upper()
-    return CATEGORY_LABELS_I18N.get(code, {"fr": code, "en": code}).get(lang, code)
-
-def _objective_i18n(value: Any, lang: str) -> str:
-    lang = _lng(lang)
-    key = str(value or "").lower().strip()
-    return OBJECTIVE_LABELS_I18N.get(key, {"fr": _replace_dynamic_text(value, "fr"), "en": _replace_dynamic_text(value, "en")}).get(lang, str(value or ""))
-
-def _phase_i18n(value: Any, lang: str) -> str:
-    lang = _lng(lang)
-    key = str(value or "").lower().strip()
-    return PHASE_LABELS_I18N.get(key, {"fr": _replace_dynamic_text(value, "fr"), "en": _replace_dynamic_text(value, "en")}).get(lang, str(value or ""))
-
-def _tip_i18n(ex: dict, lang: str) -> str:
-    lang = _lng(lang)
-    c = cat(ex)
-    return TIP_I18N_BY_CATEGORY.get(c, TIP_I18N_BY_CATEGORY["FI"])[lang]
-
-def _rationale_i18n(ex: dict, lang: str) -> str:
-    lang = _lng(lang)
-    c = cat(ex)
-    return RATIONALE_I18N_BY_CATEGORY.get(c, RATIONALE_I18N_BY_CATEGORY["FI"])[lang]
-
-
 def loc(ex, slot, priorities, lang):
-    lang = _lng(lang)
-    fr, en = BLOCK_LABELS.get(slot, (slot, slot))
-    related = []
+    fr,en = BLOCK_LABELS.get(slot,(slot,slot))
+    related=[]
     for p in priorities[:4]:
-        if cat(ex) in DOMAIN_TO_CATS.get(p.get("id"), []) or p.get("id") in exdomains(ex):
-            related.append(p.get("label") if lang == "fr" else p.get("label_en", p.get("label", "")))
-    related = [r for r in related if r]
-    why_prefix = "Sélectionné pour soutenir : " if lang == "fr" else "Selected to support: "
-    why = why_prefix + ", ".join(related[:3] or [_category_i18n(cat(ex), lang)])
-    eid = ex.get("exercise_id")
+        if cat(ex) in DOMAIN_TO_CATS.get(p["id"],[]) or p["id"] in exdomains(ex):
+            related.append(p["label"] if lang=="fr" else p.get("label_en",p["label"]))
+    why = ("Sélectionné pour soutenir : " if lang=="fr" else "Selected to support: ") + ", ".join(related[:3] or [ex.get("category_fr") or ex.get("category_en") or cat(ex)])
     return {
-        "id": eid,
-        "exercise_id": eid,
-        "block": slot,
-        "block_label": _replace_dynamic_text(fr if lang == "fr" else en, lang),
-        "block_label_fr": _replace_dynamic_text(fr, "fr"),
-        "block_label_en": _replace_dynamic_text(en, "en"),
-        "name": _exercise_name_i18n(ex, lang),
-        "name_fr": _exercise_name_i18n(ex, "fr"),
-        "name_en": _exercise_name_i18n(ex, "en"),
-        "category_code": cat(ex),
-        "target": _category_i18n(cat(ex), lang),
-        "target_fr": _category_i18n(cat(ex), "fr"),
-        "target_en": _category_i18n(cat(ex), "en"),
-        "primary_objective": ex.get("primary_objective"),
-        "primary_objective_label": _objective_i18n(ex.get("primary_objective"), lang),
-        "primary_objective_label_fr": _objective_i18n(ex.get("primary_objective"), "fr"),
-        "primary_objective_label_en": _objective_i18n(ex.get("primary_objective"), "en"),
-        "difficulty": ex.get("difficulty_1_5"),
-        "phase": ex.get("phase"),
-        "phase_label": _phase_i18n(ex.get("phase"), lang),
-        "phase_label_fr": _phase_i18n(ex.get("phase"), "fr"),
-        "phase_label_en": _phase_i18n(ex.get("phase"), "en"),
-        "equipment": _equipment_i18n(ex.get("equipment", ""), lang),
-        "equipment_fr": _equipment_i18n(ex.get("equipment", ""), "fr"),
-        "equipment_en": _equipment_i18n(ex.get("equipment", ""), "en"),
-        "material": _equipment_i18n(ex.get("equipment", ""), lang),
-        "material_fr": _equipment_i18n(ex.get("equipment", ""), "fr"),
-        "material_en": _equipment_i18n(ex.get("equipment", ""), "en"),
-        "sets": ex.get("sets", ""),
-        "reps_time": _replace_dynamic_text(ex.get("reps_time", ""), lang),
-        "reps_time_fr": _replace_dynamic_text(ex.get("reps_time", ""), "fr"),
-        "reps_time_en": _replace_dynamic_text(ex.get("reps_time", ""), "en"),
-        "tempo": _replace_dynamic_text(ex.get("tempo", ""), lang),
-        "tempo_fr": _replace_dynamic_text(ex.get("tempo", ""), "fr"),
-        "tempo_en": _replace_dynamic_text(ex.get("tempo", ""), "en"),
-        "rest": _replace_dynamic_text(ex.get("rest", ""), lang),
-        "rest_fr": _replace_dynamic_text(ex.get("rest", ""), "fr"),
-        "rest_en": _replace_dynamic_text(ex.get("rest", ""), "en"),
-        "frequency_per_week": ex.get("frequency_per_week", ""),
-        "coaching_cues": _tip_i18n(ex, lang),
-        "coaching_cues_fr": _tip_i18n(ex, "fr"),
-        "coaching_cues_en": _tip_i18n(ex, "en"),
-        "tips": _tip_i18n(ex, lang),
-        "tips_fr": _tip_i18n(ex, "fr"),
-        "tips_en": _tip_i18n(ex, "en"),
-        "common_errors": _replace_dynamic_text(ex.get("common_errors", ""), lang),
-        "clinical_rationale": _rationale_i18n(ex, lang),
-        "clinical_rationale_fr": _rationale_i18n(ex, "fr"),
-        "clinical_rationale_en": _rationale_i18n(ex, "en"),
-        "why_in_this_program": why,
-        "why_in_this_program_fr": why_prefix.replace("Selected to support: ", "Sélectionné pour soutenir : ") + ", ".join(related[:3] or [_category_i18n(cat(ex), "fr")]),
-        "why_in_this_program_en": why_prefix.replace("Sélectionné pour soutenir : ", "Selected to support: ") + ", ".join(related[:3] or [_category_i18n(cat(ex), "en")]),
-        "regression_id": ex.get("regression_id", ""),
-        "progression_id": ex.get("progression_id", ""),
-        "pain_rule": ex.get("pain_rule", ""),
-        "asymmetry_rule": ex.get("asymmetry_rule", ""),
-        "video_url": ex.get("video_url", ""),
-        "vimeo_url": ex.get("vimeo_url", ""),
-        "mp4_url": ex.get("mp4_url", ""),
-        "thumbnail_url": ex.get("thumbnail_url", ""),
+        "id":ex.get("exercise_id"),"block":slot,"block_label":fr if lang=="fr" else en,
+        "name":ex.get("name_fr") if lang=="fr" else ex.get("name_en"),
+        "name_fr":ex.get("name_fr"),"name_en":ex.get("name_en"),
+        "category_code":cat(ex),"target":ex.get("category_fr") if lang=="fr" else ex.get("category_en"),
+        "primary_objective":ex.get("primary_objective"),"difficulty":ex.get("difficulty_1_5"),"phase":ex.get("phase"),
+        "equipment":ex.get("equipment",""),"sets":ex.get("sets",""),"reps_time":ex.get("reps_time",""),
+        "tempo":ex.get("tempo",""),"rest":ex.get("rest",""),"frequency_per_week":ex.get("frequency_per_week",""),
+        "coaching_cues":ex.get("coaching_cues",""),"common_errors":ex.get("common_errors",""),
+        "clinical_rationale":ex.get("clinical_rationale",""),"why_in_this_program":why,
+        "regression_id":ex.get("regression_id",""),"progression_id":ex.get("progression_id",""),
+        "pain_rule":ex.get("pain_rule",""),"asymmetry_rule":ex.get("asymmetry_rule",""),
+        "video_url":ex.get("video_url",""),"vimeo_url":ex.get("vimeo_url",""),"mp4_url":ex.get("mp4_url",""),"thumbnail_url":ex.get("thumbnail_url","")
     }
 
 
@@ -1402,42 +1149,711 @@ def generate_clinical_prescription_v21(screening_payload, exercise_library, rule
     return program
 
 generate_clinical_prescription = generate_clinical_prescription_v21
+# -----------------------------------------------------------------------------
+# FlexiLab V54 Clinical Reasoning Engine
+# Backend-only wrapper around the existing v2.2 engine.
+# Goals:
+# - Keep the current API contract used by the HTML.
+# - Add severity-aware and pain-aware loading rules.
+# - Use bands/weights only when clinically appropriate by week.
+# - Reduce repeated exercises within the same week.
+# - Keep internal reasoning out of user-facing exercise text.
+# -----------------------------------------------------------------------------
+_generate_clinical_prescription_v54_base = generate_clinical_prescription_v21
+ENGINE_VERSION = "FlexiLab Clinical Prescription Engine v5.4 Clinical Reasoning"
 
-# V45 final wrapper: language-lock every exercise after all clinical rules.
-_generate_clinical_prescription_v45_before_i18n = generate_clinical_prescription_v21
+V54_CATEGORY_DOMAIN = {
+    "CC": "cervical_control",
+    "TM": "thoracic_mobility",
+    "SH": "shoulder_mobility",
+    "CS": "core_stability",
+    "HM": "hip_mobility",
+    "HS": "hamstring_mobility",
+    "AM": "ankle_mobility",
+    "BP": "balance_proprioception",
+    "FI": "functional_integration",
+    "RB": "recovery_breathing",
+}
 
-def _language_lock_program(program: dict, lang: str = "fr") -> dict:
-    lang = _lng(lang)
-    if not isinstance(program, dict):
-        return program
-    program["language"] = lang
+V54_ALLOWED_LOADING = {"none", "bodyweight", "foam_roller", "stick_or_pvc", "balance_pad", "elastic_band", "light_weight", "trx"}
+
+V54_LOAD_ORDER = {
+    "none": 0,
+    "bodyweight": 0,
+    "foam_roller": 0,
+    "stick_or_pvc": 1,
+    "balance_pad": 2,
+    "elastic_band": 3,
+    "trx": 4,
+    "light_weight": 5,
+}
+
+
+def _v54_normalize_lang(language):
+    return "en" if str(language or "").lower().startswith("en") else "fr"
+
+
+def _v54_text(lang, fr, en):
+    return en if _v54_normalize_lang(lang) == "en" else fr
+
+
+def _v54_equipment(exercise):
+    eq = str((exercise or {}).get("equipment") or "none").strip().lower()
+    return eq if eq in V54_ALLOWED_LOADING else "none"
+
+
+def _v54_pain_status(screening_payload):
+    """
+    User-facing pain states are: no_pain, discomfort, pain.
+    This helper accepts future frontend payloads but remains safe with the
+    current frontend, where pain may still be absent from stored intake_json.
+    """
+    report = (screening_payload or {}).get("report", screening_payload) or {}
+    intake = (
+        (screening_payload or {}).get("intake_context")
+        or report.get("intake_context")
+        or (screening_payload or {}).get("intake")
+        or {}
+    )
+    values = []
+
+    def collect(v):
+        if v is None:
+            return
+        if isinstance(v, dict):
+            for vv in v.values():
+                collect(vv)
+        elif isinstance(v, (list, tuple)):
+            for vv in v:
+                collect(vv)
+        else:
+            values.append(str(v).strip().lower())
+
+    if isinstance(intake, dict):
+        for key in ["pain_status", "pain", "pain_level", "movement_pain", "pain_clearance", "painClearance", "pain_by_test", "painByTest"]:
+            collect(intake.get(key))
+        for key in ["pain_score", "painIntensity"]:
+            try:
+                score = float(intake.get(key))
+                if score >= 4:
+                    values.append("pain")
+                elif score > 0:
+                    values.append("discomfort")
+            except Exception:
+                pass
+
+    # Also accept future report item-level flags.
+    for item in _report_items({"report": report}).values():
+        for key in ["pain_status", "pain", "pain_flag", "discomfort", "discomfort_flag"]:
+            collect(item.get(key))
+
+    joined = " ".join(values)
+    if any(x in joined for x in ["pain", "douleur", "douloureux", "true"]):
+        # A literal 'no_pain' should not become pain.
+        if "no_pain" in joined or "no pain" in joined or "aucune douleur" in joined:
+            if "discomfort" not in joined and "inconfort" not in joined and "gêne" not in joined and "gene" not in joined:
+                return "no_pain"
+        return "pain"
+    if any(x in joined for x in ["discomfort", "inconfort", "gêne", "gene", "mild"]):
+        return "discomfort"
+    return "no_pain"
+
+
+def _v54_domain_scores(program, screening_payload):
+    out = {}
+    for d in (program or {}).get("clinical_priorities", []) or []:
+        if d.get("id"):
+            out[d.get("id")] = fnum(d.get("score"), 100)
+    report = (screening_payload or {}).get("report", screening_payload) or {}
+    for d in ((report.get("score_v2") or {}).get("domain_scores") or []):
+        if d.get("id") and d.get("id") not in out:
+            out[d.get("id")] = fnum(d.get("score"), 100)
+    return out
+
+
+def _v54_domain_severity(domain_id, domain_scores):
+    if domain_id == "recovery_breathing":
+        return "support"
+    score = domain_scores.get(domain_id)
+    if score is None:
+        return "unassessed"
+    score = fnum(score, 100)
+    if score < 60:
+        return "red"
+    if score < 80:
+        return "yellow"
+    return "green"
+
+
+def _v54_allowed_load_level(severity, pain_status, week):
+    """
+    Returns max loading score allowed this week.
+    none/bodyweight/foam_roller=0, stick=1, balance=2, band=3, trx=4, light_weight=5.
+    """
+    week = int(week or 1)
+    if pain_status == "pain":
+        return 0
+    if pain_status == "discomfort":
+        if severity == "red":
+            return 0 if week <= 3 else 1
+        if severity == "yellow":
+            return 0 if week <= 2 else 2 if week == 3 else 3
+        return 1 if week <= 2 else 2 if week == 3 else 3
+    # no pain
+    if severity == "red":
+        return 0 if week <= 2 else 2 if week == 3 else 3
+    if severity == "yellow":
+        return 0 if week == 1 else 2 if week == 2 else 3 if week == 3 else 5
+    if severity == "green":
+        return 1 if week == 1 else 3 if week == 2 else 5
+    return 0 if week <= 2 else 2
+
+
+def _v54_exercise_domain(exercise):
+    return V54_CATEGORY_DOMAIN.get(cat(exercise), "functional_integration")
+
+
+def _v54_is_load_allowed(exercise, week, pain_status, domain_scores):
+    domain_id = _v54_exercise_domain(exercise)
+    severity = _v54_domain_severity(domain_id, domain_scores)
+    max_level = _v54_allowed_load_level(severity, pain_status, week)
+    eq_level = V54_LOAD_ORDER.get(_v54_equipment(exercise), 0)
+    if pain_status == "pain" and _v54_equipment(exercise) in ["elastic_band", "light_weight", "trx", "balance_pad"]:
+        return False
+    return eq_level <= max_level
+
+
+def _v54_candidate_for_slot(exercise_library, category_code, week, pain_status, domain_scores, session_exercises, prefer_loaded=False):
+    used_ids = {e.get("id") for e in session_exercises or []}
+    max_diff = WEEK_META.get(int(week), WEEK_META[1])[2]
+    candidates = []
+    for e in exercise_library or []:
+        if cat(e) != category_code:
+            continue
+        if e.get("exercise_id") in used_ids:
+            continue
+        if diff(e) > max_diff:
+            continue
+        if not _v54_is_load_allowed(e, week, pain_status, domain_scores):
+            continue
+        candidates.append(e)
+    if not candidates:
+        return None
+
+    def score(e):
+        eq = _v54_equipment(e)
+        eq_level = V54_LOAD_ORDER.get(eq, 0)
+        sc = 0
+        if prefer_loaded:
+            sc += eq_level * 10
+        else:
+            sc -= eq_level * 6
+        # Prefer stability exercises in stability blocks and clinically simple options early.
+        o = obj(e)
+        if "stability" in o or "activation_stability" in o:
+            sc += 18
+        if "mobility" in o and int(week) <= 2:
+            sc += 8
+        sc -= abs(diff(e) - min(max(int(week), 1), 4)) * 3
+        return sc
+
+    candidates.sort(key=lambda e: (score(e), -diff(e), e.get("exercise_id", "")), reverse=True)
+    return candidates[0]
+
+
+def _v54_block_for_category(category_code, fallback="stability"):
+    if category_code == "RB":
+        return "reset"
+    if category_code in ["TM", "SH", "HM", "HS", "AM"]:
+        return "mobility_primary" if fallback.startswith("mobility") else fallback
+    if category_code in ["CS", "CC", "BP"]:
+        return "stability" if fallback in ["stability", "integration"] else "activation"
+    if category_code == "FI":
+        return "integration"
+    return fallback
+
+
+def _v54_recompute_session(session):
+    session["clinical_balance"] = recompute_clinical_balance(session)
+    session["blocks"] = [e.get("block") for e in session.get("exercises", []) or []]
+    session["estimated_duration_minutes"] = max(15, min(35, 5 + len(session.get("exercises", []) or []) * 3))
+
+
+def _v54_apply_load_gating(program, exercise_library, priorities, pain_status, domain_scores, lang="fr"):
+    """Replace exercises whose equipment/load is too advanced for severity + pain + week."""
     for week in program.get("weeks", []) or []:
-        if week.get("phase"):
-            week["phase"] = _replace_dynamic_text(week.get("phase"), lang)
-        if week.get("objective"):
-            week["objective"] = _replace_dynamic_text(week.get("objective"), lang)
-        for session in week.get("sessions", []) or week.get("days", []) or []:
-            if session.get("focus"):
-                session["focus"] = _replace_dynamic_text(session.get("focus"), lang)
-            for exercise in session.get("exercises", []) or []:
-                eid = exercise.get("exercise_id") or exercise.get("id")
-                code = exercise.get("category_code")
-                exercise["exercise_id"] = eid
-                exercise["name"] = EXERCISE_NAME_I18N.get(str(eid or "").upper(), {"fr": exercise.get("name_fr") or exercise.get("name"), "en": exercise.get("name_en") or exercise.get("name")})[lang]
-                exercise["target"] = _category_i18n(code, lang)
-                exercise["equipment"] = exercise.get(f"equipment_{lang}") or _equipment_i18n(exercise.get("equipment", ""), lang)
-                exercise["material"] = exercise.get(f"material_{lang}") or exercise["equipment"]
-                exercise["tips"] = exercise.get(f"tips_{lang}") or TIP_I18N_BY_CATEGORY.get(str(code or "").upper(), TIP_I18N_BY_CATEGORY["FI"])[lang]
-                exercise["coaching_cues"] = exercise.get(f"coaching_cues_{lang}") or exercise["tips"]
-                exercise["clinical_rationale"] = exercise.get(f"clinical_rationale_{lang}") or RATIONALE_I18N_BY_CATEGORY.get(str(code or "").upper(), RATIONALE_I18N_BY_CATEGORY["FI"])[lang]
-                exercise["why_in_this_program"] = exercise.get(f"why_in_this_program_{lang}") or _replace_dynamic_text(exercise.get("why_in_this_program", ""), lang)
-                exercise["reps_time"] = exercise.get(f"reps_time_{lang}") or _replace_dynamic_text(exercise.get("reps_time", ""), lang)
-                exercise["tempo"] = exercise.get(f"tempo_{lang}") or _replace_dynamic_text(exercise.get("tempo", ""), lang)
-                exercise["rest"] = exercise.get(f"rest_{lang}") or _replace_dynamic_text(exercise.get("rest", ""), lang)
+        week_number = int(week.get("week", 1))
+        for session in week.get("sessions", []) or []:
+            exercises = session.get("exercises", []) or []
+            for idx, exercise in enumerate(list(exercises)):
+                ex_id = exercise.get("id")
+                source = next((e for e in exercise_library or [] if e.get("exercise_id") == ex_id), None)
+                if not source:
+                    continue
+                if _v54_is_load_allowed(source, week_number, pain_status, domain_scores):
+                    continue
+                replacement = _v54_candidate_for_slot(
+                    exercise_library,
+                    exercise.get("category_code") or cat(source),
+                    week_number,
+                    pain_status,
+                    domain_scores,
+                    exercises,
+                    prefer_loaded=False,
+                )
+                if replacement:
+                    block = exercise.get("block") or _v54_block_for_category(cat(replacement))
+                    exercises[idx] = loc(replacement, block, priorities, lang)
+            session["exercises"] = exercises
+            _v54_recompute_session(session)
     return program
 
+
+def _v54_add_equipment_progression(program, exercise_library, priorities, pain_status, domain_scores, lang="fr"):
+    """
+    When allowed, introduce band/weight options in later weeks without forcing them too early.
+    This upgrades one suitable stability/integration slot per session at most.
+    """
+    if pain_status == "pain":
+        return program
+
+    priority_domains = [p.get("id") for p in priorities[:4] if p.get("id")]
+    priority_categories = []
+    for domain_id in priority_domains:
+        for c in DOMAIN_TO_CATS.get(domain_id, []):
+            if c not in priority_categories:
+                priority_categories.append(c)
+    # Core and shoulder are the most relevant categories for band/weight stability progression.
+    for c in ["CS", "SH", "FI", "HM", "AM"]:
+        if c not in priority_categories:
+            priority_categories.append(c)
+
+    for week in program.get("weeks", []) or []:
+        week_number = int(week.get("week", 1))
+        for session in week.get("sessions", []) or []:
+            exercises = session.get("exercises", []) or []
+            has_loaded = any(_v54_equipment({"equipment": e.get("equipment")}) in ["elastic_band", "light_weight", "trx"] for e in exercises)
+            if has_loaded:
+                continue
+            # Do not add loading before the policy allows it for the relevant domain.
+            replacement = None
+            replace_idx = None
+            for cat_code in priority_categories:
+                domain_id = V54_CATEGORY_DOMAIN.get(cat_code)
+                severity = _v54_domain_severity(domain_id, domain_scores)
+                max_level = _v54_allowed_load_level(severity, pain_status, week_number)
+                if max_level < 3:
+                    continue
+                candidate = _v54_candidate_for_slot(
+                    exercise_library,
+                    cat_code,
+                    week_number,
+                    pain_status,
+                    domain_scores,
+                    exercises,
+                    prefer_loaded=True,
+                )
+                if candidate and _v54_equipment(candidate) in ["elastic_band", "light_weight", "trx"]:
+                    # Replace a same-category non-loaded stability/integration exercise when possible.
+                    for i, ex in enumerate(exercises):
+                        if ex.get("category_code") == cat_code and _v54_equipment({"equipment": ex.get("equipment")}) not in ["elastic_band", "light_weight", "trx"]:
+                            replace_idx = i
+                            replacement = candidate
+                            break
+                    if replacement:
+                        break
+            if replacement is not None and replace_idx is not None:
+                old_block = exercises[replace_idx].get("block") or _v54_block_for_category(cat(replacement), "stability")
+                exercises[replace_idx] = loc(replacement, old_block, priorities, lang)
+                session["exercises"] = exercises
+                _v54_recompute_session(session)
+    return program
+
+
+def _v54_reduce_week_duplicates(program, exercise_library, priorities, pain_status, domain_scores, lang="fr"):
+    """Avoid exact same exercise appearing too many times in the same week."""
+    protected_categories = {"RB"} if pain_status != "pain" else {"RB", "TM", "CC"}
+    for week in program.get("weeks", []) or []:
+        week_number = int(week.get("week", 1))
+        seen = {}
+        for session in week.get("sessions", []) or []:
+            exercises = session.get("exercises", []) or []
+            for idx, exercise in enumerate(list(exercises)):
+                ex_id = exercise.get("id")
+                category_code = exercise.get("category_code")
+                seen[ex_id] = seen.get(ex_id, 0) + 1
+                allowed_repeats = 2 if category_code in protected_categories else 1
+                if seen.get(ex_id, 0) <= allowed_repeats:
+                    continue
+                replacement = _v54_candidate_for_slot(
+                    exercise_library,
+                    category_code,
+                    week_number,
+                    pain_status,
+                    domain_scores,
+                    exercises,
+                    prefer_loaded=False,
+                )
+                if replacement and replacement.get("exercise_id") != ex_id:
+                    block = exercise.get("block") or _v54_block_for_category(cat(replacement))
+                    exercises[idx] = loc(replacement, block, priorities, lang)
+                    seen[replacement.get("exercise_id")] = seen.get(replacement.get("exercise_id"), 0) + 1
+            session["exercises"] = exercises
+            _v54_recompute_session(session)
+    return program
+
+
+def _v54_sets_for_exercise(exercise, week, pain_status, domain_scores):
+    category_code = exercise.get("category_code")
+    domain_id = V54_CATEGORY_DOMAIN.get(category_code)
+    severity = _v54_domain_severity(domain_id, domain_scores)
+    block = str(exercise.get("block") or "")
+    if pain_status == "pain":
+        return "1 set" if block in ["reset", "recovery"] else "2 sets"
+    if severity == "red":
+        return "2 sets" if int(week) <= 2 else "3 sets"
+    if severity == "yellow":
+        return "2 sets" if int(week) == 1 else "3 sets"
+    if block in ["integration", "stability"] and int(week) >= 3:
+        return "3 sets"
+    return "2 sets"
+
+
+def _v54_clean_reps_time(raw, lang="fr"):
+    raw = str(raw or "").strip()
+    if not raw:
+        return "6–8 repetitions" if lang == "en" else "6 à 8 répétitions"
+    text = raw.replace("reps", "repetitions" if lang == "en" else "répétitions")
+    text = text.replace("sec", "seconds" if lang == "en" else "secondes")
+    text = text.replace("holds", "holds" if lang == "en" else "maintien")
+    # Never let old combined prescriptions leak into this field.
+    for marker in ["<br>", "Breathe", "Respirez", "sets", "séries", "series"]:
+        if marker in text:
+            text = text.split(marker)[0].strip()
+    if not text:
+        text = "6–8 repetitions" if lang == "en" else "6 à 8 répétitions"
+    return text
+
+
+def _v54_equipment_label(eq, lang="fr"):
+    labels = {
+        "none": ("Aucun", "None"),
+        "bodyweight": ("Poids du corps", "Bodyweight"),
+        "foam_roller": ("Foam roller", "Foam roller"),
+        "stick_or_pvc": ("Bâton ou PVC", "Stick or PVC"),
+        "balance_pad": ("Coussin d’équilibre", "Balance pad"),
+        "elastic_band": ("Élastique", "Elastic band"),
+        "light_weight": ("Charge légère", "Light weight"),
+        "trx": ("Sangles/TRX", "TRX/suspension straps"),
+    }
+    fr, en = labels.get(str(eq or "none"), labels["none"])
+    return en if lang == "en" else fr
+
+
+def _v54_user_instruction(exercise, week, pain_status, domain_scores, lang="fr"):
+    category_code = exercise.get("category_code")
+    domain_id = V54_CATEGORY_DOMAIN.get(category_code)
+    severity = _v54_domain_severity(domain_id, domain_scores)
+    eq = exercise.get("equipment") or "none"
+    loaded = eq in ["elastic_band", "light_weight", "trx"]
+    if lang == "fr":
+        if pain_status == "pain":
+            return "Travaillez dans une amplitude confortable, sans provoquer la douleur. Le but est de relâcher les tensions et de restaurer un mouvement facile."
+        if loaded:
+            return "Utilisez une résistance légère et contrôlée. Gardez la qualité du mouvement prioritaire sur l’intensité."
+        if severity == "red":
+            return "Réalisez le mouvement lentement pour restaurer le contrôle et réduire les compensations."
+        if severity == "yellow":
+            return "Gardez un rythme contrôlé et cherchez une exécution fluide et symétrique."
+        return "Conservez une exécution propre et contrôlée pour soutenir la progression globale."
+    else:
+        if pain_status == "pain":
+            return "Work in a comfortable range without provoking pain. The goal is to reduce tension and restore easy movement."
+        if loaded:
+            return "Use light, controlled resistance. Movement quality is more important than intensity."
+        if severity == "red":
+            return "Move slowly to restore control and reduce compensations."
+        if severity == "yellow":
+            return "Keep a controlled rhythm and aim for smooth, symmetrical execution."
+        return "Maintain clean, controlled execution to support the overall progression."
+
+
+def _v54_user_tip(exercise, pain_status, lang="fr"):
+    cues = str(exercise.get("coaching_cues") or "").strip()
+    if cues:
+        # Keep the first cue only for a cleaner table.
+        first = cues.split(";")[0].strip()
+        if first:
+            return first[0].upper() + first[1:]
+    return _v54_text(lang, "Respirez calmement et arrêtez si une douleur apparaît.", "Breathe calmly and stop if pain appears.")
+
+
+def _v54_clean_user_fields(program, pain_status, domain_scores, lang="fr"):
+    for week in program.get("weeks", []) or []:
+        week_number = int(week.get("week", 1))
+        # Never show internal strategy text as the client-facing weekly goal.
+        week["clinical_goal"] = _v54_text(
+            lang,
+            "Améliorer le contrôle du mouvement, restaurer la mobilité et intégrer progressivement les corrections dans des exercices fonctionnels.",
+            "Improve movement control, restore mobility, and progressively integrate corrections into functional exercises.",
+        )
+        for session in week.get("sessions", []) or []:
+            for exercise in session.get("exercises", []) or []:
+                eq = _v54_equipment(exercise)
+                exercise["sets"] = _v54_sets_for_exercise(exercise, week_number, pain_status, domain_scores)
+                exercise["reps_time"] = _v54_clean_reps_time(exercise.get("reps_time"), lang)
+                exercise["equipment"] = eq
+                exercise["equipment_label"] = _v54_equipment_label(eq, lang)
+                exercise["instructions"] = _v54_user_instruction(exercise, week_number, pain_status, domain_scores, lang)
+                exercise["tips"] = _v54_user_tip(exercise, pain_status, lang)
+                # Replace internal selection text with concise client-facing rationale.
+                exercise["why_in_this_program"] = exercise["instructions"]
+    return program
+
+
+def _v54_update_readiness(program, pain_status, lang="fr"):
+    labels = {
+        "no_pain": ("Aucune douleur", "No pain"),
+        "discomfort": ("Gêne / inconfort", "Discomfort"),
+        "pain": ("Douleur", "Pain"),
+    }
+    fr, en = labels.get(pain_status, labels["no_pain"])
+    program.setdefault("clinical_readiness", {})
+    program["clinical_readiness"].update({
+        "pain_status": pain_status,
+        "pain_status_label": en if lang == "en" else fr,
+        "loading_allowed": pain_status != "pain",
+        "loading_rule": _v54_text(
+            lang,
+            "La charge est introduite progressivement selon la sévérité du score et uniquement si le mouvement reste confortable.",
+            "Loading is introduced progressively based on score severity and only when movement remains comfortable.",
+        ),
+    })
+    return program
+
+
+def _v54_quality_flags(program, pain_status, domain_scores):
+    flags = _build_program_quality_flags_v22(program) if "_build_program_quality_flags_v22" in globals() else {}
+    equipment_counts = {}
+    duplicate_by_week = {}
+    for week in program.get("weeks", []) or []:
+        seen = {}
+        for session in week.get("sessions", []) or []:
+            for ex in session.get("exercises", []) or []:
+                eq = ex.get("equipment") or "none"
+                equipment_counts[eq] = equipment_counts.get(eq, 0) + 1
+                eid = ex.get("id")
+                seen[eid] = seen.get(eid, 0) + 1
+        duplicate_by_week[str(week.get("week"))] = {k: v for k, v in seen.items() if v > 1}
+    flags.update({
+        "v54_clinical_reasoning_enabled": True,
+        "v54_pain_status": pain_status,
+        "v54_domain_scores_used": domain_scores,
+        "v54_equipment_counts": equipment_counts,
+        "v54_duplicate_exercises_by_week": duplicate_by_week,
+    })
+    return flags
+
+
 def generate_clinical_prescription_v21(screening_payload, exercise_library, rules=None, movement_dna=None, language="fr"):
-    program = _generate_clinical_prescription_v45_before_i18n(screening_payload, exercise_library, rules=rules, movement_dna=movement_dna, language=language)
-    return _language_lock_program(program, language)
+    lang = _v54_normalize_lang(language)
+    program = _generate_clinical_prescription_v54_base(
+        screening_payload,
+        exercise_library,
+        rules=rules,
+        movement_dna=movement_dna,
+        language=lang,
+    )
+    priorities = program.get("clinical_priorities") or program.get("main_priorities") or []
+    domain_scores = _v54_domain_scores(program, screening_payload)
+    pain_status = _v54_pain_status(screening_payload)
+
+    program = _v54_apply_load_gating(program, exercise_library, priorities, pain_status, domain_scores, lang)
+    program = _v54_reduce_week_duplicates(program, exercise_library, priorities, pain_status, domain_scores, lang)
+    program = _v54_add_equipment_progression(program, exercise_library, priorities, pain_status, domain_scores, lang)
+    program = _v54_clean_user_fields(program, pain_status, domain_scores, lang)
+    program = _v54_update_readiness(program, pain_status, lang)
+
+    program["engine_version"] = ENGINE_VERSION
+    program["clinical_reasoning_version"] = "v54"
+    program["selection_strategy"] = {
+        "type": "severity_pain_equipment_progression",
+        "pain_states": ["no_pain", "discomfort", "pain"],
+        "principles": [
+            "score severity controls progression timing",
+            "pain prevents loaded stability work",
+            "discomfort delays loading and reduces intensity",
+            "red domains progress later than yellow domains",
+            "bands and weights are introduced only when clinically appropriate",
+            "duplicate exercises are reduced while preserving clinical anchors",
+        ],
+    }
+    program["validation_flags"] = _v54_quality_flags(program, pain_status, domain_scores)
+    return program
+
+
+generate_clinical_prescription = generate_clinical_prescription_v21
+
+# V54.1 refinement: week-level duplicate avoidance and safer pain parsing.
+def _v54_pain_status(screening_payload):
+    report = (screening_payload or {}).get("report", screening_payload) or {}
+    intake = (
+        (screening_payload or {}).get("intake_context")
+        or report.get("intake_context")
+        or (screening_payload or {}).get("intake")
+        or {}
+    )
+    tokens = []
+
+    def collect(v):
+        if v is None:
+            return
+        if isinstance(v, dict):
+            for vv in v.values():
+                collect(vv)
+        elif isinstance(v, (list, tuple)):
+            for vv in v:
+                collect(vv)
+        else:
+            tokens.append(str(v).strip().lower())
+
+    if isinstance(intake, dict):
+        for key in ["pain_status", "pain", "pain_level", "movement_pain", "pain_clearance", "painClearance", "pain_by_test", "painByTest"]:
+            collect(intake.get(key))
+        for key in ["pain_score", "painIntensity"]:
+            try:
+                score = float(intake.get(key))
+                if score >= 4:
+                    tokens.append("pain")
+                elif score > 0:
+                    tokens.append("discomfort")
+            except Exception:
+                pass
+    for item in _report_items({"report": report}).values():
+        for key in ["pain_status", "pain", "pain_flag", "discomfort", "discomfort_flag"]:
+            collect(item.get(key))
+
+    normalized = set()
+    for t in tokens:
+        if t in ["pain", "douleur", "true", "yes"] or ("douleur" in t and "aucune" not in t) or ("pain" in t and "no pain" not in t and "no_pain" not in t):
+            normalized.add("pain")
+        elif any(x in t for x in ["discomfort", "inconfort", "gêne", "gene", "mild"]):
+            normalized.add("discomfort")
+        elif t in ["no_pain", "no pain", "none", "aucune douleur", "false", "0"]:
+            normalized.add("no_pain")
+    if "pain" in normalized:
+        return "pain"
+    if "discomfort" in normalized:
+        return "discomfort"
+    return "no_pain"
+
+
+def _v54_candidate_for_slot(exercise_library, category_code, week, pain_status, domain_scores, session_exercises, prefer_loaded=False, exclude_ids=None):
+    used_ids = {e.get("id") for e in session_exercises or []}
+    if exclude_ids:
+        used_ids |= set(exclude_ids)
+    max_diff = WEEK_META.get(int(week), WEEK_META[1])[2]
+    candidates = []
+    for e in exercise_library or []:
+        if cat(e) != category_code:
+            continue
+        if e.get("exercise_id") in used_ids:
+            continue
+        if diff(e) > max_diff:
+            continue
+        if not _v54_is_load_allowed(e, week, pain_status, domain_scores):
+            continue
+        candidates.append(e)
+    if not candidates:
+        return None
+
+    def score(e):
+        eq = _v54_equipment(e)
+        eq_level = V54_LOAD_ORDER.get(eq, 0)
+        sc = eq_level * 10 if prefer_loaded else -eq_level * 6
+        o = obj(e)
+        if "stability" in o or "activation_stability" in o:
+            sc += 18
+        if "mobility" in o and int(week) <= 2:
+            sc += 8
+        sc -= abs(diff(e) - min(max(int(week), 1), 4)) * 3
+        return sc
+
+    candidates.sort(key=lambda e: (score(e), -diff(e), e.get("exercise_id", "")), reverse=True)
+    return candidates[0]
+
+
+def _v54_reduce_week_duplicates(program, exercise_library, priorities, pain_status, domain_scores, lang="fr"):
+    protected_categories = {"RB"} if pain_status != "pain" else {"RB", "TM", "CC"}
+    for week in program.get("weeks", []) or []:
+        week_number = int(week.get("week", 1))
+        seen_counts = {}
+        week_used = set()
+        for session in week.get("sessions", []) or []:
+            exercises = session.get("exercises", []) or []
+            for idx, exercise in enumerate(list(exercises)):
+                ex_id = exercise.get("id")
+                category_code = exercise.get("category_code")
+                allowed_repeats = 2 if category_code in protected_categories else 1
+                if seen_counts.get(ex_id, 0) >= allowed_repeats:
+                    replacement = _v54_candidate_for_slot(
+                        exercise_library,
+                        category_code,
+                        week_number,
+                        pain_status,
+                        domain_scores,
+                        exercises,
+                        prefer_loaded=False,
+                        exclude_ids=week_used,
+                    )
+                    if replacement and replacement.get("exercise_id") != ex_id:
+                        block = exercise.get("block") or _v54_block_for_category(cat(replacement))
+                        exercise = loc(replacement, block, priorities, lang)
+                        exercises[idx] = exercise
+                        ex_id = replacement.get("exercise_id")
+                seen_counts[ex_id] = seen_counts.get(ex_id, 0) + 1
+                week_used.add(ex_id)
+            session["exercises"] = exercises
+            _v54_recompute_session(session)
+    return program
+
+# V54.2 final public wrapper: run duplicate control again after equipment progression.
+def generate_clinical_prescription_v21(screening_payload, exercise_library, rules=None, movement_dna=None, language="fr"):
+    lang = _v54_normalize_lang(language)
+    program = _generate_clinical_prescription_v54_base(
+        screening_payload,
+        exercise_library,
+        rules=rules,
+        movement_dna=movement_dna,
+        language=lang,
+    )
+    priorities = program.get("clinical_priorities") or program.get("main_priorities") or []
+    domain_scores = _v54_domain_scores(program, screening_payload)
+    pain_status = _v54_pain_status(screening_payload)
+
+    program = _v54_apply_load_gating(program, exercise_library, priorities, pain_status, domain_scores, lang)
+    program = _v54_reduce_week_duplicates(program, exercise_library, priorities, pain_status, domain_scores, lang)
+    program = _v54_add_equipment_progression(program, exercise_library, priorities, pain_status, domain_scores, lang)
+    program = _v54_reduce_week_duplicates(program, exercise_library, priorities, pain_status, domain_scores, lang)
+    program = _v54_clean_user_fields(program, pain_status, domain_scores, lang)
+    program = _v54_update_readiness(program, pain_status, lang)
+
+    program["engine_version"] = ENGINE_VERSION
+    program["clinical_reasoning_version"] = "v54.2"
+    program["selection_strategy"] = {
+        "type": "severity_pain_equipment_progression",
+        "pain_states": ["no_pain", "discomfort", "pain"],
+        "principles": [
+            "score severity controls progression timing",
+            "pain prevents loaded stability work",
+            "discomfort delays loading and reduces intensity",
+            "red domains progress later than yellow domains",
+            "bands and weights are introduced only when clinically appropriate",
+            "duplicate exercises are reduced while preserving clinical anchors",
+        ],
+    }
+    program["validation_flags"] = _v54_quality_flags(program, pain_status, domain_scores)
+    return program
+
 
 generate_clinical_prescription = generate_clinical_prescription_v21
