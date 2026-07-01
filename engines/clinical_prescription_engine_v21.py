@@ -2153,3 +2153,298 @@ def generate_clinical_prescription_v21(screening_payload, exercise_library, rule
 
 
 generate_clinical_prescription = generate_clinical_prescription_v21
+
+# -----------------------------------------------------------------------------
+# FlexiLab V59 Loaded Exercise Enforcement
+# Purpose:
+# - After the V56 exercise library expansion, ensure light-weight exercises are
+#   actually selected when clinically appropriate.
+# - Keep the frontend stable; no HTML changes required.
+# - Pain/discomfort still blocks weight use.
+# -----------------------------------------------------------------------------
+_generate_clinical_prescription_v59_base = generate_clinical_prescription_v21
+ENGINE_VERSION = "FlexiLab Clinical Prescription Engine v5.9 Loaded Progression"
+
+V59_SAFE_LIGHT_WEIGHT_IDS = [
+    # Week 3 safer load / control
+    "CS021",  # Dead Bug with Kettlebell Reach
+    "HM021",  # Kettlebell Hip Hinge
+    "SH025",  # Controlled Single-Arm Row
+    "SH022",  # Bent-Over Reverse Fly with Dumbbells
+    "SH023",  # Single-Arm Kettlebell Floor Press
+    "SH021",  # Kettlebell Halo
+    # Week 4 integration / stability
+    "CS022", "CS023", "CS024", "CS026",
+    "FI022", "FI023", "FI024", "FI025",
+]
+
+V59_ADVANCED_LIGHT_WEIGHT_IDS = {
+    "FI021",  # Half-Kneeling Clean Press
+    "SH024",  # Tall Kneeling KB Press
+    "FI026",  # KB Swing to Pause Squat
+}
+
+
+def _v59_movement_score(program):
+    return fnum((program or {}).get("movement_score", 0), 0)
+
+
+def _v59_should_avoid_direct_shoulder_load(domain_scores):
+    # If shoulder domain is clearly red, avoid direct loaded shoulder/overhead exercises.
+    return _v54_domain_severity("shoulder_mobility", domain_scores) == "red"
+
+
+def _v59_is_safe_light_candidate(exercise, week_number, pain_status, domain_scores, movement_score):
+    if pain_status != "no_pain":
+        return False
+    if int(week_number) < 3:
+        return False
+    if _v54_equipment(exercise) != "light_weight":
+        return False
+    if diff(exercise) > WEEK_META.get(int(week_number), WEEK_META[1])[2]:
+        return False
+    eid = exercise.get("exercise_id")
+    if eid in V59_ADVANCED_LIGHT_WEIGHT_IDS:
+        # Keep advanced loaded/overhead/power drills out of automated MVP unless later explicitly enabled.
+        return False
+    if eid not in V59_SAFE_LIGHT_WEIGHT_IDS:
+        return False
+
+    c = cat(exercise)
+    domain_id = _v54_exercise_domain(exercise)
+    severity = _v54_domain_severity(domain_id, domain_scores)
+
+    # Direct shoulder loading is delayed/filtered when shoulder mobility is red.
+    if c == "SH" and _v59_should_avoid_direct_shoulder_load(domain_scores):
+        return False
+
+    # Week 3: use safer supportive load only when global score is good enough.
+    if int(week_number) == 3:
+        if movement_score < 80:
+            return False
+        return c in ["CS", "HM", "SH"] and severity in ["yellow", "green", "support", "unassessed"]
+
+    # Week 4: allow one or two low-risk loaded integration drills if pain-free.
+    if int(week_number) >= 4:
+        if movement_score < 70:
+            return False
+        if c == "SH" and severity == "red":
+            return False
+        return c in ["CS", "HM", "SH", "FI"]
+
+    return False
+
+
+def _v59_week_lightweight_target(week_number, pain_status, movement_score):
+    week_number = int(week_number or 1)
+    if pain_status != "no_pain":
+        return 0
+    if movement_score >= 80:
+        return {1: 0, 2: 0, 3: 1, 4: 2}.get(week_number, 0)
+    if movement_score >= 70:
+        return {1: 0, 2: 0, 3: 0, 4: 1}.get(week_number, 0)
+    return 0
+
+
+def _v59_existing_week_ids(week):
+    return {
+        e.get("id")
+        for s in (week.get("sessions", []) or [])
+        for e in (s.get("exercises", []) or [])
+        if e.get("id")
+    }
+
+
+def _v59_select_lightweight_candidate(exercise_library, week_number, pain_status, domain_scores, movement_score, existing_ids, priorities):
+    existing_ids = set(existing_ids or [])
+    priority_ids = [p.get("id") for p in (priorities or []) if p.get("id")]
+    priority_cats = []
+    for did in priority_ids:
+        for c in DOMAIN_TO_CATS.get(did, []):
+            if c not in priority_cats:
+                priority_cats.append(c)
+    # Supportive loaded categories should be considered even when not primary.
+    for c in ["CS", "HM", "FI", "SH"]:
+        if c not in priority_cats:
+            priority_cats.append(c)
+
+    candidates = []
+    for e in exercise_library or []:
+        if e.get("exercise_id") in existing_ids:
+            continue
+        if not _v59_is_safe_light_candidate(e, week_number, pain_status, domain_scores, movement_score):
+            continue
+        candidates.append(e)
+
+    if not candidates:
+        return None
+
+    def score(e):
+        eid = e.get("exercise_id")
+        c = cat(e)
+        o = obj(e)
+        sc = 0
+        # Prefer safe supportive loaded exercises first.
+        preferred_id_rank = {
+            "CS021": 100, "HM021": 96, "SH025": 94, "SH022": 90,
+            "SH023": 82, "SH021": 78,
+            "CS022": 88, "CS023": 86, "CS024": 84, "CS026": 82,
+            "FI022": 80, "FI024": 78, "FI023": 74, "FI025": 70,
+        }
+        sc += preferred_id_rank.get(eid, 0)
+        if c in priority_cats:
+            sc += max(0, 30 - priority_cats.index(c) * 4)
+        if c in ["CS", "HM"]:
+            sc += 12
+        if c == "FI" and int(week_number) >= 4:
+            sc += 10
+        if "stability" in o or "control" in o:
+            sc += 8
+        # Avoid too-advanced choices where a simpler loaded drill exists.
+        sc -= max(0, diff(e) - 3) * 6
+        return sc
+
+    candidates.sort(key=lambda e: (score(e), -diff(e), e.get("exercise_id", "")), reverse=True)
+    return candidates[0]
+
+
+def _v59_replacement_index(session):
+    exercises = session.get("exercises", []) or []
+    # Prefer replacing lower-value non-loaded or band slots in the active part of the session.
+    preferred_blocks = ["integration", "stability", "activation", "mobility_secondary", "mobility_primary"]
+    for block in preferred_blocks:
+        for i, ex in enumerate(exercises):
+            if ex.get("block") != block:
+                continue
+            eq = _v54_equipment({"equipment": ex.get("equipment")})
+            if eq in ["none", "bodyweight", "elastic_band", "balance_pad"] and ex.get("category_code") not in ["RB", "CC"]:
+                return i
+    for i, ex in enumerate(exercises):
+        eq = _v54_equipment({"equipment": ex.get("equipment")})
+        if ex.get("block") not in ["reset", "recovery"] and eq != "light_weight" and ex.get("category_code") not in ["RB", "CC"]:
+            return i
+    return None
+
+
+def _v59_force_lightweight_exposure(program, exercise_library, priorities, pain_status, domain_scores, lang="fr"):
+    movement_score = _v59_movement_score(program)
+    total_added = 0
+    failed_weeks = []
+
+    for week in program.get("weeks", []) or []:
+        week_number = int(week.get("week", 1))
+        target = _v59_week_lightweight_target(week_number, pain_status, movement_score)
+        if target <= 0:
+            continue
+        current = sum(
+            1
+            for s in (week.get("sessions", []) or [])
+            for e in (s.get("exercises", []) or [])
+            if _v54_equipment({"equipment": e.get("equipment")}) == "light_weight"
+        )
+        attempts = 0
+        while current < target and attempts < 6:
+            attempts += 1
+            existing_ids = _v59_existing_week_ids(week)
+            candidate = _v59_select_lightweight_candidate(
+                exercise_library, week_number, pain_status, domain_scores, movement_score, existing_ids, priorities
+            )
+            if not candidate:
+                failed_weeks.append(week_number)
+                break
+            placed = False
+            for session in week.get("sessions", []) or []:
+                exercises = session.get("exercises", []) or []
+                if any(_v54_equipment({"equipment": e.get("equipment")}) == "light_weight" for e in exercises):
+                    continue
+                idx = _v59_replacement_index(session)
+                if idx is None:
+                    continue
+                old_block = exercises[idx].get("block") or _v54_block_for_category(cat(candidate), "stability")
+                # Loaded exercises should generally appear in stability/integration blocks.
+                if cat(candidate) == "FI":
+                    block = "integration"
+                elif cat(candidate) in ["CS", "SH", "HM"]:
+                    block = "stability" if old_block in ["integration", "stability"] else "activation"
+                else:
+                    block = old_block
+                exercises[idx] = loc(candidate, block, priorities, lang)
+                session["exercises"] = exercises
+                _v54_recompute_session(session)
+                current += 1
+                total_added += 1
+                placed = True
+                break
+            if not placed:
+                failed_weeks.append(week_number)
+                break
+
+    program.setdefault("validation_flags", {})
+    program["validation_flags"]["v59_lightweight_targeting"] = {
+        "enabled": True,
+        "pain_status": pain_status,
+        "movement_score": movement_score,
+        "total_lightweight_exposures_added_or_forced": total_added,
+        "failed_weeks": sorted(list(set(failed_weeks))),
+        "note": "When pain-free and global score allows it, V59 forces safe filmed Power Posture light-weight exercises in week 3/4."
+    }
+    return program
+
+
+def generate_clinical_prescription_v21(screening_payload, exercise_library, rules=None, movement_dna=None, language="fr"):
+    lang = _v54_normalize_lang(language)
+    program = _generate_clinical_prescription_v59_base(
+        screening_payload,
+        exercise_library,
+        rules=rules,
+        movement_dna=movement_dna,
+        language=lang,
+    )
+    priorities = program.get("clinical_priorities") or program.get("main_priorities") or []
+    domain_scores = _v54_domain_scores(program, screening_payload)
+    pain_status = _v54_pain_status(screening_payload)
+
+    program = _v59_force_lightweight_exposure(program, exercise_library, priorities, pain_status, domain_scores, lang)
+    # Clean/enrich again after replacement so frontend fields stay consistent.
+    program = _v54_reduce_week_duplicates(program, exercise_library, priorities, pain_status, domain_scores, lang)
+    program = _v54_clean_user_fields(program, pain_status, domain_scores, lang)
+    program = _v55_enrich_material_fields(program, lang)
+    program = _v54_update_readiness(program, pain_status, lang)
+
+    equipment_counts = {}
+    for week in program.get("weeks", []) or []:
+        for session in week.get("sessions", []) or []:
+            for exercise in session.get("exercises", []) or []:
+                eq = _v54_equipment(exercise)
+                equipment_counts[eq] = equipment_counts.get(eq, 0) + 1
+
+    program["engine_version"] = ENGINE_VERSION
+    program["clinical_reasoning_version"] = "v59_loaded_progression"
+    flags = _v54_quality_flags(program, pain_status, domain_scores)
+    flags.update(program.get("validation_flags") or {})
+    flags["v59_equipment_counts"] = equipment_counts
+    flags["v59_lightweight_exposure_count"] = equipment_counts.get("light_weight", 0)
+    flags["v59_lightweight_rule_passed"] = (
+        pain_status != "no_pain" or _v59_movement_score(program) < 70 or equipment_counts.get("light_weight", 0) >= 1
+    )
+    program["validation_flags"] = flags
+    program["selection_strategy"] = {
+        "type": "v59_loaded_progression_with_filmed_power_posture_exercises",
+        "pain_states": ["no_pain", "discomfort", "pain"],
+        "principles": [
+            "no pain allows safe loaded progression in week 3/4 when the score is sufficient",
+            "discomfort and pain block light weights",
+            "red shoulder status blocks direct shoulder loading",
+            "filmed Power Posture exercises are prioritized for loaded stability/integration",
+            "light weights remain supportive, not dominant",
+        ],
+        "user_facing_summary": _v54_text(
+            lang,
+            "Votre programme introduit progressivement des exercices avec charge légère lorsque le score et l’absence de douleur le permettent.",
+            "Your program progressively introduces light-weight exercises when the score and pain-free status allow it."
+        ),
+    }
+    return program
+
+
+generate_clinical_prescription = generate_clinical_prescription_v21
