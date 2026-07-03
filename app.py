@@ -122,6 +122,44 @@ def safe_json_loads(raw):
         return None
 
 
+def parse_intake_payload(intake_json=None, questionnaire_json=None):
+    """
+    V64 compatibility helper.
+    Accepts both the older frontend field name `intake_json` and the V63+
+    questionnaire field name `questionnaire_json`.
+
+    If both are present and both are dictionaries, merge them, with
+    questionnaire_json taking priority.
+    """
+    intake_data = safe_json_loads(intake_json)
+    questionnaire_data = safe_json_loads(questionnaire_json)
+
+    if isinstance(intake_data, dict) and isinstance(questionnaire_data, dict):
+        merged = dict(intake_data)
+        merged.update(questionnaire_data)
+        return merged
+
+    if isinstance(questionnaire_data, dict):
+        return questionnaire_data
+
+    return intake_data
+
+
+def try_save_session_intake(session_id, intake_data):
+    """
+    Best-effort save of questionnaire/intake context on the sessions table.
+    This will silently skip if the Supabase column does not exist yet.
+    The authoritative fallback remains the screenings.intake_json field.
+    """
+    try:
+        if supabase is not None and session_id and intake_data:
+            supabase.table("sessions").update({"intake_json": intake_data}).eq("id", session_id).execute()
+            return True
+    except Exception:
+        return False
+    return False
+
+
 def make_thresholds(unit, scale_min, scale_max, bands, pointer_value):
     v = float(pointer_value)
     v = max(float(scale_min), min(float(scale_max), v))
@@ -786,11 +824,11 @@ def compute_composite(posture, shoulder_r, shoulder_l, squat, aslr_r=None, aslr_
 
 
 @app.post("/start_session")
-def start_session(user_email: str = Form(...), intake_json: str = Form(None)):
+def start_session(user_email: str = Form(...), intake_json: str = Form(None), questionnaire_json: str = Form(None)):
     if supabase is None:
         return {"error": "Supabase is not configured on server."}
 
-    intake_data = safe_json_loads(intake_json)
+    intake_data = parse_intake_payload(intake_json=intake_json, questionnaire_json=questionnaire_json)
 
     session_row = {
         "user_email": user_email,
@@ -802,10 +840,16 @@ def start_session(user_email: str = Form(...), intake_json: str = Form(None)):
     # session_row["intake_json"] = intake_data
 
     resp = supabase.table("sessions").insert(session_row).execute()
+    session_id = resp.data[0]["id"]
+
+    # Optional: if sessions.intake_json exists, save the questionnaire there too.
+    # If the column does not exist, this is safely ignored.
+    try_save_session_intake(session_id, intake_data)
 
     return {
-        "session_id": resp.data[0]["id"],
-        "intake_json": intake_data
+        "session_id": session_id,
+        "intake_json": intake_data,
+        "questionnaire_json": intake_data
     }
 
 
@@ -852,12 +896,14 @@ async def analyze(
     user_email: str = Form(...),
     test_type: str = Form(...),
     session_id: str = Form(...),
-    intake_json: str = Form(None)
+    intake_json: str = Form(None),
+    questionnaire_json: str = Form(None)
 ):
     if supabase is None:
         return {"error": "Supabase is not configured on server."}
 
-    intake_data = safe_json_loads(intake_json)
+    intake_data = parse_intake_payload(intake_json=intake_json, questionnaire_json=questionnaire_json)
+    try_save_session_intake(session_id, intake_data)
 
     img_bytes = await image.read()
     nparr = np.frombuffer(img_bytes, np.uint8)
@@ -1129,10 +1175,14 @@ async def submit_analysis(
     user_email: str = Form(...),
     test_type: str = Form(...),
     session_id: str = Form(...),
-    intake_json: str = Form(None)
+    intake_json: str = Form(None),
+    questionnaire_json: str = Form(None)
 ):
     if supabase is None:
         return {"error": "Supabase is not configured on server."}
+
+    intake_data = parse_intake_payload(intake_json=intake_json, questionnaire_json=questionnaire_json)
+    try_save_session_intake(session_id, intake_data)
 
     img_bytes = await image.read()
 
@@ -1142,7 +1192,7 @@ async def submit_analysis(
         "test_type": test_type,
         "status": "queued",
         "image_base64": base64.b64encode(img_bytes).decode("utf-8"),
-        "intake_json": safe_json_loads(intake_json)
+        "intake_json": intake_data
     }
 
     resp = supabase.table("analysis_jobs").insert(job).execute()
@@ -1215,11 +1265,13 @@ def report(session_id: str, lang: str = "fr"):
 
     tests_found = [x.get("test_type") for x in screenings if x.get("test_type")]
 
-    intake_context = None
-    for r in screenings:
-        if r.get("intake_json"):
-            intake_context = r.get("intake_json")
-            break
+    # Prefer session-level questionnaire when available, then fallback to screenings.
+    intake_context = session.get("intake_json") or session.get("questionnaire_json")
+    if not intake_context:
+        for r in screenings:
+            if r.get("intake_json"):
+                intake_context = r.get("intake_json")
+                break
 
     def txt(fr, en):
         return en if lang == "en" else fr
@@ -1848,7 +1900,7 @@ def normalize_clinical_program_for_frontend(program_data: dict, report_data: dic
 
 
 @app.get("/program")
-def program(session_id: str, lang: str = "fr"):
+def program(session_id: str, lang: str = "fr", intake_json: str = None, questionnaire_json: str = None):
     """
     FlexiLab V2.1 clinical program endpoint.
 
@@ -1881,6 +1933,17 @@ def program(session_id: str, lang: str = "fr"):
             "sections": [],
             "fallback_reason": report_data.get("error")
         }
+
+    # Optional query-level compatibility for tests: /program?...&questionnaire_json={...}
+    query_intake = parse_intake_payload(intake_json=intake_json, questionnaire_json=questionnaire_json)
+    if query_intake:
+        existing_intake = report_data.get("intake_context")
+        if isinstance(existing_intake, dict) and isinstance(query_intake, dict):
+            merged_intake = dict(existing_intake)
+            merged_intake.update(query_intake)
+            report_data["intake_context"] = merged_intake
+        else:
+            report_data["intake_context"] = query_intake
 
     # Score V2: movement-quality score with weighted domains.
     try:
@@ -1940,7 +2003,7 @@ def program(session_id: str, lang: str = "fr"):
             "program_is_canonical": True,
             "prescription_is_legacy_alias": True,
             "clinical_engine_expected": "FlexiLab Clinical Prescription Engine v2.1.1",
-            "i18n_contract": "v46 backend program + results language-lock active"
+            "i18n_contract": "v64 questionnaire/intake compatibility active"
         }
     }
 
