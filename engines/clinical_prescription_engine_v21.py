@@ -2448,3 +2448,307 @@ def generate_clinical_prescription_v21(screening_payload, exercise_library, rule
 
 
 generate_clinical_prescription = generate_clinical_prescription_v21
+
+
+# -----------------------------------------------------------------------------
+# FlexiLab V63 - Pre-screening questionnaire integration
+# -----------------------------------------------------------------------------
+# Purpose:
+# - Read client-reported goal, multi-select tension areas, pain level/context.
+# - Add contextual clinical + biomechanical interpretation to the program payload.
+# - Nudge program selection toward symptom-relevant categories without diagnosing.
+
+_generate_clinical_prescription_v63_base = generate_clinical_prescription_v21
+
+
+def _v63_parse_jsonish(value):
+    if isinstance(value, dict):
+        return value
+    if not value:
+        return {}
+    try:
+        import json
+        return json.loads(value) if isinstance(value, str) else {}
+    except Exception:
+        return {}
+
+
+def _v63_find_questionnaire(screening_payload):
+    if not isinstance(screening_payload, dict):
+        return {}
+    keys = [
+        "pre_screening_questionnaire", "questionnaire", "questionnaire_json",
+        "intake_questionnaire", "intake", "client_context", "symptom_context"
+    ]
+    for key in keys:
+        if key in screening_payload:
+            q = _v63_parse_jsonish(screening_payload.get(key))
+            if q:
+                return q
+    # Some APIs store form fields flat in the session payload.
+    if any(k in screening_payload for k in ["tension_areas", "primary_tension_area", "main_goal", "pain_level"]):
+        raw_areas = screening_payload.get("tension_areas", [])
+        if isinstance(raw_areas, str):
+            raw_areas = [x.strip() for x in raw_areas.split(",") if x.strip()]
+        return {
+            "main_goal": screening_payload.get("main_goal", screening_payload.get("goal", "general")),
+            "tension_areas": raw_areas or [screening_payload.get("tension_area", "none")],
+            "primary_tension_area": screening_payload.get("primary_tension_area", screening_payload.get("tension_area", "none")),
+            "pain_level": screening_payload.get("pain_level", screening_payload.get("pain_status", "no_pain")),
+            "pain_context": screening_payload.get("pain_context", []),
+            "duration": screening_payload.get("duration", "na"),
+            "activity_level": screening_payload.get("activity_level", "moderate"),
+            "medical_restriction": screening_payload.get("medical_restriction", "no"),
+        }
+    # If tests are a list/dict, look inside once.
+    for container_key in ["tests", "items", "results", "analyses"]:
+        container = screening_payload.get(container_key)
+        if isinstance(container, dict):
+            for item in container.values():
+                q = _v63_find_questionnaire(item) if isinstance(item, dict) else {}
+                if q:
+                    return q
+        elif isinstance(container, list):
+            for item in container:
+                q = _v63_find_questionnaire(item) if isinstance(item, dict) else {}
+                if q:
+                    return q
+    return {}
+
+
+def _v63_area_label(area, lang="fr"):
+    labels = {
+        "neck": ("cou", "neck"),
+        "shoulders": ("épaules", "shoulders"),
+        "upper_back": ("haut du dos", "upper back"),
+        "lower_back": ("bas du dos", "lower back"),
+        "hips": ("hanches", "hips"),
+        "hamstrings": ("ischio-jambiers", "hamstrings"),
+        "knees": ("genoux", "knees"),
+        "ankles_feet": ("chevilles / pieds", "ankles / feet"),
+        "none": ("aucune zone spécifique", "no specific area"),
+    }
+    fr, en = labels.get(str(area or "none"), (str(area or ""), str(area or "")))
+    return fr if lang == "fr" else en
+
+
+def _v63_goal_label(goal, lang="fr"):
+    labels = {
+        "posture": ("améliorer la posture", "improve posture"),
+        "reduce_tension": ("réduire les tensions", "reduce tension"),
+        "mobility": ("améliorer la mobilité", "improve mobility"),
+        "injury_prevention": ("prévenir les blessures", "prevent injury"),
+        "performance": ("améliorer la performance", "improve performance"),
+        "general": ("réaliser un bilan général", "complete a general assessment"),
+    }
+    fr, en = labels.get(str(goal or "general"), (str(goal or ""), str(goal or "")))
+    return fr if lang == "fr" else en
+
+
+def _v63_pain_label(pain_level, lang="fr"):
+    labels = {
+        "no_pain": ("aucune douleur", "no pain"),
+        "discomfort": ("gêne / inconfort", "discomfort"),
+        "pain": ("douleur", "pain"),
+    }
+    fr, en = labels.get(str(pain_level or "no_pain"), (str(pain_level or ""), str(pain_level or "")))
+    return fr if lang == "fr" else en
+
+
+def _v63_target_categories(q):
+    primary = str((q or {}).get("primary_tension_area") or "none")
+    areas = q.get("tension_areas") or [] if isinstance(q, dict) else []
+    if isinstance(areas, str):
+        areas = [x.strip() for x in areas.split(",") if x.strip()]
+    # Primary has stronger influence; secondary areas add support.
+    mapping = {
+        "lower_back": ["RB", "CS", "HM"],
+        "neck": ["CC", "TM", "RB", "SH"],
+        "shoulders": ["TM", "SH", "CS"],
+        "upper_back": ["TM", "SH", "RB"],
+        "hips": ["HM", "CS", "FI"],
+        "hamstrings": ["HM", "CS"],
+        "knees": ["FI", "HM", "CS"],
+        "ankles_feet": ["AM", "FI", "HM"],
+        "none": [],
+    }
+    cats = []
+    for c in mapping.get(primary, []):
+        if c not in cats:
+            cats.append(c)
+    for area in areas:
+        for c in mapping.get(str(area), [])[:2]:
+            if c not in cats:
+                cats.append(c)
+    return cats[:5]
+
+
+def _v63_report_text(q, program, lang="fr"):
+    areas = q.get("tension_areas") or []
+    if isinstance(areas, str):
+        areas = [x.strip() for x in areas.split(",") if x.strip()]
+    primary = q.get("primary_tension_area") or (areas[0] if areas else "none")
+    area_names = ", ".join([_v63_area_label(a, lang) for a in areas]) or _v63_area_label(primary, lang)
+    goal = _v63_goal_label(q.get("main_goal", "general"), lang)
+    pain = _v63_pain_label(q.get("pain_level", "no_pain"), lang)
+    primary_label = _v63_area_label(primary, lang)
+    if lang == "fr":
+        context = f"Objectif déclaré : {goal}. Zone prioritaire : {primary_label}. Zones signalées : {area_names}. Niveau déclaré : {pain}."
+        clinical = f"Le screening est interprété avec votre contexte déclaré, en particulier la zone {primary_label}. Les limites mesurées ne constituent pas un diagnostic, mais elles aident à identifier les compensations possibles et à adapter la progression du programme."
+    else:
+        context = f"Reported goal: {goal}. Main priority area: {primary_label}. Reported areas: {area_names}. Reported level: {pain}."
+        clinical = f"The screening is interpreted with your reported context, especially the {primary_label} area. The measured limitations are not a diagnosis, but they help identify possible compensations and adapt program progression."
+    biomech = _v63_biomechanical_text(primary, lang)
+    return context, clinical, biomech
+
+
+def _v63_biomechanical_text(primary, lang="fr"):
+    p = str(primary or "none")
+    fr = {
+        "lower_back": "Une gêne lombaire peut être associée à une mobilité hanche/ischio-jambiers limitée, à une stratégie de squat avec inclinaison du tronc, ou à un contrôle lombo-pelvien insuffisant. Le programme privilégie donc respiration, mobilité active des hanches, activation fessière et stabilité du tronc.",
+        "neck": "Les tensions cervicales peuvent être influencées par le contrôle cervical, la mobilité thoracique, la respiration et le positionnement des épaules. La progression doit rester lente, contrôlée et sans douleur.",
+        "shoulders": "Les inconforts d'épaule peuvent être liés à l'amplitude d'élévation, au contrôle scapulaire et à la mobilité thoracique. Les charges au-dessus de la tête doivent rester limitées tant que le mouvement n'est pas confortable.",
+        "upper_back": "Le haut du dos est souvent lié à la mobilité thoracique, à la respiration et au contrôle des omoplates. Le programme cible l'extension/rotation thoracique et l'endurance posturale.",
+        "hips": "Les tensions de hanche peuvent modifier le squat, la marche et la stratégie de gainage. Le programme cible mobilité active, contrôle du bassin et activation fessière.",
+        "hamstrings": "Une limitation de la chaîne postérieure peut influencer l'ASLR, la flexion de hanche et la stratégie de squat. Le travail combine mobilité active, respiration et contrôle lombo-pelvien.",
+        "knees": "Les sensations au genou doivent être reliées au contrôle de hanche, à la stabilité du tronc et à la qualité du squat. Le programme évite les amplitudes douloureuses et favorise le contrôle progressif.",
+        "ankles_feet": "Les chevilles et pieds peuvent influencer la profondeur de squat, l'équilibre et les compensations du tronc. Ce domaine sert de soutien préventif même lorsqu'il n'est pas scoré directement.",
+        "none": "Le programme reste guidé par les limitations mesurées : mobilité utile, contrôle postural, stabilité et qualité d'exécution.",
+    }
+    en = {
+        "lower_back": "Lower-back discomfort may be associated with limited hip/hamstring mobility, a squat strategy with increased trunk lean, or reduced lumbopelvic control. The program therefore emphasizes breathing, active hip mobility, glute activation and trunk stability.",
+        "neck": "Neck tension may be influenced by cervical control, thoracic mobility, breathing and shoulder positioning. Progression should remain slow, controlled and pain-free.",
+        "shoulders": "Shoulder discomfort may relate to overhead range, scapular control and thoracic mobility. Overhead loading should remain limited until movement is comfortable.",
+        "upper_back": "Upper-back tension is often linked to thoracic mobility, breathing and scapular control. The program targets thoracic extension/rotation and postural endurance.",
+        "hips": "Hip tension can modify squat mechanics, walking and core strategy. The program targets active mobility, pelvic control and glute activation.",
+        "hamstrings": "Posterior-chain limitation may influence ASLR, hip flexion and squat strategy. Work combines active mobility, breathing and lumbopelvic control.",
+        "knees": "Knee symptoms should be considered with hip control, trunk stability and squat quality. The program avoids painful ranges and favors progressive control.",
+        "ankles_feet": "Ankles and feet can influence squat depth, balance and trunk compensations. This area is used as preventive support even when it is not directly scored.",
+        "none": "The program remains guided by measured limitations: useful mobility, postural control, stability and execution quality.",
+    }
+    return (fr if lang == "fr" else en).get(p, (fr if lang == "fr" else en)["none"])
+
+
+def _v63_prefer_symptom_categories(program, exercise_library, q, pain_status, domain_scores, priorities, lang="fr"):
+    target_cats = _v63_target_categories(q)
+    if not target_cats:
+        return program
+    # Keep this gentle: at most one symptom-relevant replacement per week, only in mobility/activation/stability blocks.
+    added = []
+    for week in program.get("weeks", []) or []:
+        try:
+            week_number = int(week.get("week", 1))
+        except Exception:
+            week_number = 1
+        week_cats = set()
+        for session in week.get("sessions", []) or []:
+            for ex in session.get("exercises", []) or []:
+                if ex.get("category_code"):
+                    week_cats.add(ex.get("category_code"))
+        missing = [c for c in target_cats if c not in week_cats]
+        if not missing:
+            continue
+        desired_cat = missing[0]
+        candidate = None
+        try:
+            candidate = _v54_candidate_for_slot(exercise_library, desired_cat, week_number, pain_status, domain_scores, [], prefer_loaded=False)
+        except Exception:
+            candidate = None
+        if not candidate:
+            continue
+        placed = False
+        for session in week.get("sessions", []) or []:
+            exercises = session.get("exercises", []) or []
+            for idx, old in enumerate(exercises):
+                if old.get("category_code") in ["RB", "CC"] and desired_cat not in ["RB", "CC"]:
+                    continue
+                if old.get("block") in ["reset", "recovery"] and desired_cat not in ["RB", "TM", "CC"]:
+                    continue
+                if old.get("block") in ["mobility_primary", "mobility_secondary", "activation", "stability", "integration"]:
+                    block = old.get("block") or _v54_block_for_category(desired_cat, "activation")
+                    exercises[idx] = loc(candidate, block, priorities, lang)
+                    session["exercises"] = exercises
+                    try:
+                        _v54_recompute_session(session)
+                    except Exception:
+                        pass
+                    added.append({"week": week_number, "category": desired_cat, "exercise_id": candidate.get("exercise_id")})
+                    placed = True
+                    break
+            if placed:
+                break
+    program.setdefault("validation_flags", {})["v63_questionnaire_category_nudges"] = added
+    program.setdefault("selection_strategy", {}).setdefault("principles", []).append("pre-screening questionnaire can prioritize symptom-relevant categories while preserving pain-free progression")
+    return program
+
+
+def _v63_add_questionnaire_context(program, q, lang="fr"):
+    if not q:
+        return program
+    context, clinical, biomech = _v63_report_text(q, program, lang)
+    program["pre_screening_questionnaire"] = q
+    program["client_reported_context"] = {
+        "summary": context,
+        "primary_tension_area": q.get("primary_tension_area"),
+        "tension_areas": q.get("tension_areas", []),
+        "pain_level": q.get("pain_level"),
+        "pain_context": q.get("pain_context", []),
+    }
+    program.setdefault("clinical_strategy", {})["reported_context"] = context
+    program["clinical_strategy"]["questionnaire_clinical_interpretation"] = clinical
+    program["clinical_strategy"]["questionnaire_biomechanical_interpretation"] = biomech
+    program.setdefault("program_summary", {})["reported_context"] = context
+    program["program_summary"]["questionnaire_aware"] = True
+    program.setdefault("validation_flags", {})["v63_questionnaire_detected"] = True
+    program["validation_flags"]["v63_primary_tension_area"] = q.get("primary_tension_area")
+    program["validation_flags"]["v63_tension_areas"] = q.get("tension_areas", [])
+    return program
+
+
+def _v63_merge_questionnaire_into_payload(screening_payload, q):
+    # Do not diagnose. Only expose context to existing pain/readiness functions.
+    if not q or not isinstance(screening_payload, dict):
+        return screening_payload
+    payload = dict(screening_payload)
+    payload["pre_screening_questionnaire"] = q
+    # If the questionnaire reports pain/discomfort, preserve a pain-like field so existing V54/V59 pain gates can react.
+    pain_level = str(q.get("pain_level", "no_pain"))
+    if pain_level == "pain":
+        payload.setdefault("pain_status", "pain")
+        payload.setdefault("pain", "pain")
+    elif pain_level == "discomfort":
+        payload.setdefault("pain_status", "discomfort")
+        payload.setdefault("pain", "discomfort")
+    else:
+        payload.setdefault("pain_status", "no_pain")
+    return payload
+
+
+def generate_clinical_prescription_v21(screening_payload, exercise_library, rules=None, movement_dna=None, language="fr"):
+    lang = _v54_normalize_lang(language)
+    q = _v63_find_questionnaire(screening_payload)
+    payload = _v63_merge_questionnaire_into_payload(screening_payload, q)
+    program = _generate_clinical_prescription_v63_base(
+        payload,
+        exercise_library,
+        rules=rules,
+        movement_dna=movement_dna,
+        language=lang,
+    )
+    if q:
+        priorities = program.get("clinical_priorities") or program.get("main_priorities") or []
+        domain_scores = _v54_domain_scores(program, payload)
+        pain_status = _v54_pain_status(payload)
+        program = _v63_prefer_symptom_categories(program, exercise_library, q, pain_status, domain_scores, priorities, lang)
+        program = _v54_clean_user_fields(program, pain_status, domain_scores, lang)
+        try:
+            program = _v55_enrich_material_fields(program, lang)
+        except Exception:
+            pass
+        program = _v63_add_questionnaire_context(program, q, lang)
+        program["engine_version"] = ENGINE_VERSION
+        program["clinical_reasoning_version"] = "v63_questionnaire_aware_loaded_progression"
+    return program
+
+
+generate_clinical_prescription = generate_clinical_prescription_v21
