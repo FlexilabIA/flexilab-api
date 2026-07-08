@@ -50,7 +50,21 @@ DATA_DIR = os.path.join(BASE_DIR, "data")
 
 MOVEMENT_PATTERNS_PATH = os.path.join(DATA_DIR, "movement_patterns_v1.json")
 PRESCRIPTION_RULES_PATH = os.path.join(DATA_DIR, "prescription_rules_v1.json")
-EXERCISE_LIBRARY_PATH = os.path.join(DATA_DIR, "flexilab_exercise_library_v1.json")
+# V68: exercise library can run in filmed-demo mode or full-library mode.
+# Default is "demo" because the current client demo should use only filmed exercises.
+# Set FLEXILAB_LIBRARY_MODE=full in Render when you want to return to the full library.
+EXERCISE_LIBRARY_MODE = os.environ.get("FLEXILAB_LIBRARY_MODE", "demo").strip().lower()
+EXERCISE_LIBRARY_PATH_FULL = os.path.join(DATA_DIR, "flexilab_exercise_library_full_v1.json")
+EXERCISE_LIBRARY_PATH_DEMO = os.path.join(DATA_DIR, "flexilab_exercise_library_demo_v1.json")
+
+if EXERCISE_LIBRARY_MODE in ["full", "production", "prod"]:
+    EXERCISE_LIBRARY_PATH = EXERCISE_LIBRARY_PATH_FULL
+elif EXERCISE_LIBRARY_MODE in ["demo", "filmed", "filmed_demo", "client_demo"]:
+    EXERCISE_LIBRARY_PATH = EXERCISE_LIBRARY_PATH_DEMO
+else:
+    # Optional custom JSON path for testing. Falls back to demo if the custom path is invalid.
+    custom_path = os.environ.get("FLEXILAB_EXERCISE_LIBRARY_PATH")
+    EXERCISE_LIBRARY_PATH = custom_path if custom_path else EXERCISE_LIBRARY_PATH_DEMO
 
 MOVEMENT_PATTERNS = None
 PRESCRIPTION_RULES = None
@@ -91,8 +105,15 @@ def load_clinical_resources():
         try:
             EXERCISE_LIBRARY = load_exercise_library(EXERCISE_LIBRARY_PATH)
         except Exception as e:
-            EXERCISE_LIBRARY = None
-            RESOURCE_LOAD_ERRORS["exercise_library"] = str(e)
+            # V68 safety fallback: if selected library fails, try the original v1 file before failing.
+            fallback_path = os.path.join(DATA_DIR, "flexilab_exercise_library_v1.json")
+            try:
+                EXERCISE_LIBRARY = load_exercise_library(fallback_path)
+                RESOURCE_LOAD_ERRORS["exercise_library_selected_path_failed"] = str(e)
+                RESOURCE_LOAD_ERRORS["exercise_library_fallback_path"] = fallback_path
+            except Exception:
+                EXERCISE_LIBRARY = None
+                RESOURCE_LOAD_ERRORS["exercise_library"] = str(e)
     else:
         RESOURCE_LOAD_ERRORS["exercise_library"] = "load_exercise_library import failed"
 
@@ -112,7 +133,25 @@ model = YOLO("yolov8n-pose.pt")
 
 @app.get("/health")
 def health():
-    return {"ok": True}
+    return {
+        "ok": True,
+        "exercise_library_mode": EXERCISE_LIBRARY_MODE,
+        "exercise_library_path": EXERCISE_LIBRARY_PATH,
+        "exercise_library_count": len(EXERCISE_LIBRARY or []),
+        "resource_load_errors": RESOURCE_LOAD_ERRORS,
+    }
+
+
+@app.get("/library_status")
+def library_status():
+    return {
+        "exercise_library_mode": EXERCISE_LIBRARY_MODE,
+        "exercise_library_path": EXERCISE_LIBRARY_PATH,
+        "exercise_library_count": len(EXERCISE_LIBRARY or []),
+        "resource_load_errors": RESOURCE_LOAD_ERRORS,
+        "demo_ready_count": sum(1 for e in (EXERCISE_LIBRARY or []) if e.get("demo_ready") is True),
+        "video_ready_count": sum(1 for e in (EXERCISE_LIBRARY or []) if e.get("video_ready") is True or e.get("video_url") or e.get("vimeo_url")),
+    }
 
 
 def safe_json_loads(raw):
@@ -2003,7 +2042,7 @@ def program(session_id: str, lang: str = "fr", intake_json: str = None, question
             "program_is_canonical": True,
             "prescription_is_legacy_alias": True,
             "clinical_engine_expected": "FlexiLab Clinical Prescription Engine v2.1.1",
-            "i18n_contract": "v64 questionnaire/intake compatibility active"
+            "i18n_contract": "v68 demo filmed library mode + v64 questionnaire/intake compatibility active"
         }
     }
 
