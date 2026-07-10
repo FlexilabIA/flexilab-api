@@ -2752,3 +2752,228 @@ def generate_clinical_prescription_v21(screening_payload, exercise_library, rule
 
 
 generate_clinical_prescription = generate_clinical_prescription_v21
+# -----------------------------------------------------------------------------
+# FlexiLab V84 - questionnaire-aware observations + filmed loaded demo safeguard
+# -----------------------------------------------------------------------------
+# Final wrapper goals:
+# - preserve the V63 questionnaire-aware engine;
+# - run the loaded-exercise safeguard AFTER questionnaire category nudges;
+# - include safe filmed light-resistance work in later weeks when clinically allowed;
+# - normalize user-facing duration strings and replace generic one-line cues.
+
+_generate_clinical_prescription_v84_base = generate_clinical_prescription_v21
+
+
+def _v84_questionnaire(screening_payload):
+    try:
+        return _v63_find_questionnaire(screening_payload) or {}
+    except Exception:
+        payload = screening_payload or {}
+        report = payload.get("report", payload) or {}
+        return (
+            payload.get("pre_screening_questionnaire")
+            or payload.get("questionnaire")
+            or payload.get("intake_context")
+            or payload.get("intake")
+            or report.get("intake_context")
+            or {}
+        )
+
+
+def _v84_load_state(screening_payload):
+    q = _v84_questionnaire(screening_payload)
+    raw = str(
+        q.get("pain_level")
+        or q.get("pain_status")
+        or q.get("pain")
+        or (screening_payload or {}).get("pain_status")
+        or "no_pain"
+    ).strip().lower()
+    if raw in {"pain", "moderate", "severe", "high", "7", "8", "9", "10"}:
+        return "pain"
+    if raw in {"discomfort", "mild", "low", "1", "2", "3", "4"}:
+        return "discomfort"
+    return "no_pain"
+
+
+def _v84_normalize_duration(value):
+    import re
+    s = str(value or "").strip()
+    s = re.sub(r"secondsondsonds|secondsonds|secondsseconds|secondessecondes", "sec", s, flags=re.I)
+    s = re.sub(r"\bseconds?\b|\bsecondes?\b|\bsecs?\b", "sec", s, flags=re.I)
+    return re.sub(r"\s+", " ", s).strip()
+
+
+def _v84_specific_tip(exercise, lang="fr"):
+    name = str(exercise.get("name_en") or exercise.get("name") or "").lower()
+    equipment = str(exercise.get("equipment") or "").lower()
+    current = str(exercise.get("coaching_cues") or "").strip()
+    generic = current.lower().rstrip(".!") in {
+        "move slowly", "move slowly and with control", "bougez lentement",
+        "faites le mouvement lentement", "mouvement lent"
+    }
+    if current and not generic:
+        return current
+    fr = "Effectuez le mouvement lentement, dans une amplitude confortable, avec un alignement stable. Respirez régulièrement et arrêtez si une douleur apparaît."
+    en = "Move slowly through a comfortable range while maintaining stable alignment. Breathe steadily and stop if pain appears."
+    if "foam" in equipment or "roller" in name:
+        fr = "Déplacez-vous lentement sur le foam roller sans appuyer directement sur une zone douloureuse. Gardez la respiration calme et contrôlée."
+        en = "Move slowly on the foam roller without pressing directly on a painful area. Keep your breathing calm and controlled."
+    elif any(k in name for k in ["squat", "lunge", "deadlift", "hinge"]):
+        fr = "Gardez les appuis stables et les genoux alignés avec les pieds. Utilisez une charge légère uniquement si le mouvement reste contrôlé et sans douleur."
+        en = "Keep the feet stable and the knees aligned with the feet. Use a light load only when the movement remains controlled and pain-free."
+    elif any(k in name for k in ["row", "press", "fly", "halo"]):
+        fr = "Gardez le tronc stable et contrôlez la trajectoire de la charge. Évitez de hausser les épaules ou de cambrer le bas du dos."
+        en = "Keep the trunk stable and control the path of the load. Avoid shrugging the shoulders or arching the lower back."
+    elif "bird dog" in name:
+        fr = "Allongez le bras et la jambe opposés sans tourner le bassin. Marquez une courte pause et gardez le tronc stable."
+        en = "Reach the opposite arm and leg without rotating the pelvis. Pause briefly and keep the trunk stable."
+    return fr if lang == "fr" else en
+
+
+def _v84_existing_ids(week):
+    return {
+        e.get("id") or e.get("exercise_id")
+        for session in (week.get("sessions", []) or [])
+        for e in (session.get("exercises", []) or [])
+        if (e.get("id") or e.get("exercise_id"))
+    }
+
+
+def _v84_loaded_candidate(exercise_library, week_number, existing_ids, priorities, load_state):
+    max_diff = {1: 2, 2: 3, 3: 4, 4: 5}.get(int(week_number or 1), 4)
+    priority_ids = [p.get("id") for p in (priorities or []) if p.get("id")]
+    priority_cats = []
+    for did in priority_ids:
+        for c in DOMAIN_TO_CATS.get(did, []):
+            if c not in priority_cats:
+                priority_cats.append(c)
+    candidates = []
+    for e in exercise_library or []:
+        eid = e.get("exercise_id")
+        if not eid or eid in existing_ids:
+            continue
+        if _v54_equipment(e) != "light_weight":
+            continue
+        if not (e.get("video_ready") is True or e.get("video_url") or e.get("vimeo_url") or e.get("mp4_url")):
+            continue
+        if diff(e) > max_diff:
+            continue
+        # Mild discomfort allows low-load trunk/hip integration only in week 4.
+        if load_state == "discomfort" and (int(week_number) < 4 or cat(e) not in {"CS", "HM", "FI"} or diff(e) > 4):
+            continue
+        if load_state == "pain":
+            continue
+        candidates.append(e)
+    def rank(e):
+        c = cat(e); eid = e.get("exercise_id", "")
+        preferred = {
+            "DMCS001": 140, "DMCS004": 135, "DMHM003": 125,
+            "DMFI001": 120, "DMFI002": 115, "DMFI006": 112,
+            "DMFI010": 105, "DMFI012": 102, "DMFI013": 100,
+        }
+        score = preferred.get(eid, 0)
+        if c in priority_cats:
+            score += 40 - min(priority_cats.index(c), 6) * 5
+        if c in {"CS", "HM"}: score += 18
+        if c == "FI" and int(week_number) >= 4: score += 16
+        score -= max(0, diff(e) - 3) * 8
+        return score
+    candidates.sort(key=lambda e: (rank(e), -diff(e), e.get("exercise_id", "")), reverse=True)
+    return candidates[0] if candidates else None
+
+
+def _v84_replace_index(session):
+    exercises = session.get("exercises", []) or []
+    for block in ["integration", "stability", "activation", "mobility_secondary"]:
+        for i, ex in enumerate(exercises):
+            if ex.get("block") != block:
+                continue
+            if ex.get("category_code") in {"RB", "CC"}:
+                continue
+            if _v54_equipment(ex) != "light_weight":
+                return i
+    return None
+
+
+def _v84_force_loaded_demo(program, exercise_library, screening_payload, lang="fr"):
+    state = _v84_load_state(screening_payload)
+    score = _v59_movement_score(program) if "_v59_movement_score" in globals() else fnum(program.get("movement_score"), 0)
+    priorities = program.get("clinical_priorities") or program.get("main_priorities") or []
+    targets = {3: 1, 4: 1} if state == "no_pain" and score >= 70 else ({4: 1} if state == "discomfort" and score >= 70 else {})
+    added = []
+    failures = []
+    for week in program.get("weeks", []) or []:
+        wn = int(week.get("week", 1))
+        target = targets.get(wn, 0)
+        if target <= 0:
+            continue
+        current = sum(
+            1 for s in (week.get("sessions", []) or []) for e in (s.get("exercises", []) or [])
+            if _v54_equipment(e) == "light_weight"
+        )
+        while current < target:
+            candidate = _v84_loaded_candidate(exercise_library, wn, _v84_existing_ids(week), priorities, state)
+            if not candidate:
+                failures.append(wn); break
+            placed = False
+            # Favor day 2/3 for stability and integration.
+            sessions = list(week.get("sessions", []) or [])
+            sessions.sort(key=lambda s: 0 if int(s.get("day", 1)) in {2, 3} else 1)
+            for session in sessions:
+                idx = _v84_replace_index(session)
+                if idx is None:
+                    continue
+                old = session["exercises"][idx]
+                block = "integration" if cat(candidate) == "FI" else "stability"
+                session["exercises"][idx] = loc(candidate, block, priorities, lang)
+                try:
+                    _v54_recompute_session(session)
+                except Exception:
+                    session["clinical_balance"] = recompute_clinical_balance(session)
+                added.append({"week": wn, "day": session.get("day"), "exercise_id": candidate.get("exercise_id")})
+                current += 1; placed = True; break
+            if not placed:
+                failures.append(wn); break
+    program.setdefault("validation_flags", {})["v84_filmed_loaded_demo"] = {
+        "pain_state": state,
+        "movement_score": score,
+        "targets": targets,
+        "added": added,
+        "failed_weeks": sorted(set(failures)),
+        "passed": not failures,
+    }
+    return program
+
+
+def _v84_clean_program_copy(program, lang="fr"):
+    for week in program.get("weeks", []) or []:
+        for session in week.get("sessions", []) or []:
+            for exercise in session.get("exercises", []) or []:
+                exercise["reps_time"] = _v84_normalize_duration(exercise.get("reps_time"))
+                exercise["rest"] = _v84_normalize_duration(exercise.get("rest"))
+                exercise["coaching_cues"] = _v84_specific_tip(exercise, lang)
+    return program
+
+
+def generate_clinical_prescription_v21(screening_payload, exercise_library, rules=None, movement_dna=None, language="fr"):
+    lang = _v54_normalize_lang(language)
+    program = _generate_clinical_prescription_v84_base(
+        screening_payload,
+        exercise_library,
+        rules=rules,
+        movement_dna=movement_dna,
+        language=lang,
+    )
+    program = _v84_force_loaded_demo(program, exercise_library, screening_payload, lang)
+    program = _v84_clean_program_copy(program, lang)
+    program["engine_version"] = "FlexiLab Clinical Prescription Engine v2.1.1-V84"
+    program["clinical_reasoning_version"] = "v84_questionnaire_correlated_loaded_demo"
+    program.setdefault("selection_strategy", {})["v84_note"] = (
+        "Questionnaire context is correlated with measured results; safe filmed light-resistance work is protected after all selection nudges."
+    )
+    return program
+
+
+generate_clinical_prescription = generate_clinical_prescription_v21
+
