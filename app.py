@@ -135,7 +135,7 @@ model = YOLO("yolov8n-pose.pt")
 def health():
     return {
         "ok": True,
-        "patch_version": "V84",
+        "patch_version": "V85",
         "exercise_library_mode": EXERCISE_LIBRARY_MODE,
         "exercise_library_path": EXERCISE_LIBRARY_PATH,
         "exercise_library_count": len(EXERCISE_LIBRARY or []),
@@ -146,7 +146,7 @@ def health():
 @app.get("/library_status")
 def library_status():
     return {
-        "patch_version": "V84",
+        "patch_version": "V85",
         "exercise_library_mode": EXERCISE_LIBRARY_MODE,
         "exercise_library_path": EXERCISE_LIBRARY_PATH,
         "exercise_library_count": len(EXERCISE_LIBRARY or []),
@@ -2016,6 +2016,14 @@ def program(session_id: str, lang: str = "fr", intake_json: str = None, question
         )
         clinical_program = normalize_clinical_program_for_frontend(clinical_program, report_data, lang=lang)
 
+        # V85: bind each generated program to the screening that created it.
+        # This gives the frontend a stable namespace for session-completion state.
+        generated_at = datetime.now(timezone.utc).isoformat()
+        clinical_program["program_id"] = str(session_id)
+        clinical_program["generated_from_screening_id"] = str(session_id)
+        clinical_program["generated_at"] = generated_at
+        clinical_program["program_version"] = "V85-" + str(session_id)
+
     except Exception as e:
         clinical_program = {
             "engine_version": "FlexiLab Clinical Prescription Engine unavailable",
@@ -2030,8 +2038,18 @@ def program(session_id: str, lang: str = "fr", intake_json: str = None, question
             }
         }
 
+    # V85: expose stable program identity at both root and program levels.
+    if isinstance(clinical_program, dict):
+        clinical_program.setdefault("program_id", str(session_id))
+        clinical_program.setdefault("generated_from_screening_id", str(session_id))
+        clinical_program.setdefault("generated_at", datetime.now(timezone.utc).isoformat())
+        clinical_program.setdefault("program_version", "V85-" + str(session_id))
+
     result_payload = {
         "session_id": session_id,
+        "program_id": str(session_id),
+        "generated_from_screening_id": str(session_id),
+        "program_generated_at": clinical_program.get("generated_at") if isinstance(clinical_program, dict) else datetime.now(timezone.utc).isoformat(),
         "language": lang,
         "report": report_data,
         "movement_dna": report_data.get("movement_dna"),
@@ -2044,7 +2062,7 @@ def program(session_id: str, lang: str = "fr", intake_json: str = None, question
             "program_is_canonical": True,
             "prescription_is_legacy_alias": True,
             "clinical_engine_expected": "FlexiLab Clinical Prescription Engine v2.1.1",
-            "i18n_contract": "v68 demo filmed library mode + v64 questionnaire/intake compatibility active"
+            "i18n_contract": "v85 program identity + completion-state namespace; v68 filmed demo library; v64 questionnaire compatibility"
         }
     }
 
