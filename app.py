@@ -135,7 +135,7 @@ model = YOLO("yolov8n-pose.pt")
 def health():
     return {
         "ok": True,
-        "patch_version": "V85",
+        "patch_version": "V86",
         "exercise_library_mode": EXERCISE_LIBRARY_MODE,
         "exercise_library_path": EXERCISE_LIBRARY_PATH,
         "exercise_library_count": len(EXERCISE_LIBRARY or []),
@@ -146,7 +146,7 @@ def health():
 @app.get("/library_status")
 def library_status():
     return {
-        "patch_version": "V85",
+        "patch_version": "V86",
         "exercise_library_mode": EXERCISE_LIBRARY_MODE,
         "exercise_library_path": EXERCISE_LIBRARY_PATH,
         "exercise_library_count": len(EXERCISE_LIBRARY or []),
@@ -1940,6 +1940,154 @@ def normalize_clinical_program_for_frontend(program_data: dict, report_data: dic
     return _v45_walk_program_i18n(program_data, lang)
 
 
+
+
+def persist_corrective_program(user_email: str, screening_session_id: str, language: str, program_data: dict):
+    """Create or update the canonical program row for one completed screening."""
+    if supabase is None or not user_email or not screening_session_id or not isinstance(program_data, dict):
+        return None
+    try:
+        existing = (
+            supabase.table("corrective_programs")
+            .select("id,program_version,status")
+            .eq("screening_session_id", screening_session_id)
+            .limit(1)
+            .execute()
+        )
+        now_iso = utc_now_iso()
+        if existing.data:
+            row = existing.data[0]
+            program_id = row.get("id")
+            supabase.table("corrective_programs").update({
+                "user_email": user_email,
+                "language": language,
+                "status": "active",
+                "program_data": program_data,
+                "generated_at": now_iso,
+            }).eq("id", program_id).execute()
+        else:
+            previous = (
+                supabase.table("corrective_programs")
+                .select("program_version")
+                .eq("user_email", user_email)
+                .order("program_version", desc=True)
+                .limit(1)
+                .execute()
+            )
+            version = 1
+            if previous.data:
+                try:
+                    version = int(previous.data[0].get("program_version") or 0) + 1
+                except Exception:
+                    version = 1
+            created = supabase.table("corrective_programs").insert({
+                "user_email": user_email,
+                "screening_session_id": screening_session_id,
+                "program_version": version,
+                "language": language,
+                "status": "active",
+                "program_data": program_data,
+                "generated_at": now_iso,
+            }).execute()
+            program_id = created.data[0]["id"]
+            # Only one active program per customer; older programs remain in history.
+            try:
+                older = (
+                    supabase.table("corrective_programs")
+                    .select("id")
+                    .eq("user_email", user_email)
+                    .eq("status", "active")
+                    .neq("id", program_id)
+                    .execute()
+                )
+                for old in older.data or []:
+                    supabase.table("corrective_programs").update({"status":"superseded"}).eq("id", old["id"]).execute()
+            except Exception:
+                pass
+        final = (
+            supabase.table("corrective_programs")
+            .select("id,program_version,status,generated_at")
+            .eq("id", program_id)
+            .limit(1)
+            .execute()
+        )
+        return final.data[0] if final.data else {"id": program_id}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/program_progress")
+def get_program_progress(program_id: str, user_email: str):
+    if supabase is None:
+        return {"error": "Supabase is not configured on server."}
+    owner = (
+        supabase.table("corrective_programs")
+        .select("id,user_email,status")
+        .eq("id", program_id)
+        .eq("user_email", user_email)
+        .limit(1)
+        .execute()
+    )
+    if not owner.data:
+        return {"error": "Program not found for this user."}
+    rows = (
+        supabase.table("program_session_progress")
+        .select("week_number,day_number,status,started_at,completed_at,updated_at,completion_data")
+        .eq("program_id", program_id)
+        .eq("user_email", user_email)
+        .order("week_number")
+        .order("day_number")
+        .execute()
+    )
+    return {"program_id": program_id, "progress": rows.data or []}
+
+
+@app.post("/program_progress")
+def save_program_progress(
+    program_id: str = Form(...),
+    user_email: str = Form(...),
+    week_number: int = Form(...),
+    day_number: int = Form(...),
+    status: str = Form(...),
+    completion_data: str = Form(None),
+):
+    if supabase is None:
+        return {"error": "Supabase is not configured on server."}
+    if status not in {"not_started", "in_progress", "completed"}:
+        return {"error": "Invalid progress status."}
+    owner = (
+        supabase.table("corrective_programs")
+        .select("id,user_email")
+        .eq("id", program_id)
+        .eq("user_email", user_email)
+        .limit(1)
+        .execute()
+    )
+    if not owner.data:
+        return {"error": "Program not found for this user."}
+    now_iso = utc_now_iso()
+    payload = {
+        "program_id": program_id,
+        "user_email": user_email,
+        "week_number": int(week_number),
+        "day_number": int(day_number),
+        "status": status,
+        "updated_at": now_iso,
+    }
+    if status == "in_progress":
+        payload["started_at"] = now_iso
+    if status == "completed":
+        payload["completed_at"] = now_iso
+    parsed_completion = safe_json_loads(completion_data)
+    if parsed_completion is not None:
+        payload["completion_data"] = parsed_completion
+    saved = supabase.table("program_session_progress").upsert(
+        payload,
+        on_conflict="program_id,week_number,day_number"
+    ).execute()
+    return {"ok": True, "progress": saved.data[0] if saved.data else payload}
+
+
 @app.get("/program")
 def program(session_id: str, lang: str = "fr", intake_json: str = None, questionnaire_json: str = None):
     """
@@ -2016,13 +2164,11 @@ def program(session_id: str, lang: str = "fr", intake_json: str = None, question
         )
         clinical_program = normalize_clinical_program_for_frontend(clinical_program, report_data, lang=lang)
 
-        # V85: bind each generated program to the screening that created it.
-        # This gives the frontend a stable namespace for session-completion state.
+        # V86: the screening remains the source identity; the canonical database
+        # program UUID is attached after the program is persisted below.
         generated_at = datetime.now(timezone.utc).isoformat()
-        clinical_program["program_id"] = str(session_id)
         clinical_program["generated_from_screening_id"] = str(session_id)
         clinical_program["generated_at"] = generated_at
-        clinical_program["program_version"] = "V85-" + str(session_id)
 
     except Exception as e:
         clinical_program = {
@@ -2038,35 +2184,53 @@ def program(session_id: str, lang: str = "fr", intake_json: str = None, question
             }
         }
 
-    # V85: expose stable program identity at both root and program levels.
+    user_email = get_session_user_email(session_id, report_data)
+
+    # Persist a canonical program version and expose its database UUID.
+    persisted_program = persist_corrective_program(
+        user_email=user_email,
+        screening_session_id=str(session_id),
+        language=lang,
+        program_data=clinical_program if isinstance(clinical_program, dict) else {},
+    )
+    db_program_id = None
+    db_program_version = None
+    program_persistence_error = None
+    if isinstance(persisted_program, dict):
+        db_program_id = persisted_program.get("id")
+        db_program_version = persisted_program.get("program_version")
+        program_persistence_error = persisted_program.get("error")
+
+    # Safe fallback keeps the endpoint usable if persistence is temporarily unavailable.
+    stable_program_id = str(db_program_id or session_id)
     if isinstance(clinical_program, dict):
-        clinical_program.setdefault("program_id", str(session_id))
-        clinical_program.setdefault("generated_from_screening_id", str(session_id))
+        clinical_program["program_id"] = stable_program_id
+        clinical_program["generated_from_screening_id"] = str(session_id)
         clinical_program.setdefault("generated_at", datetime.now(timezone.utc).isoformat())
-        clinical_program.setdefault("program_version", "V85-" + str(session_id))
+        clinical_program["program_version"] = db_program_version or clinical_program.get("program_version") or 1
 
     result_payload = {
         "session_id": session_id,
-        "program_id": str(session_id),
+        "program_id": stable_program_id,
         "generated_from_screening_id": str(session_id),
+        "program_version": db_program_version or 1,
         "program_generated_at": clinical_program.get("generated_at") if isinstance(clinical_program, dict) else datetime.now(timezone.utc).isoformat(),
         "language": lang,
         "report": report_data,
         "movement_dna": report_data.get("movement_dna"),
         "clinical_patterns": report_data.get("clinical_patterns", []),
         "program": clinical_program,
-        # Legacy alias: current frontend may still read response["prescription"].
         "prescription": clinical_program,
         "resource_load_errors": RESOURCE_LOAD_ERRORS,
+        "program_persistence_error": program_persistence_error,
         "api_contract_note": {
             "program_is_canonical": True,
             "prescription_is_legacy_alias": True,
             "clinical_engine_expected": "FlexiLab Clinical Prescription Engine v2.1.1",
-            "i18n_contract": "v85 program identity + completion-state namespace; v68 filmed demo library; v64 questionnaire compatibility"
+            "i18n_contract": "v86 Supabase program identity + cross-device progress; v68 filmed demo library; v64 questionnaire compatibility"
         }
     }
 
-    user_email = get_session_user_email(session_id, report_data)
     history_status = save_screening_history(user_email=user_email, session_id=session_id, result=result_payload)
     result_payload["history_status"] = history_status
 
