@@ -135,7 +135,7 @@ model = YOLO("yolov8n-pose.pt")
 def health():
     return {
         "ok": True,
-        "patch_version": "V88",
+        "patch_version": "V88.1",
         "exercise_library_mode": EXERCISE_LIBRARY_MODE,
         "exercise_library_path": EXERCISE_LIBRARY_PATH,
         "exercise_library_count": len(EXERCISE_LIBRARY or []),
@@ -146,7 +146,7 @@ def health():
 @app.get("/library_status")
 def library_status():
     return {
-        "patch_version": "V88",
+        "patch_version": "V88.1",
         "exercise_library_mode": EXERCISE_LIBRARY_MODE,
         "exercise_library_path": EXERCISE_LIBRARY_PATH,
         "exercise_library_count": len(EXERCISE_LIBRARY or []),
@@ -2319,70 +2319,99 @@ def program(session_id: str, lang: str = "fr", intake_json: str = None, question
 
 @app.get("/history/{user_email}")
 def history(user_email: str, limit: int = 20):
-    """Return real completed screening sessions, newest first."""
+    """
+    Return one real history item per screening session.
+
+    New records use sessions.created_at and sessions.composite_score.
+    Legacy records fall back to the oldest screening_history snapshot for the
+    same session, so existing screenings remain visible without creating fake dates.
+    """
     try:
         if not supabase:
             return {"user_email": user_email, "items": [], "error": "supabase_not_configured"}
 
-        res = (
+        s_resp = (
             supabase.table("sessions")
             .select("id, user_email, created_at, composite_score, status")
             .eq("user_email", user_email)
-            .eq("status", "completed")
             .order("created_at", desc=True)
-            .limit(limit)
+            .limit(max(limit * 4, 50))
             .execute()
         )
-        sessions = getattr(res, "data", None) or []
-        rows = [
-            {
-                "id": row.get("id"),
-                "user_email": row.get("user_email"),
-                "session_id": row.get("id"),
-                "created_at": row.get("created_at"),
-                "flexilab_score": row.get("composite_score"),
-                "risk_level": None,
-            }
-            for row in sessions
-            if row.get("id") and row.get("created_at") and row.get("composite_score") is not None
-        ]
-        return {"user_email": user_email, "count": len(rows), "items": rows, "source": "completed_sessions"}
+        sessions = getattr(s_resp, "data", None) or []
+        session_map = {str(r.get("id")): r for r in sessions if r.get("id")}
+
+        h_resp = (
+            supabase.table("screening_history")
+            .select("id, user_email, session_id, created_at, flexilab_score, risk_level")
+            .eq("user_email", user_email)
+            .order("created_at", desc=False)
+            .limit(max(limit * 10, 200))
+            .execute()
+        )
+        snapshots = getattr(h_resp, "data", None) or []
+        oldest_snapshot = {}
+        for row in snapshots:
+            sid = str(row.get("session_id") or "")
+            if sid and sid not in oldest_snapshot:
+                oldest_snapshot[sid] = row
+
+        candidate_ids = set(session_map.keys()) | set(oldest_snapshot.keys())
+        rows = []
+        for sid in candidate_ids:
+            session = session_map.get(sid) or {}
+            snap = oldest_snapshot.get(sid) or {}
+
+            score = session.get("composite_score")
+            if score is None:
+                score = snap.get("flexilab_score")
+            if score is None:
+                continue
+
+            created_at = session.get("created_at") or snap.get("created_at")
+            if not created_at:
+                continue
+
+            rows.append({
+                "id": sid,
+                "user_email": session.get("user_email") or snap.get("user_email") or user_email,
+                "session_id": sid,
+                "created_at": created_at,
+                "flexilab_score": score,
+                "risk_level": snap.get("risk_level"),
+                "session_status": session.get("status"),
+            })
+
+        rows.sort(key=lambda x: str(x.get("created_at") or ""), reverse=True)
+        rows = rows[:limit]
+        return {
+            "user_email": user_email,
+            "count": len(rows),
+            "items": rows,
+            "source": "sessions_with_legacy_snapshot_fallback",
+        }
     except Exception as e:
         return {"user_email": user_email, "items": [], "error": str(e)}
 
 
 @app.get("/history/{user_email}/latest")
 def latest_history(user_email: str):
-    """Return the latest two real completed screening sessions."""
-    try:
-        if not supabase:
-            return {"user_email": user_email, "latest": None, "previous": None, "error": "supabase_not_configured"}
-
-        res = (
-            supabase.table("sessions")
-            .select("id, user_email, created_at, composite_score, status")
-            .eq("user_email", user_email)
-            .eq("status", "completed")
-            .order("created_at", desc=True)
-            .limit(2)
-            .execute()
-        )
-        sessions = getattr(res, "data", None) or []
-        rows = [
-            {
-                "id": row.get("id"),
-                "user_email": row.get("user_email"),
-                "session_id": row.get("id"),
-                "created_at": row.get("created_at"),
-                "flexilab_score": row.get("composite_score"),
-                "risk_level": None,
-            }
-            for row in sessions
-            if row.get("id") and row.get("created_at") and row.get("composite_score") is not None
-        ]
-        latest = rows[0] if len(rows) >= 1 else None
-        previous = rows[1] if len(rows) >= 2 else None
-        delta = round(float(latest["flexilab_score"]) - float(previous["flexilab_score"]), 1) if latest and previous else None
-        return {"user_email": user_email, "latest": latest, "previous": previous, "score_delta": delta, "source": "completed_sessions"}
-    except Exception as e:
-        return {"user_email": user_email, "latest": None, "previous": None, "error": str(e)}
+    """Return the latest two items using the same compatibility source."""
+    payload = history(user_email=user_email, limit=2)
+    rows = payload.get("items") or []
+    latest = rows[0] if len(rows) >= 1 else None
+    previous = rows[1] if len(rows) >= 2 else None
+    delta = None
+    if latest and previous:
+        try:
+            delta = round(float(latest["flexilab_score"]) - float(previous["flexilab_score"]), 1)
+        except Exception:
+            delta = None
+    return {
+        "user_email": user_email,
+        "latest": latest,
+        "previous": previous,
+        "score_delta": delta,
+        "source": payload.get("source"),
+        "error": payload.get("error"),
+    }
