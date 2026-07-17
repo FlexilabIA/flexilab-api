@@ -140,7 +140,7 @@ model = YOLO("yolov8n-pose.pt")
 def health():
     return {
         "ok": True,
-        "patch_version": "V91.0-latest-session",
+        "patch_version": "V92.0-screening-history",
         "exercise_library_mode": EXERCISE_LIBRARY_MODE,
         "exercise_library_path": EXERCISE_LIBRARY_PATH,
         "exercise_library_count": len(EXERCISE_LIBRARY or []),
@@ -151,7 +151,7 @@ def health():
 @app.get("/library_status")
 def library_status():
     return {
-        "patch_version": "V91.0-latest-session",
+        "patch_version": "V92.0-screening-history",
         "exercise_library_mode": EXERCISE_LIBRARY_MODE,
         "exercise_library_path": EXERCISE_LIBRARY_PATH,
         "exercise_library_count": len(EXERCISE_LIBRARY or []),
@@ -940,6 +940,178 @@ def latest_session(user_email: str):
         "status": session.get("status"),
         "created_at": session.get("created_at"),
         "composite_score": session.get("composite_score"),
+    }
+
+
+def _safe_number(value):
+    try:
+        if value is None:
+            return None
+        number = float(value)
+        if math.isnan(number) or math.isinf(number):
+            return None
+        return number
+    except Exception:
+        return None
+
+
+def _mean_available(values):
+    clean = [_safe_number(value) for value in values]
+    clean = [value for value in clean if value is not None]
+    if not clean:
+        return None
+    return round(sum(clean) / len(clean), 1)
+
+
+def _symmetry_score(left_value, right_value):
+    """
+    Convert a bilateral score difference into a 0–100 symmetry score.
+
+    A difference of 0 gives 100. The score decreases progressively as the
+    left/right gap grows. Missing bilateral data returns None rather than
+    inventing a value.
+    """
+    left = _safe_number(left_value)
+    right = _safe_number(right_value)
+    if left is None or right is None:
+        return None
+    return round(max(0.0, 100.0 - abs(left - right) * 2.0), 1)
+
+
+def build_movement_profile_from_session(session):
+    """
+    Build a six-domain descriptive movement profile from measurements that
+    actually exist in the completed session.
+
+    These are screening domains, not independent medical diagnoses.
+    Missing tests remain None and are not converted to zero.
+    """
+    posture = _safe_number(session.get("posture_score"))
+
+    shoulder_right = _safe_number(session.get("shoulder_right_score"))
+    shoulder_left = _safe_number(session.get("shoulder_left_score"))
+    shoulder_mobility = _mean_available([shoulder_right, shoulder_left])
+
+    squat = _safe_number(session.get("squat_score"))
+    aslr_right = _safe_number(session.get("aslr_right_score"))
+    aslr_left = _safe_number(session.get("aslr_left_score"))
+    aslr_mobility = _mean_available([aslr_right, aslr_left])
+    lower_body_mobility = _mean_available([squat, aslr_mobility])
+
+    # Current movement-control proxy uses the two tests that include visible
+    # alignment/control demands. It should later be replaced by a dedicated
+    # dynamic-control test when that module is added.
+    movement_control = _mean_available([posture, squat])
+
+    shoulder_symmetry = _symmetry_score(shoulder_left, shoulder_right)
+    aslr_symmetry = _symmetry_score(aslr_left, aslr_right)
+    symmetry = _mean_available([shoulder_symmetry, aslr_symmetry])
+
+    overall = _safe_number(session.get("composite_score"))
+    if overall is None:
+        overall = compute_composite(
+            posture,
+            shoulder_right,
+            shoulder_left,
+            squat,
+            aslr_right,
+            aslr_left,
+        )
+
+    return {
+        "posture": posture,
+        "shoulder_mobility": shoulder_mobility,
+        "lower_body_mobility": lower_body_mobility,
+        "movement_control": movement_control,
+        "symmetry": symmetry,
+        "overall_movement_capacity": overall,
+    }
+
+
+@app.get("/screening_history")
+def screening_history(user_email: str, limit: int = 6):
+    """
+    Return the latest real screening sessions for a user.
+
+    The response is ordered oldest -> newest for chart rendering.
+    Only usable sessions with at least one recorded screening are included.
+    No synthetic dates, scores, or interpolated points are generated.
+    """
+    if supabase is None:
+        return {"error": "Supabase is not configured on server."}
+
+    normalized_email = str(user_email or "").strip().lower()
+    if not normalized_email:
+        return {"error": "user_email is required"}
+
+    safe_limit = max(1, min(int(limit or 6), 12))
+
+    sessions_resp = (
+        supabase.table("sessions")
+        .select(
+            "id,user_email,status,created_at,composite_score,"
+            "posture_score,shoulder_right_score,shoulder_left_score,"
+            "squat_score,aslr_right_score,aslr_left_score"
+        )
+        .ilike("user_email", normalized_email)
+        .order("created_at", desc=True)
+        .limit(max(safe_limit * 3, 12))
+        .execute()
+    )
+
+    usable = []
+
+    for session in sessions_resp.data or []:
+        session_id = session.get("id")
+        if not session_id:
+            continue
+
+        has_screening = (
+            supabase.table("screenings")
+            .select("id")
+            .eq("session_id", session_id)
+            .limit(1)
+            .execute()
+        )
+
+        if not has_screening.data:
+            continue
+
+        score = _safe_number(session.get("composite_score"))
+        if score is None:
+            score = compute_composite(
+                session.get("posture_score"),
+                session.get("shoulder_right_score"),
+                session.get("shoulder_left_score"),
+                session.get("squat_score"),
+                session.get("aslr_right_score"),
+                session.get("aslr_left_score"),
+            )
+
+        usable.append({
+            "session_id": session_id,
+            "created_at": session.get("created_at"),
+            "status": session.get("status"),
+            "score": score,
+            "movement_profile": build_movement_profile_from_session(session),
+        })
+
+        if len(usable) >= safe_limit:
+            break
+
+    usable.reverse()
+
+    return {
+        "found": bool(usable),
+        "user_email": normalized_email,
+        "count": len(usable),
+        "screenings": usable,
+        "latest": usable[-1] if usable else None,
+        "profile_method": "v1_session_measurement_profile",
+        "profile_disclaimer": (
+            "This profile summarizes available screening measurements and is "
+            "not a medical diagnosis."
+        ),
     }
 
 @app.post("/start_session")
