@@ -1,257 +1,214 @@
-
 """
-FlexiLab Score Engine V2
+FlexiLab Evidence-Aware Score Engine V3
 
-Goal
-----
-Replace the old "deduct from 100" score with a movement-quality score.
-
-The final score is built from 6 domains:
-- cervical_control: 15%
-- thoracic_mobility: 20%
-- shoulder_mobility: 20%
-- hip_mobility: 20%
-- core_stability: 15%
-- ankle_mobility: 10%
-
-This avoids unrealistic 90+ scores when several movement areas need improvement.
+Principles
+----------
+- Score only domains supported by the current screening.
+- Never assign a positive default score to an unassessed domain.
+- Keep measured evidence and inferred support separate.
+- Reweight the global score across assessed domains only.
 """
 
 from __future__ import annotations
-from typing import Dict, Any, List
+from typing import Any, Dict, List, Optional
 
-
-DOMAIN_WEIGHTS = {
-    "cervical_control": 15,
-    "thoracic_mobility": 20,
-    "shoulder_mobility": 20,
-    "hip_mobility": 20,
-    "core_stability": 15,
-    "ankle_mobility": 10,
+DOMAIN_CONFIG = {
+    "cervical_alignment_control": {
+        "weight": 15,
+        "label_fr": "Alignement et contrôle cervical",
+        "label_en": "Cervical alignment and control",
+        "metrics": ["neck_angle"],
+        "evidence_level": "direct_screening_measure",
+    },
+    "upper_trunk_alignment": {
+        "weight": 15,
+        "label_fr": "Alignement du haut du tronc",
+        "label_en": "Upper-trunk alignment",
+        "metrics": ["thoracic_angle"],
+        "evidence_level": "direct_screening_measure",
+    },
+    "shoulder_overhead_mobility": {
+        "weight": 25,
+        "label_fr": "Mobilité active des épaules",
+        "label_en": "Active shoulder mobility",
+        "metrics": ["shoulder_right_flexion", "shoulder_left_flexion"],
+        "evidence_level": "direct_screening_measure",
+    },
+    "posterior_chain_active_mobility": {
+        "weight": 20,
+        "label_fr": "Mobilité active de la chaîne postérieure",
+        "label_en": "Active posterior-chain mobility",
+        "metrics": ["aslr_right_angle", "aslr_left_angle"],
+        "evidence_level": "direct_screening_measure",
+    },
+    "squat_movement_strategy": {
+        "weight": 25,
+        "label_fr": "Stratégie de mouvement au squat",
+        "label_en": "Squat movement strategy",
+        "metrics": ["squat_knee_angle", "squat_trunk_lean"],
+        "evidence_level": "multi_joint_screening_measure",
+    },
 }
 
-DOMAIN_LABELS = {
-    "cervical_control": {"fr": "Contrôle cervical", "en": "Cervical Control"},
-    "thoracic_mobility": {"fr": "Mobilité thoracique", "en": "Thoracic Mobility"},
-    "shoulder_mobility": {"fr": "Mobilité des épaules", "en": "Shoulder Mobility"},
-    "hip_mobility": {"fr": "Mobilité de hanche", "en": "Hip Mobility"},
-    "core_stability": {"fr": "Stabilité du tronc", "en": "Core Stability"},
-    "ankle_mobility": {"fr": "Mobilité de cheville", "en": "Ankle Mobility"},
+UNASSESSED_DOMAINS = {
+    "ankle_dorsiflexion": {
+        "label_fr": "Dorsiflexion de cheville",
+        "label_en": "Ankle dorsiflexion",
+        "reason_fr": "Aucun test direct de dorsiflexion n’a été réalisé.",
+        "reason_en": "No direct dorsiflexion test was performed.",
+    },
+    "scapular_control": {
+        "label_fr": "Contrôle scapulaire",
+        "label_en": "Scapular control",
+        "reason_fr": "La rotation scapulaire n’a pas été mesurée directement.",
+        "reason_en": "Scapular rotation was not measured directly.",
+    },
+    "thoracic_mobility": {
+        "label_fr": "Mobilité thoracique",
+        "label_en": "Thoracic mobility",
+        "reason_fr": "La vue de profil mesure un alignement statique, pas une amplitude thoracique.",
+        "reason_en": "The side view measures static alignment, not thoracic range of motion.",
+    },
+    "isolated_core_stability": {
+        "label_fr": "Stabilité isolée du tronc",
+        "label_en": "Isolated trunk stability",
+        "reason_fr": "Le squat renseigne sur une stratégie globale et ne constitue pas un test isolé du tronc.",
+        "reason_en": "The squat reflects a global strategy and is not an isolated trunk test.",
+    },
 }
 
+def clamp(value: float, lo: float = 0.0, hi: float = 100.0) -> float:
+    return max(lo, min(hi, float(value)))
 
-def clamp(x: float, lo: float = 0, hi: float = 100) -> float:
-    try:
-        return max(lo, min(hi, float(x)))
-    except Exception:
-        return lo
-
-
-def score_from_band(rating: str) -> float:
-    """
-    Base score from traffic-light rating.
-    Green is not always 100 because 'green' may still contain improvement potential.
-    """
-    rating = str(rating or "").lower()
-    if rating == "green":
-        return 85
-    if rating == "yellow":
-        return 62
-    if rating == "red":
-        return 38
-    return 70
-
-
-def get_item(report: Dict[str, Any], item_id: str) -> Dict[str, Any] | None:
-    for sec in report.get("sections", []) or []:
-        for item in sec.get("items", []) or []:
+def get_item(report: Dict[str, Any], item_id: str) -> Optional[Dict[str, Any]]:
+    for section in report.get("sections", []) or []:
+        for item in section.get("items", []) or []:
             if item.get("id") == item_id:
                 return item
     return None
 
-
-def score_metric(report: Dict[str, Any], item_id: str, default: float = 70) -> float:
-    item = get_item(report, item_id)
-    if not item:
-        return default
-
-    base = score_from_band(item.get("rating"))
-
-    # Fine adjustment inside rating band using pointer when available.
-    th = item.get("thresholds", {}) or {}
-    scale_min = th.get("scale_min")
-    scale_max = th.get("scale_max")
-    pointer = th.get("pointer_value", item.get("value"))
-    rating = str(item.get("rating", "")).lower()
-
-    try:
-        if scale_min is not None and scale_max is not None and scale_max != scale_min:
-            normalized = (float(pointer) - float(scale_min)) / (float(scale_max) - float(scale_min))
-            normalized = clamp(normalized, 0, 1)
-            # For metrics where higher is better, rating bands usually have green at high values.
-            higher_is_better = item_id in [
-                "shoulder_right_flexion",
-                "shoulder_left_flexion",
-                "aslr_right_angle",
-                "aslr_left_angle",
-                "aslr_angle",
-            ]
-            if higher_is_better:
-                fine = normalized
-            else:
-                fine = 1 - normalized
-
-            if rating == "green":
-                base = 82 + 18 * fine
-            elif rating == "yellow":
-                base = 52 + 23 * fine
-            elif rating == "red":
-                base = 18 + 27 * fine
-    except Exception:
-        pass
-
+def band_score(item: Dict[str, Any]) -> float:
+    rating = str(item.get("rating") or "").lower()
+    base = {"green": 88.0, "yellow": 64.0, "orange": 52.0, "red": 36.0}.get(rating, 70.0)
     return clamp(base)
 
+def confidence_from_items(items: List[Dict[str, Any]]) -> str:
+    values = []
+    for item in items:
+        try:
+            values.append(float(item.get("confidence")))
+        except Exception:
+            pass
+    if not values:
+        return "moderate"
+    mean = sum(values) / len(values)
+    if mean >= 0.75:
+        return "high"
+    if mean >= 0.45:
+        return "moderate"
+    return "low"
 
-def avg(values: List[float], default: float = 70) -> float:
-    vals = [float(v) for v in values if v is not None]
-    return sum(vals) / len(vals) if vals else default
+def derive_domain_scores(report: Dict[str, Any], lang: str = "fr") -> List[Dict[str, Any]]:
+    domains = []
+    for domain_id, cfg in DOMAIN_CONFIG.items():
+        items = [get_item(report, metric_id) for metric_id in cfg["metrics"]]
+        items = [item for item in items if item and item.get("value") is not None]
+        if not items:
+            continue
 
-
-def derive_domain_scores(report: Dict[str, Any]) -> Dict[str, float]:
-    """
-    Build domain scores from available screening metrics.
-    Missing domains receive a conservative default score.
-    """
-    neck = score_metric(report, "neck_angle", 70)
-    thoracic_posture = score_metric(report, "thoracic_angle", 70)
-    pelvis = score_metric(report, "pelvic_proxy_angle", 70)
-    sh_r = score_metric(report, "shoulder_right_flexion", 70)
-    sh_l = score_metric(report, "shoulder_left_flexion", 70)
-    squat_knee = score_metric(report, "squat_knee_angle", 70)
-    squat_trunk = score_metric(report, "squat_trunk_lean", 70)
-    aslr_r = score_metric(report, "aslr_right_angle", None)
-    aslr_l = score_metric(report, "aslr_left_angle", None)
-
-    # Shoulder asymmetry penalty
-    shoulder_asym_penalty = 0
-    try:
-        for sec in report.get("sections", []) or []:
-            if sec.get("id") == "shoulders":
-                asym = sec.get("asymmetry", {}) or {}
-                if asym.get("rating") == "yellow":
-                    shoulder_asym_penalty = 8
-                elif asym.get("rating") == "red":
-                    shoulder_asym_penalty = 18
-    except Exception:
-        pass
-
-    shoulder = clamp(avg([sh_r, sh_l], 70) - shoulder_asym_penalty)
-
-    # ASLR contributes strongly to hip/posterior chain when available.
-    aslr = avg([aslr_r, aslr_l], None) if (aslr_r is not None or aslr_l is not None) else None
-
-    domains = {
-        "cervical_control": neck,
-        "thoracic_mobility": avg([thoracic_posture, squat_trunk], 70),
-        "shoulder_mobility": shoulder,
-        "hip_mobility": avg([squat_knee, aslr if aslr is not None else 65], 65),
-        "core_stability": avg([squat_trunk, pelvis], 70),
-        "ankle_mobility": avg([squat_knee], 70),
-    }
-
-    # If several domains are flagged as priorities, prevent inflated score.
-    priority_count = 0
-    for sec in report.get("sections", []) or []:
-        for item in sec.get("items", []) or []:
-            if item.get("rating") in ["yellow", "red"]:
-                priority_count += 1
-
-    if priority_count >= 4:
-        for k in domains:
-            domains[k] = min(domains[k], 78)
-    if priority_count >= 6:
-        for k in domains:
-            domains[k] = min(domains[k], 72)
-
-    return {k: round(clamp(v), 1) for k, v in domains.items()}
-
+        score = round(sum(band_score(item) for item in items) / len(items), 1)
+        domains.append({
+            "id": domain_id,
+            "label_fr": cfg["label_fr"],
+            "label_en": cfg["label_en"],
+            "label": cfg["label_fr"] if lang == "fr" else cfg["label_en"],
+            "score": score,
+            "weight": cfg["weight"],
+            "assessment_status": "assessed",
+            "evidence_level": cfg["evidence_level"],
+            "evidence": [
+                {
+                    "metric_id": item.get("id"),
+                    "value": item.get("value"),
+                    "unit": item.get("unit"),
+                    "rating": item.get("rating"),
+                }
+                for item in items
+            ],
+            "confidence": confidence_from_items(items),
+        })
+    return domains
 
 def movement_quality_label(score: float, lang: str = "fr") -> Dict[str, str]:
-    s = float(score)
-    if s >= 90:
-        key, fr, en, color = "excellent", "Excellent", "Excellent Movement", "green"
-    elif s >= 80:
-        key, fr, en, color = "good", "Bon", "Good Movement", "green"
-    elif s >= 70:
-        key, fr, en, color = "fair", "Correct", "Fair Movement", "yellow"
-    elif s >= 60:
-        key, fr, en, color = "needs_improvement", "À améliorer", "Needs Improvement", "orange"
-    elif s >= 40:
-        key, fr, en, color = "limited", "Mobilité limitée", "Limited Mobility", "red"
+    if score >= 85:
+        fr, en, color = "Profil global favorable", "Favourable overall profile", "green"
+    elif score >= 70:
+        fr, en, color = "Axes d’amélioration modérés", "Moderate improvement opportunities", "yellow"
     else:
-        key, fr, en, color = "priority_program", "Programme prioritaire", "Corrective Program Recommended", "red"
-    return {"key": key, "label_fr": fr, "label_en": en, "label": fr if lang == "fr" else en, "color": color}
+        fr, en, color = "Priorités correctives identifiées", "Corrective priorities identified", "red"
+    return {"label_fr": fr, "label_en": en, "label": fr if lang == "fr" else en, "color": color}
 
+def compute_flexilab_score_v3(report: Dict[str, Any], lang: str = "fr") -> Dict[str, Any]:
+    domains = derive_domain_scores(report, lang)
+    if not domains:
+        return {
+            "version": "FlexiLab Evidence-Aware Score Engine V3",
+            "score": None,
+            "movement_quality": movement_quality_label(0, lang),
+            "domain_scores": [],
+            "main_areas_to_improve": [],
+            "strengths": [],
+            "not_assessed_domains": [],
+        }
 
-def compute_flexilab_score_v2(report: Dict[str, Any], lang: str = "fr") -> Dict[str, Any]:
-    domains = derive_domain_scores(report)
-    weighted = 0
-    for domain, weight in DOMAIN_WEIGHTS.items():
-        weighted += domains.get(domain, 70) * weight / 100
+    weight_sum = sum(d["weight"] for d in domains)
+    score = round(sum(d["score"] * d["weight"] for d in domains) / weight_sum, 1)
+    priorities = [d for d in sorted(domains, key=lambda d: d["score"]) if d["score"] < 75][:3]
+    strengths = [d for d in sorted(domains, key=lambda d: d["score"], reverse=True) if d["score"] >= 75][:3]
 
-    score = round(clamp(weighted), 1)
-    label = movement_quality_label(score, lang=lang)
-
-    domain_list = []
-    for k, v in domains.items():
-        domain_list.append({
-            "id": k,
-            "label_fr": DOMAIN_LABELS[k]["fr"],
-            "label_en": DOMAIN_LABELS[k]["en"],
-            "label": DOMAIN_LABELS[k]["fr"] if lang == "fr" else DOMAIN_LABELS[k]["en"],
-            "score": v,
-            "weight": DOMAIN_WEIGHTS[k],
-            "status": movement_quality_label(v, lang=lang)["key"],
-            "color": movement_quality_label(v, lang=lang)["color"],
-        })
-
-    priorities = sorted(domain_list, key=lambda x: x["score"])[:6]
-    strengths = sorted(domain_list, key=lambda x: x["score"], reverse=True)[:3]
-
-    improvement_potential = round(clamp(100 - score), 1)
+    not_assessed = [
+        {
+            "id": did,
+            "label_fr": cfg["label_fr"],
+            "label_en": cfg["label_en"],
+            "label": cfg["label_fr"] if lang == "fr" else cfg["label_en"],
+            "assessment_status": "not_assessed",
+            "score": None,
+            "reason_fr": cfg["reason_fr"],
+            "reason_en": cfg["reason_en"],
+            "reason": cfg["reason_fr"] if lang == "fr" else cfg["reason_en"],
+        }
+        for did, cfg in UNASSESSED_DOMAINS.items()
+    ]
 
     return {
-        "version": "FlexiLab Score Engine V2",
+        "version": "FlexiLab Evidence-Aware Score Engine V3",
         "score": score,
-        "movement_quality": label,
-        "improvement_potential": improvement_potential,
-        "domain_scores": domain_list,
+        "movement_quality": movement_quality_label(score, lang),
+        "domain_scores": domains,
         "main_areas_to_improve": priorities,
         "strengths": strengths,
-        "weights": DOMAIN_WEIGHTS,
+        "not_assessed_domains": not_assessed,
+        "scoring_note_fr": "Le score global est recalculé uniquement à partir des domaines effectivement évalués.",
+        "scoring_note_en": "The global score is reweighted across assessed domains only.",
     }
-
 
 def attach_score_v2(report: Dict[str, Any], lang: str = "fr") -> Dict[str, Any]:
-    """
-    Mutates and returns report with V2 score fields.
-    Keeps old score under flexilab_score_v1 for backward compatibility.
-    """
+    """Compatibility name retained for app.py."""
     if not isinstance(report, dict):
         return report
-
-    score_v2 = compute_flexilab_score_v2(report, lang=lang)
-    old_score = report.get("flexilab_score")
-    report["flexilab_score_v1"] = old_score
-    report["flexilab_score"] = score_v2["score"]
-    report["score_v2"] = score_v2
+    result = compute_flexilab_score_v3(report, lang)
+    report["flexilab_score_v1"] = report.get("flexilab_score")
+    report["flexilab_score"] = result["score"]
+    report["score_v2"] = result
+    report["movement_quality"] = result["movement_quality"]
     report["risk_category"] = {
-        "label": score_v2["movement_quality"]["label"],
-        "color": score_v2["movement_quality"]["color"],
-        "description_fr": "Score basé sur la qualité globale du mouvement et les domaines prioritaires.",
-        "description_en": "Score based on overall movement quality and priority domains.",
-        "description": "Score basé sur la qualité globale du mouvement et les domaines prioritaires." if lang == "fr" else "Score based on overall movement quality and priority domains.",
+        "label": result["movement_quality"]["label"],
+        "color": result["movement_quality"]["color"],
+        "description_fr": result.get("scoring_note_fr"),
+        "description_en": result.get("scoring_note_en"),
+        "description": result.get("scoring_note_fr") if lang == "fr" else result.get("scoring_note_en"),
     }
-    report["top_priorities_v2"] = score_v2["main_areas_to_improve"]
+    report["top_priorities_v2"] = result["main_areas_to_improve"]
+    report["not_assessed_domains"] = result["not_assessed_domains"]
     return report
