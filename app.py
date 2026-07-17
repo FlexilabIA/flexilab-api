@@ -16,6 +16,11 @@ except Exception:
     attach_score_v2 = None
 
 try:
+    from engines.clinical_report_engine_v1 import attach_expert_report
+except Exception:
+    attach_expert_report = None
+
+try:
     from engines.flexilab_ckb_engine_v1 import generate_movement_dna, load_json as load_ckb_json
 except Exception:
     generate_movement_dna = None
@@ -135,7 +140,7 @@ model = YOLO("yolov8n-pose.pt")
 def health():
     return {
         "ok": True,
-        "patch_version": "V88.1",
+        "patch_version": "V90.0-clinical-report",
         "exercise_library_mode": EXERCISE_LIBRARY_MODE,
         "exercise_library_path": EXERCISE_LIBRARY_PATH,
         "exercise_library_count": len(EXERCISE_LIBRARY or []),
@@ -146,7 +151,7 @@ def health():
 @app.get("/library_status")
 def library_status():
     return {
-        "patch_version": "V88.1",
+        "patch_version": "V90.0-clinical-report",
         "exercise_library_mode": EXERCISE_LIBRARY_MODE,
         "exercise_library_path": EXERCISE_LIBRARY_PATH,
         "exercise_library_count": len(EXERCISE_LIBRARY or []),
@@ -1707,7 +1712,7 @@ def report(session_id: str, lang: str = "fr"):
             "why": c["why"],
         })
 
-    return {
+    report_payload = {
         "session_id": session_id,
         "language": lang,
         "user_email": session.get("user_email"),
@@ -1717,11 +1722,36 @@ def report(session_id: str, lang: str = "fr"):
         "risk_category": risk_category,
         "sections": sections,
         "top_priorities": top_priorities,
-        "next_step_fr": "Refais le screening dans 14 jours pour vérifier l'évolution.",
-        "next_step_en": "Repeat the screening in 14 days to check progress.",
-        "next_step": txt("Refais le screening dans 14 jours pour vérifier l'évolution.", "Repeat the screening in 14 days to check progress."),
+        "next_step_fr": "Refais le screening après 4 semaines dans des conditions comparables.",
+        "next_step_en": "Repeat the screening after 4 weeks under comparable conditions.",
+        "next_step": txt(
+            "Refais le screening après 4 semaines dans des conditions comparables.",
+            "Repeat the screening after 4 weeks under comparable conditions."
+        ),
         "debug": {"tests_found": tests_found}
     }
+
+    # Evidence-aware movement score. The compatibility function name remains
+    # attach_score_v2 even though the replacement engine is V3.
+    try:
+        if attach_score_v2:
+            report_payload = attach_score_v2(report_payload, lang=lang)
+        else:
+            report_payload["score_v2_error"] = "attach_score_v2 not loaded"
+    except Exception as e:
+        report_payload["score_v2_error"] = str(e)
+
+    # Expert clinical and biomechanical interpretation. This also attaches
+    # backend-defined symmetry thresholds to each asymmetry object.
+    try:
+        if attach_expert_report:
+            report_payload = attach_expert_report(report_payload, lang=lang)
+        else:
+            report_payload["expert_report_error"] = "attach_expert_report not loaded"
+    except Exception as e:
+        report_payload["expert_report_error"] = str(e)
+
+    return report_payload
 
 
 
@@ -2221,14 +2251,16 @@ def program(session_id: str, lang: str = "fr", intake_json: str = None, question
         else:
             report_data["intake_context"] = query_intake
 
-    # Score V2: movement-quality score with weighted domains.
-    try:
-        if attach_score_v2:
-            report_data = attach_score_v2(report_data, lang=lang)
-        else:
-            report_data["score_v2_error"] = "attach_score_v2 not loaded"
-    except Exception as e:
-        report_data["score_v2_error"] = str(e)
+    # /report already attaches the evidence-aware score. Keep this fallback
+    # only for legacy/fallback report payloads.
+    if not report_data.get("score_v2"):
+        try:
+            if attach_score_v2:
+                report_data = attach_score_v2(report_data, lang=lang)
+            else:
+                report_data["score_v2_error"] = "attach_score_v2 not loaded"
+        except Exception as e:
+            report_data["score_v2_error"] = str(e)
 
     # Movement DNA + clinical pattern recognition.
     report_data = attach_movement_dna_to_report(report_data, lang=lang)
