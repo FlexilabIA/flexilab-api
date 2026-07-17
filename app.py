@@ -140,7 +140,7 @@ model = YOLO("yolov8n-pose.pt")
 def health():
     return {
         "ok": True,
-        "patch_version": "V92.5-strict-completed-history",
+        "patch_version": "V93-v3-history-rebuild",
         "exercise_library_mode": EXERCISE_LIBRARY_MODE,
         "exercise_library_path": EXERCISE_LIBRARY_PATH,
         "exercise_library_count": len(EXERCISE_LIBRARY or []),
@@ -151,7 +151,7 @@ def health():
 @app.get("/library_status")
 def library_status():
     return {
-        "patch_version": "V92.5-strict-completed-history",
+        "patch_version": "V93-v3-history-rebuild",
         "exercise_library_mode": EXERCISE_LIBRARY_MODE,
         "exercise_library_path": EXERCISE_LIBRARY_PATH,
         "exercise_library_count": len(EXERCISE_LIBRARY or []),
@@ -1007,6 +1007,173 @@ def _score_lower_is_better(value, green_max, yellow_max, red_max):
     return round(max(0.0, 60.0 - ratio * 60.0), 1)
 
 
+
+REQUIRED_SCREENING_TESTS = {
+    "posture_side",
+    "shoulder_right",
+    "shoulder_left",
+    "squat",
+    "aslr_right",
+    "aslr_left",
+}
+
+V3_BAND_SCORES = {
+    "green": 88.0,
+    "yellow": 64.0,
+    "orange": 52.0,
+    "red": 36.0,
+}
+
+
+def _as_dict(value):
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+            return parsed if isinstance(parsed, dict) else {}
+        except Exception:
+            return {}
+    return {}
+
+
+def _screening_created_sort_key(screening):
+    return str(screening.get("created_at") or "")
+
+
+def deduplicate_screenings(screenings):
+    """Keep the newest row for each test type and ignore duplicate inserts."""
+    latest_by_test = {}
+    for screening in sorted(screenings or [], key=_screening_created_sort_key):
+        test_type = screening.get("test_type")
+        if test_type in REQUIRED_SCREENING_TESTS:
+            latest_by_test[test_type] = screening
+    return latest_by_test
+
+
+def is_complete_screening_set(screenings):
+    return REQUIRED_SCREENING_TESTS.issubset(set(deduplicate_screenings(screenings).keys()))
+
+
+def _metric_value(screening, metric_key, column_key=None):
+    if column_key and screening.get(column_key) is not None:
+        return _safe_number(screening.get(column_key))
+    metrics = _as_dict(screening.get("metrics"))
+    return _safe_number(metrics.get(metric_key))
+
+
+def _fallback_metric_rating(test_type, metric_key, value):
+    number = _safe_number(value)
+    if number is None:
+        return None
+
+    if test_type == "posture_side" and metric_key == "neck_angle":
+        return "green" if number < 10 else "yellow" if number < 20 else "red"
+    if test_type == "posture_side" and metric_key == "thoracic_angle":
+        return "green" if number < 5 else "yellow" if number < 15 else "red"
+    if test_type in {"shoulder_right", "shoulder_left"}:
+        return "red" if number < 160 else "yellow" if number < 170 else "green"
+    if test_type in {"aslr_right", "aslr_left"}:
+        return "red" if number < 45 else "yellow" if number < 70 else "green"
+    if test_type == "squat" and metric_key == "knee_angle":
+        return "green" if number < 95 else "yellow" if number < 110 else "red"
+    if test_type == "squat" and metric_key == "trunk_lean":
+        return "green" if number < 15 else "yellow" if number < 25 else "red"
+    return None
+
+
+def _screening_metric_rating(screening, threshold_key, metric_key, column_key=None):
+    thresholds = _as_dict(screening.get("thresholds"))
+    threshold = _as_dict(thresholds.get(threshold_key))
+    rating = str(threshold.get("rating") or "").strip().lower()
+    if rating in V3_BAND_SCORES:
+        return rating
+    value = _metric_value(screening, metric_key, column_key)
+    return _fallback_metric_rating(screening.get("test_type"), metric_key, value)
+
+
+def _v3_band_score(rating):
+    return V3_BAND_SCORES.get(str(rating or "").lower())
+
+
+def calculate_v3_score_from_screenings(screenings):
+    """
+    Rebuild the Evidence-Aware V3 score from the newest unique row for each of
+    the six required tests. This mirrors engines/score_engine_v2.py (V3).
+    """
+    by_test = deduplicate_screenings(screenings)
+    if not REQUIRED_SCREENING_TESTS.issubset(set(by_test.keys())):
+        return None
+
+    posture = by_test["posture_side"]
+    shoulder_r = by_test["shoulder_right"]
+    shoulder_l = by_test["shoulder_left"]
+    squat = by_test["squat"]
+    aslr_r = by_test["aslr_right"]
+    aslr_l = by_test["aslr_left"]
+
+    domains = []
+
+    neck = _v3_band_score(_screening_metric_rating(posture, "neck_angle", "neck_angle", "neck_angle_deg"))
+    thoracic = _v3_band_score(_screening_metric_rating(posture, "thoracic_angle", "thoracic_angle", "thoracic_angle_deg"))
+    shoulder_scores = [
+        _v3_band_score(_screening_metric_rating(shoulder_r, "shoulder_flexion", "shoulder_flexion_angle", "shoulder_flexion_angle_deg")),
+        _v3_band_score(_screening_metric_rating(shoulder_l, "shoulder_flexion", "shoulder_flexion_angle", "shoulder_flexion_angle_deg")),
+    ]
+    aslr_scores = [
+        _v3_band_score(_screening_metric_rating(aslr_r, "aslr_angle", "aslr_angle")),
+        _v3_band_score(_screening_metric_rating(aslr_l, "aslr_angle", "aslr_angle")),
+    ]
+    squat_scores = [
+        _v3_band_score(_screening_metric_rating(squat, "knee_angle", "knee_angle", "squat_knee_angle_deg")),
+        _v3_band_score(_screening_metric_rating(squat, "trunk_lean", "trunk_lean", "squat_trunk_lean_deg")),
+    ]
+
+    if neck is not None:
+        domains.append((neck, 15.0))
+    if thoracic is not None:
+        domains.append((thoracic, 15.0))
+
+    clean_shoulders = [v for v in shoulder_scores if v is not None]
+    if clean_shoulders:
+        domains.append((sum(clean_shoulders) / len(clean_shoulders), 25.0))
+
+    clean_aslr = [v for v in aslr_scores if v is not None]
+    if clean_aslr:
+        domains.append((sum(clean_aslr) / len(clean_aslr), 20.0))
+
+    clean_squat = [v for v in squat_scores if v is not None]
+    if clean_squat:
+        domains.append((sum(clean_squat) / len(clean_squat), 25.0))
+
+    if not domains:
+        return None
+
+    weight_sum = sum(weight for _, weight in domains)
+    return round(sum(score * weight for score, weight in domains) / weight_sum, 1)
+
+
+def session_with_screening_scores(session, screenings, v3_score=None):
+    """Create a non-persistent session view from deduplicated screening rows."""
+    by_test = deduplicate_screenings(screenings)
+    result = dict(session or {})
+    field_map = {
+        "posture_side": "posture_score",
+        "shoulder_right": "shoulder_right_score",
+        "shoulder_left": "shoulder_left_score",
+        "squat": "squat_score",
+        "aslr_right": "aslr_right_score",
+        "aslr_left": "aslr_left_score",
+    }
+    for test_type, field in field_map.items():
+        screening = by_test.get(test_type)
+        if screening is not None:
+            result[field] = _safe_number(screening.get("score"))
+    if v3_score is not None:
+        result["composite_score"] = v3_score
+    return result
+
+
 def build_movement_profile_from_session(session, screenings=None):
     """
     Build a six-domain descriptive movement profile from measurements that
@@ -1110,11 +1277,12 @@ def build_movement_profile_from_session(session, screenings=None):
 @app.get("/screening_history")
 def screening_history(user_email: str, limit: int = 6):
     """
-    Return the latest completed screening sessions for a user.
+    Rebuild the latest valid assessments from their individual screening rows.
 
-    The response is ordered oldest -> newest for chart rendering.
-    In-progress, abandoned, and development/test sessions are excluded.
-    No synthetic dates, scores, or interpolated points are generated.
+    A history point is included only when all six required test types exist.
+    Duplicate inserts are collapsed by test type, keeping the newest row.
+    Every score is recalculated with Evidence-Aware Score Engine V3; stored
+    legacy composite_score values are never trusted.
     """
     if supabase is None:
         return {"error": "Supabase is not configured on server."}
@@ -1133,18 +1301,14 @@ def screening_history(user_email: str, limit: int = 6):
             "squat_score,aslr_right_score,aslr_left_score"
         )
         .ilike("user_email", normalized_email)
-        .eq("status", "completed")
         .order("created_at", desc=True)
-        .limit(max(safe_limit * 2, 12))
+        .limit(max(safe_limit * 8, 48))
         .execute()
     )
 
     usable = []
 
     for session in sessions_resp.data or []:
-        if session.get("status") != "completed":
-            continue
-
         session_id = session.get("id")
         if not session_id:
             continue
@@ -1152,35 +1316,40 @@ def screening_history(user_email: str, limit: int = 6):
         screenings_resp = (
             supabase.table("screenings")
             .select(
-                "id,test_type,metrics,thoracic_angle_deg,"
-                "squat_trunk_lean_deg"
+                "id,created_at,test_type,score,confidence,metrics,thresholds,"
+                "neck_angle_deg,thoracic_angle_deg,shoulder_flexion_angle_deg,"
+                "squat_knee_angle_deg,squat_trunk_lean_deg"
             )
             .eq("session_id", session_id)
+            .order("created_at", desc=False)
             .execute()
         )
-
         session_screenings = screenings_resp.data or []
 
-        if not session_screenings:
+        if not is_complete_screening_set(session_screenings):
             continue
 
-        score = _safe_number(session.get("composite_score"))
-        if score is None:
-            score = compute_composite(
-                session.get("posture_score"),
-                session.get("shoulder_right_score"),
-                session.get("shoulder_left_score"),
-                session.get("squat_score"),
-                session.get("aslr_right_score"),
-                session.get("aslr_left_score"),
-            )
+        v3_score = calculate_v3_score_from_screenings(session_screenings)
+        if v3_score is None:
+            continue
+
+        effective_session = session_with_screening_scores(
+            session,
+            session_screenings,
+            v3_score=v3_score,
+        )
 
         usable.append({
             "session_id": session_id,
             "created_at": session.get("created_at"),
-            "status": session.get("status"),
-            "score": score,
-            "movement_profile": build_movement_profile_from_session(session, session_screenings),
+            "status": "completed",
+            "stored_status": session.get("status"),
+            "score": v3_score,
+            "score_version": "FlexiLab Evidence-Aware Score Engine V3",
+            "movement_profile": build_movement_profile_from_session(
+                effective_session,
+                list(deduplicate_screenings(session_screenings).values()),
+            ),
         })
 
         if len(usable) >= safe_limit:
@@ -1194,12 +1363,13 @@ def screening_history(user_email: str, limit: int = 6):
         "count": len(usable),
         "screenings": usable,
         "latest": usable[-1] if usable else None,
-        "profile_method": "v2_trunk_measurement_profile",
+        "profile_method": "v3_rebuilt_unique_six_test_history",
         "profile_disclaimer": (
-            "This profile summarizes available screening measurements and is "
-            "not a medical diagnosis."
+            "History is rebuilt from the newest unique row for each of the six "
+            "required tests. Scores use Evidence-Aware Score Engine V3."
         ),
     }
+
 
 @app.post("/start_session")
 def start_session(user_email: str = Form(...), intake_json: str = Form(None), questionnaire_json: str = Form(None)):
@@ -1241,30 +1411,50 @@ def finalize_session(session_id: str = Form(...)):
         return {"error": "Session not found"}
 
     row = s.data[0]
-    composite = compute_composite(
-        row.get("posture_score"),
-        row.get("shoulder_right_score"),
-        row.get("shoulder_left_score"),
-        row.get("squat_score"),
-        row.get("aslr_right_score"),
-        row.get("aslr_left_score"),
+    screenings_resp = (
+        supabase.table("screenings")
+        .select(
+            "id,created_at,test_type,score,confidence,metrics,thresholds,"
+            "neck_angle_deg,thoracic_angle_deg,shoulder_flexion_angle_deg,"
+            "squat_knee_angle_deg,squat_trunk_lean_deg"
+        )
+        .eq("session_id", session_id)
+        .order("created_at", desc=False)
+        .execute()
     )
+    screenings = screenings_resp.data or []
 
-    supabase.table("sessions").update({
-        "composite_score": composite,
-        "status": "completed"
-    }).eq("id", session_id).execute()
+    if not is_complete_screening_set(screenings):
+        found = sorted(deduplicate_screenings(screenings).keys())
+        missing = sorted(REQUIRED_SCREENING_TESTS.difference(found))
+        return {
+            "error": "Session cannot be finalized because required tests are missing.",
+            "missing_tests": missing,
+        }
+
+    v3_score = calculate_v3_score_from_screenings(screenings)
+    if v3_score is None:
+        return {"error": "Unable to calculate Evidence-Aware Score Engine V3 score."}
+
+    effective = session_with_screening_scores(row, screenings, v3_score=v3_score)
+    update_payload = {
+        "posture_score": effective.get("posture_score"),
+        "shoulder_right_score": effective.get("shoulder_right_score"),
+        "shoulder_left_score": effective.get("shoulder_left_score"),
+        "squat_score": effective.get("squat_score"),
+        "aslr_right_score": effective.get("aslr_right_score"),
+        "aslr_left_score": effective.get("aslr_left_score"),
+        "composite_score": v3_score,
+        "status": "completed",
+    }
+
+    supabase.table("sessions").update(update_payload).eq("id", session_id).execute()
 
     return {
         "session_id": session_id,
         "status": "completed",
-        "posture_score": row.get("posture_score"),
-        "shoulder_right_score": row.get("shoulder_right_score"),
-        "shoulder_left_score": row.get("shoulder_left_score"),
-        "squat_score": row.get("squat_score"),
-        "aslr_right_score": row.get("aslr_right_score"),
-        "aslr_left_score": row.get("aslr_left_score"),
-        "composite_score": composite
+        **update_payload,
+        "score_version": "FlexiLab Evidence-Aware Score Engine V3",
     }
 
 
