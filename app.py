@@ -140,7 +140,7 @@ model = YOLO("yolov8n-pose.pt")
 def health():
     return {
         "ok": True,
-        "patch_version": "V92.4-valid-legacy-history",
+        "patch_version": "V92.5-strict-completed-history",
         "exercise_library_mode": EXERCISE_LIBRARY_MODE,
         "exercise_library_path": EXERCISE_LIBRARY_PATH,
         "exercise_library_count": len(EXERCISE_LIBRARY or []),
@@ -151,7 +151,7 @@ def health():
 @app.get("/library_status")
 def library_status():
     return {
-        "patch_version": "V92.4-valid-legacy-history",
+        "patch_version": "V92.5-strict-completed-history",
         "exercise_library_mode": EXERCISE_LIBRARY_MODE,
         "exercise_library_path": EXERCISE_LIBRARY_PATH,
         "exercise_library_count": len(EXERCISE_LIBRARY or []),
@@ -1007,30 +1007,6 @@ def _score_lower_is_better(value, green_max, yellow_max, red_max):
     return round(max(0.0, 60.0 - ratio * 60.0), 1)
 
 
-def is_valid_history_session(session):
-    """
-    Include:
-    - sessions explicitly finalized as completed
-    - legacy sessions left as in_progress only when every required screening
-      score exists
-
-    Exclude partial, abandoned, or test sessions with missing required scores.
-    """
-    if session.get("status") == "completed":
-        return True
-
-    required_scores = [
-        session.get("posture_score"),
-        session.get("shoulder_right_score"),
-        session.get("shoulder_left_score"),
-        session.get("squat_score"),
-        session.get("aslr_right_score"),
-        session.get("aslr_left_score"),
-    ]
-
-    return all(_safe_number(value) is not None for value in required_scores)
-
-
 def build_movement_profile_from_session(session, screenings=None):
     """
     Build a six-domain descriptive movement profile from measurements that
@@ -1134,12 +1110,11 @@ def build_movement_profile_from_session(session, screenings=None):
 @app.get("/screening_history")
 def screening_history(user_email: str, limit: int = 6):
     """
-    Return the latest valid screening sessions for a user.
+    Return the latest completed screening sessions for a user.
 
-    Explicitly completed sessions are included. Legacy in-progress sessions are
-    included only when all six required screening scores exist. Partial,
-    abandoned, and incomplete sessions remain excluded. No synthetic dates,
-    scores, or interpolated points are generated.
+    The response is ordered oldest -> newest for chart rendering.
+    In-progress, abandoned, and development/test sessions are excluded.
+    No synthetic dates, scores, or interpolated points are generated.
     """
     if supabase is None:
         return {"error": "Supabase is not configured on server."}
@@ -1158,15 +1133,16 @@ def screening_history(user_email: str, limit: int = 6):
             "squat_score,aslr_right_score,aslr_left_score"
         )
         .ilike("user_email", normalized_email)
+        .eq("status", "completed")
         .order("created_at", desc=True)
-        .limit(max(safe_limit * 4, 24))
+        .limit(max(safe_limit * 2, 12))
         .execute()
     )
 
     usable = []
 
     for session in sessions_resp.data or []:
-        if not is_valid_history_session(session):
+        if session.get("status") != "completed":
             continue
 
         session_id = session.get("id")
@@ -1218,7 +1194,7 @@ def screening_history(user_email: str, limit: int = 6):
         "count": len(usable),
         "screenings": usable,
         "latest": usable[-1] if usable else None,
-        "profile_method": "v2_trunk_profile_valid_legacy_history",
+        "profile_method": "v2_trunk_measurement_profile",
         "profile_disclaimer": (
             "This profile summarizes available screening measurements and is "
             "not a medical diagnosis."
