@@ -140,7 +140,7 @@ model = YOLO("yolov8n-pose.pt")
 def health():
     return {
         "ok": True,
-        "patch_version": "V90.0-clinical-report",
+        "patch_version": "V91.0-latest-session",
         "exercise_library_mode": EXERCISE_LIBRARY_MODE,
         "exercise_library_path": EXERCISE_LIBRARY_PATH,
         "exercise_library_count": len(EXERCISE_LIBRARY or []),
@@ -151,7 +151,7 @@ def health():
 @app.get("/library_status")
 def library_status():
     return {
-        "patch_version": "V90.0-clinical-report",
+        "patch_version": "V91.0-latest-session",
         "exercise_library_mode": EXERCISE_LIBRARY_MODE,
         "exercise_library_path": EXERCISE_LIBRARY_PATH,
         "exercise_library_count": len(EXERCISE_LIBRARY or []),
@@ -868,6 +868,79 @@ def compute_composite(posture, shoulder_r, shoulder_l, squat, aslr_r=None, aslr_
     composite = sum(val * w for val, w in parts) / wsum
     return round(float(composite), 1)
 
+
+
+@app.get("/latest_session")
+def latest_session(user_email: str):
+    """
+    Return the newest usable screening session for an email address.
+
+    MVP note:
+    The current app identifies users by email stored in the browser.
+    Production should replace this with authenticated Supabase user identity.
+    """
+    if supabase is None:
+        return {"error": "Supabase is not configured on server."}
+
+    normalized_email = str(user_email or "").strip().lower()
+    if not normalized_email:
+        return {"error": "user_email is required"}
+
+    # First prefer completed sessions.
+    completed = (
+        supabase.table("sessions")
+        .select("*")
+        .ilike("user_email", normalized_email)
+        .eq("status", "completed")
+        .order("created_at", desc=True)
+        .limit(1)
+        .execute()
+    )
+
+    session = completed.data[0] if completed.data else None
+
+    # Compatibility fallback for older rows whose status was not finalized.
+    if session is None:
+        fallback = (
+            supabase.table("sessions")
+            .select("*")
+            .ilike("user_email", normalized_email)
+            .order("created_at", desc=True)
+            .limit(10)
+            .execute()
+        )
+
+        for candidate in fallback.data or []:
+            candidate_id = candidate.get("id")
+            if not candidate_id:
+                continue
+
+            screenings = (
+                supabase.table("screenings")
+                .select("id,test_type")
+                .eq("session_id", candidate_id)
+                .limit(1)
+                .execute()
+            )
+            if screenings.data:
+                session = candidate
+                break
+
+    if session is None:
+        return {
+            "found": False,
+            "user_email": normalized_email,
+            "session_id": None,
+        }
+
+    return {
+        "found": True,
+        "user_email": normalized_email,
+        "session_id": session.get("id"),
+        "status": session.get("status"),
+        "created_at": session.get("created_at"),
+        "composite_score": session.get("composite_score"),
+    }
 
 @app.post("/start_session")
 def start_session(user_email: str = Form(...), intake_json: str = Form(None), questionnaire_json: str = Form(None)):
