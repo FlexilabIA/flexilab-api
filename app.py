@@ -140,7 +140,7 @@ model = YOLO("yolov8n-pose.pt")
 def health():
     return {
         "ok": True,
-        "patch_version": "V92.0-screening-history",
+        "patch_version": "V92.3-trunk-profile",
         "exercise_library_mode": EXERCISE_LIBRARY_MODE,
         "exercise_library_path": EXERCISE_LIBRARY_PATH,
         "exercise_library_count": len(EXERCISE_LIBRARY or []),
@@ -151,7 +151,7 @@ def health():
 @app.get("/library_status")
 def library_status():
     return {
-        "patch_version": "V92.0-screening-history",
+        "patch_version": "V92.3-trunk-profile",
         "exercise_library_mode": EXERCISE_LIBRARY_MODE,
         "exercise_library_path": EXERCISE_LIBRARY_PATH,
         "exercise_library_count": len(EXERCISE_LIBRARY or []),
@@ -978,14 +978,49 @@ def _symmetry_score(left_value, right_value):
     return round(max(0.0, 100.0 - abs(left - right) * 2.0), 1)
 
 
-def build_movement_profile_from_session(session):
+def _score_lower_is_better(value, green_max, yellow_max, red_max):
+    """
+    Convert an angle where lower values are better into a 0–100 domain score.
+
+    Green range -> 100 to 85
+    Yellow range -> 85 to 60
+    Red range -> 60 to 0
+    """
+    number = _safe_number(value)
+    if number is None:
+        return None
+
+    number = max(0.0, min(float(red_max), number))
+
+    if number <= float(green_max):
+        if green_max <= 0:
+            return 100.0
+        return round(100.0 - (number / float(green_max)) * 15.0, 1)
+
+    if number <= float(yellow_max):
+        span = max(1e-6, float(yellow_max) - float(green_max))
+        ratio = (number - float(green_max)) / span
+        return round(85.0 - ratio * 25.0, 1)
+
+    span = max(1e-6, float(red_max) - float(yellow_max))
+    ratio = (number - float(yellow_max)) / span
+    return round(max(0.0, 60.0 - ratio * 60.0), 1)
+
+
+def build_movement_profile_from_session(session, screenings=None):
     """
     Build a six-domain descriptive movement profile from measurements that
     actually exist in the completed session.
 
-    These are screening domains, not independent medical diagnoses.
-    Missing tests remain None and are not converted to zero.
+    Trunk control is derived from direct trunk-related measurements when
+    available:
+    - thoracic alignment from the side-posture screening
+    - trunk lean during the squat screening
+
+    Missing tests remain None and are never converted to zero.
     """
+    screenings = screenings or []
+
     posture = _safe_number(session.get("posture_score"))
 
     shoulder_right = _safe_number(session.get("shoulder_right_score"))
@@ -998,10 +1033,49 @@ def build_movement_profile_from_session(session):
     aslr_mobility = _mean_available([aslr_right, aslr_left])
     lower_body_mobility = _mean_available([squat, aslr_mobility])
 
-    # Current movement-control proxy uses the two tests that include visible
-    # alignment/control demands. It should later be replaced by a dedicated
-    # dynamic-control test when that module is added.
-    movement_control = _mean_available([posture, squat])
+    thoracic_angle = None
+    squat_trunk_lean = None
+
+    for screening in screenings:
+        test_type = screening.get("test_type")
+        metrics = screening.get("metrics") or {}
+
+        if test_type == "posture_side":
+            thoracic_angle = (
+                screening.get("thoracic_angle_deg")
+                if screening.get("thoracic_angle_deg") is not None
+                else metrics.get("thoracic_angle")
+            )
+
+        elif test_type == "squat":
+            squat_trunk_lean = (
+                screening.get("squat_trunk_lean_deg")
+                if screening.get("squat_trunk_lean_deg") is not None
+                else metrics.get("trunk_lean")
+            )
+
+    thoracic_alignment_score = _score_lower_is_better(
+        thoracic_angle,
+        green_max=5,
+        yellow_max=15,
+        red_max=45,
+    )
+    squat_trunk_control_score = _score_lower_is_better(
+        squat_trunk_lean,
+        green_max=15,
+        yellow_max=25,
+        red_max=60,
+    )
+
+    trunk_control = _mean_available([
+        thoracic_alignment_score,
+        squat_trunk_control_score,
+    ])
+
+    # Compatibility fallback for older sessions where detailed screening
+    # metrics are unavailable.
+    if trunk_control is None:
+        trunk_control = _mean_available([posture, squat])
 
     shoulder_symmetry = _symmetry_score(shoulder_left, shoulder_right)
     aslr_symmetry = _symmetry_score(aslr_left, aslr_right)
@@ -1022,7 +1096,12 @@ def build_movement_profile_from_session(session):
         "posture": posture,
         "shoulder_mobility": shoulder_mobility,
         "lower_body_mobility": lower_body_mobility,
-        "movement_control": movement_control,
+        "trunk_control": trunk_control,
+
+        # Temporary compatibility alias so the currently deployed frontend
+        # does not break before progress.tsx is updated.
+        "movement_control": trunk_control,
+
         "symmetry": symmetry,
         "overall_movement_capacity": overall,
     }
@@ -1031,10 +1110,10 @@ def build_movement_profile_from_session(session):
 @app.get("/screening_history")
 def screening_history(user_email: str, limit: int = 6):
     """
-    Return the latest real screening sessions for a user.
+    Return the latest completed screening sessions for a user.
 
     The response is ordered oldest -> newest for chart rendering.
-    Only usable sessions with at least one recorded screening are included.
+    In-progress, abandoned, and development/test sessions are excluded.
     No synthetic dates, scores, or interpolated points are generated.
     """
     if supabase is None:
@@ -1054,27 +1133,35 @@ def screening_history(user_email: str, limit: int = 6):
             "squat_score,aslr_right_score,aslr_left_score"
         )
         .ilike("user_email", normalized_email)
+        .eq("status", "completed")
         .order("created_at", desc=True)
-        .limit(max(safe_limit * 3, 12))
+        .limit(max(safe_limit * 2, 12))
         .execute()
     )
 
     usable = []
 
     for session in sessions_resp.data or []:
+        if session.get("status") != "completed":
+            continue
+
         session_id = session.get("id")
         if not session_id:
             continue
 
-        has_screening = (
+        screenings_resp = (
             supabase.table("screenings")
-            .select("id")
+            .select(
+                "id,test_type,metrics,thoracic_angle_deg,"
+                "squat_trunk_lean_deg"
+            )
             .eq("session_id", session_id)
-            .limit(1)
             .execute()
         )
 
-        if not has_screening.data:
+        session_screenings = screenings_resp.data or []
+
+        if not session_screenings:
             continue
 
         score = _safe_number(session.get("composite_score"))
@@ -1093,7 +1180,7 @@ def screening_history(user_email: str, limit: int = 6):
             "created_at": session.get("created_at"),
             "status": session.get("status"),
             "score": score,
-            "movement_profile": build_movement_profile_from_session(session),
+            "movement_profile": build_movement_profile_from_session(session, session_screenings),
         })
 
         if len(usable) >= safe_limit:
@@ -1107,7 +1194,7 @@ def screening_history(user_email: str, limit: int = 6):
         "count": len(usable),
         "screenings": usable,
         "latest": usable[-1] if usable else None,
-        "profile_method": "v1_session_measurement_profile",
+        "profile_method": "v2_trunk_measurement_profile",
         "profile_disclaimer": (
             "This profile summarizes available screening measurements and is "
             "not a medical diagnosis."
