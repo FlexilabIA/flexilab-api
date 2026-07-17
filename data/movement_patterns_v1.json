@@ -39,12 +39,15 @@
         "SH",
         "CC",
         "RB"
-      ]
+      ],
+      "validation_status": "rule_based_screening_pattern",
+      "disclaimer_en": "Screening pattern, not a diagnosis.",
+      "disclaimer_fr": "Profil de screening, non diagnostique."
     },
     {
       "pattern_id": "P02",
-      "name_en": "Desk Worker Postural Pattern",
-      "name_fr": "Profil postural travail de bureau",
+      "name_en": "Upper-Quarter Mobility-Control Pattern",
+      "name_fr": "Profil de mobilité-contrôle du quadrant supérieur",
       "primary_domains": [
         "cervical_control",
         "thoracic_mobility",
@@ -58,8 +61,8 @@
         "thoracic_mobility < 80",
         "shoulder_mobility < 80"
       ],
-      "clinical_priority_en": "Reduce neck load by restoring thoracic mobility and scapular mechanics.",
-      "clinical_priority_fr": "Réduire la charge cervicale en restaurant la mobilité thoracique et la mécanique scapulaire.",
+      "clinical_priority_en": "Prioritize cervical positioning, upper-trunk alignment and active overhead control without inferring occupational exposure.",
+      "clinical_priority_fr": "Prioriser le positionnement cervical, l’alignement du haut du tronc et le contrôle actif au-dessus de la tête, sans déduire d’exposition professionnelle.",
       "typical_consequences_en": [
         "forward head posture",
         "rounded shoulders",
@@ -82,7 +85,10 @@
         "CC",
         "SH",
         "CS"
-      ]
+      ],
+      "validation_status": "rule_based_screening_pattern",
+      "disclaimer_en": "Screening pattern, not a diagnosis.",
+      "disclaimer_fr": "Profil de screening, non diagnostique."
     },
     {
       "pattern_id": "P03",
@@ -121,7 +127,10 @@
         "TM",
         "SH",
         "CS"
-      ]
+      ],
+      "validation_status": "rule_based_screening_pattern",
+      "disclaimer_en": "Screening pattern, not a diagnosis.",
+      "disclaimer_fr": "Profil de screening, non diagnostique."
     },
     {
       "pattern_id": "P04",
@@ -161,7 +170,10 @@
         "HS",
         "CS",
         "FI"
-      ]
+      ],
+      "validation_status": "rule_based_screening_pattern",
+      "disclaimer_en": "Screening pattern, not a diagnosis.",
+      "disclaimer_fr": "Profil de screening, non diagnostique."
     },
     {
       "pattern_id": "P05",
@@ -202,7 +214,10 @@
         "HM",
         "FI",
         "RB"
-      ]
+      ],
+      "validation_status": "rule_based_screening_pattern",
+      "disclaimer_en": "Screening pattern, not a diagnosis.",
+      "disclaimer_fr": "Profil de screening, non diagnostique."
     },
     {
       "pattern_id": "P06",
@@ -242,7 +257,10 @@
         "SH",
         "HM",
         "AM"
-      ]
+      ],
+      "validation_status": "rule_based_screening_pattern",
+      "disclaimer_en": "Screening pattern, not a diagnosis.",
+      "disclaimer_fr": "Profil de screening, non diagnostique."
     },
     {
       "pattern_id": "P07",
@@ -282,7 +300,10 @@
         "HM",
         "BP",
         "FI"
-      ]
+      ],
+      "validation_status": "rule_based_screening_pattern",
+      "disclaimer_en": "Screening pattern, not a diagnosis.",
+      "disclaimer_fr": "Profil de screening, non diagnostique."
     },
     {
       "pattern_id": "P08",
@@ -319,7 +340,10 @@
         "CS",
         "FI",
         "BP"
-      ]
+      ],
+      "validation_status": "rule_based_screening_pattern",
+      "disclaimer_en": "Screening pattern, not a diagnosis.",
+      "disclaimer_fr": "Profil de screening, non diagnostique."
     },
     {
       "pattern_id": "P09",
@@ -357,7 +381,10 @@
         "HM",
         "AM",
         "RB"
-      ]
+      ],
+      "validation_status": "rule_based_screening_pattern",
+      "disclaimer_en": "Screening pattern, not a diagnosis.",
+      "disclaimer_fr": "Profil de screening, non diagnostique."
     },
     {
       "pattern_id": "P10",
@@ -386,7 +413,10 @@
         "FI",
         "BP",
         "CS"
-      ]
+      ],
+      "validation_status": "rule_based_screening_pattern",
+      "disclaimer_en": "Screening pattern, not a diagnosis.",
+      "disclaimer_fr": "Profil de screening, non diagnostique."
     },
     {
       "pattern_id": "P11",
@@ -427,7 +457,10 @@
         "HM",
         "CS",
         "FI"
-      ]
+      ],
+      "validation_status": "rule_based_screening_pattern",
+      "disclaimer_en": "Screening pattern, not a diagnosis.",
+      "disclaimer_fr": "Profil de screening, non diagnostique."
     },
     {
       "pattern_id": "P12",
@@ -461,7 +494,10 @@
         "RB",
         "CC",
         "CS"
-      ]
+      ],
+      "validation_status": "rule_based_screening_pattern",
+      "disclaimer_en": "Screening pattern, not a diagnosis.",
+      "disclaimer_fr": "Profil de screening, non diagnostique."
     },
     {
       "pattern_id": "P13",
@@ -496,7 +532,10 @@
         "CC",
         "TM",
         "RB"
-      ]
+      ],
+      "validation_status": "provisional_not_for_automatic_assignment",
+      "disclaimer_en": "Screening pattern, not a diagnosis.",
+      "disclaimer_fr": "Profil de screening, non diagnostique."
     },
     {
       "pattern_id": "P14",
@@ -531,7 +570,10 @@
         "SH",
         "CS",
         "TM"
-      ]
+      ],
+      "validation_status": "provisional_not_for_automatic_assignment",
+      "disclaimer_en": "Screening pattern, not a diagnosis.",
+      "disclaimer_fr": "Profil de screening, non diagnostique."
     },
     {
       "pattern_id": "P15",
@@ -566,7 +608,10 @@
         "HS",
         "HM",
         "CS"
-      ]
+      ],
+      "validation_status": "provisional_not_for_automatic_assignment",
+      "disclaimer_en": "Screening pattern, not a diagnosis.",
+      "disclaimer_fr": "Profil de screening, non diagnostique."
     },
     {
       "pattern_id": "P16",
@@ -601,7 +646,10 @@
         "AM",
         "FI",
         "BP"
-      ]
+      ],
+      "validation_status": "provisional_not_for_automatic_assignment",
+      "disclaimer_en": "Screening pattern, not a diagnosis.",
+      "disclaimer_fr": "Profil de screening, non diagnostique."
     },
     {
       "pattern_id": "P17",
@@ -636,7 +684,10 @@
         "FI",
         "CS",
         "BP"
-      ]
+      ],
+      "validation_status": "provisional_not_for_automatic_assignment",
+      "disclaimer_en": "Screening pattern, not a diagnosis.",
+      "disclaimer_fr": "Profil de screening, non diagnostique."
     },
     {
       "pattern_id": "P18",
@@ -671,7 +722,10 @@
         "BP",
         "AM",
         "FI"
-      ]
+      ],
+      "validation_status": "provisional_not_for_automatic_assignment",
+      "disclaimer_en": "Screening pattern, not a diagnosis.",
+      "disclaimer_fr": "Profil de screening, non diagnostique."
     },
     {
       "pattern_id": "P19",
@@ -706,12 +760,15 @@
         "RB",
         "CS",
         "TM"
-      ]
+      ],
+      "validation_status": "provisional_not_for_automatic_assignment",
+      "disclaimer_en": "Screening pattern, not a diagnosis.",
+      "disclaimer_fr": "Profil de screening, non diagnostique."
     },
     {
       "pattern_id": "P20",
-      "name_en": "Overhead Athlete Asymmetry",
-      "name_fr": "Asymétrie sportif overhead",
+      "name_en": "Shoulder Asymmetry Pattern",
+      "name_fr": "Profil d’asymétrie des épaules",
       "primary_domains": [
         "shoulder_mobility"
       ],
@@ -721,8 +778,8 @@
       "rules": [
         "pattern-specific rule to be refined with validation data"
       ],
-      "clinical_priority_en": "Correct shoulder asymmetry and scapular control before high-speed overhead work.",
-      "clinical_priority_fr": "Corriger l’asymétrie d’épaule et le contrôle scapulaire avant le travail overhead rapide.",
+      "clinical_priority_en": "Address side-to-side shoulder mobility and control differences before progressing symmetrical overhead loading.",
+      "clinical_priority_fr": "Réduire les différences droite-gauche de mobilité et de contrôle de l’épaule avant de progresser vers un chargement symétrique au-dessus de la tête.",
       "typical_consequences_en": [
         "movement compensation risk",
         "reduced movement efficiency"
@@ -741,12 +798,15 @@
         "SH",
         "TM",
         "CS"
-      ]
+      ],
+      "validation_status": "provisional_not_for_automatic_assignment",
+      "disclaimer_en": "Screening pattern, not a diagnosis.",
+      "disclaimer_fr": "Profil de screening, non diagnostique."
     },
     {
       "pattern_id": "P21",
-      "name_en": "Runner Hip-Ankle Pattern",
-      "name_fr": "Profil coureur hanche-cheville",
+      "name_en": "Hip-Ankle Support Pattern",
+      "name_fr": "Profil de soutien hanche-cheville",
       "primary_domains": [
         "hip_mobility",
         "ankle_mobility"
@@ -757,8 +817,8 @@
       "rules": [
         "pattern-specific rule to be refined with validation data"
       ],
-      "clinical_priority_en": "Restore hip/ankle mobility and single-leg control.",
-      "clinical_priority_fr": "Restaurer mobilité hanche/cheville et contrôle unipodal.",
+      "clinical_priority_en": "Explore hip, ankle and single-leg control contributors without assuming a running background.",
+      "clinical_priority_fr": "Explorer les contributions de la hanche, de la cheville et du contrôle unipodal sans supposer une pratique de course.",
       "typical_consequences_en": [
         "movement compensation risk",
         "reduced movement efficiency"
@@ -778,7 +838,10 @@
         "AM",
         "BP",
         "FI"
-      ]
+      ],
+      "validation_status": "provisional_not_for_automatic_assignment",
+      "disclaimer_en": "Screening pattern, not a diagnosis.",
+      "disclaimer_fr": "Profil de screening, non diagnostique."
     },
     {
       "pattern_id": "P22",
@@ -813,7 +876,10 @@
         "RB",
         "TM",
         "HM"
-      ]
+      ],
+      "validation_status": "provisional_not_for_automatic_assignment",
+      "disclaimer_en": "Screening pattern, not a diagnosis.",
+      "disclaimer_fr": "Profil de screening, non diagnostique."
     },
     {
       "pattern_id": "P23",
@@ -848,12 +914,15 @@
         "CS",
         "FI",
         "BP"
-      ]
+      ],
+      "validation_status": "provisional_not_for_automatic_assignment",
+      "disclaimer_en": "Screening pattern, not a diagnosis.",
+      "disclaimer_fr": "Profil de screening, non diagnostique."
     },
     {
       "pattern_id": "P24",
-      "name_en": "Sedentary Global Control Pattern",
-      "name_fr": "Profil sédentaire contrôle global",
+      "name_en": "Global Mobility-Control Pattern",
+      "name_fr": "Profil global de mobilité-contrôle",
       "primary_domains": [
         "core_stability",
         "thoracic_mobility"
@@ -864,8 +933,8 @@
       "rules": [
         "pattern-specific rule to be refined with validation data"
       ],
-      "clinical_priority_en": "Use low-complexity global control and daily mobility exposure.",
-      "clinical_priority_fr": "Utiliser un contrôle global simple et une exposition quotidienne à la mobilité.",
+      "clinical_priority_en": "Use low-complexity global control and regular mobility exposure without inferring sedentary behavior.",
+      "clinical_priority_fr": "Utiliser un contrôle global simple et une exposition régulière à la mobilité sans déduire un comportement sédentaire.",
       "typical_consequences_en": [
         "movement compensation risk",
         "reduced movement efficiency"
@@ -885,7 +954,10 @@
         "TM",
         "CS",
         "HM"
-      ]
+      ],
+      "validation_status": "provisional_not_for_automatic_assignment",
+      "disclaimer_en": "Screening pattern, not a diagnosis.",
+      "disclaimer_fr": "Profil de screening, non diagnostique."
     },
     {
       "pattern_id": "P25",
@@ -921,7 +993,10 @@
         "BP",
         "CS",
         "RB"
-      ]
+      ],
+      "validation_status": "provisional_not_for_automatic_assignment",
+      "disclaimer_en": "Screening pattern, not a diagnosis.",
+      "disclaimer_fr": "Profil de screening, non diagnostique."
     }
   ]
 }
