@@ -1,6 +1,6 @@
 from typing import Any, Optional
 
-from fastapi import Header, HTTPException
+from fastapi import HTTPException
 
 
 def authenticated_user(
