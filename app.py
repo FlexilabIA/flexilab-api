@@ -10,6 +10,7 @@ from fastapi import (
 from fastapi.middleware.cors import CORSMiddleware
 
 from account_api import create_account_router
+from stripe_api import create_stripe_router
 from screening_access import (
     authenticated_user,
     ensure_email_matches,
@@ -144,6 +145,7 @@ load_clinical_resources()
 
 app = FastAPI()
 app.include_router(create_account_router(supabase))
+app.include_router(create_stripe_router(supabase))
 
 app.add_middleware(
     CORSMiddleware,
