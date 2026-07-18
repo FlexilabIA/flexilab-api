@@ -1,7 +1,21 @@
-from fastapi import FastAPI, UploadFile, File, Form, BackgroundTasks
+from fastapi import (
+    FastAPI,
+    UploadFile,
+    File,
+    Form,
+    BackgroundTasks,
+    Header,
+    HTTPException,
+)
 from fastapi.middleware.cors import CORSMiddleware
 
 from account_api import create_account_router
+from screening_access import (
+    authenticated_user,
+    ensure_email_matches,
+    reserve_credit,
+    consume_credit,
+)
 
 import numpy as np
 import cv2
@@ -1377,45 +1391,105 @@ def screening_history(user_email: str, limit: int = 6):
 
 
 @app.post("/start_session")
-def start_session(user_email: str = Form(...), intake_json: str = Form(None), questionnaire_json: str = Form(None)):
+def start_session(
+    user_email: str = Form(...),
+    intake_json: str = Form(None),
+    questionnaire_json: str = Form(None),
+    authorization: str = Header(None),
+):
     if supabase is None:
-        return {"error": "Supabase is not configured on server."}
+        raise HTTPException(
+            status_code=503,
+            detail="Supabase is not configured on server.",
+        )
 
-    intake_data = parse_intake_payload(intake_json=intake_json, questionnaire_json=questionnaire_json)
+    user = authenticated_user(supabase, authorization)
+    normalized_email = ensure_email_matches(user["email"], user_email)
+
+    intake_data = parse_intake_payload(
+        intake_json=intake_json,
+        questionnaire_json=questionnaire_json,
+    )
 
     session_row = {
-        "user_email": user_email,
-        "status": "in_progress"
+        "user_email": normalized_email,
+        "user_id": user["id"],
+        "status": "in_progress",
     }
 
-    # Only saved in screenings for now.
-    # If you add intake_json to sessions later, uncomment this:
-    # session_row["intake_json"] = intake_data
-
     resp = supabase.table("sessions").insert(session_row).execute()
+    if not resp.data:
+        raise HTTPException(
+            status_code=500,
+            detail="Unable to create the screening session.",
+        )
+
     session_id = resp.data[0]["id"]
 
-    # Optional: if sessions.intake_json exists, save the questionnaire there too.
-    # If the column does not exist, this is safely ignored.
+    try:
+        reservation = reserve_credit(
+            supabase,
+            user["id"],
+            session_id,
+        )
+    except Exception:
+        # Do not retain an unusable session when no credit was reserved.
+        try:
+            supabase.table("sessions").delete().eq(
+                "id",
+                session_id,
+            ).execute()
+        except Exception:
+            pass
+        raise
+
     try_save_session_intake(session_id, intake_data)
 
     return {
         "session_id": session_id,
         "intake_json": intake_data,
-        "questionnaire_json": intake_data
+        "questionnaire_json": intake_data,
+        "screening_credits_remaining": reservation.get(
+            "credits_remaining",
+            0,
+        ),
     }
 
 
 @app.post("/finalize_session")
-def finalize_session(session_id: str = Form(...)):
+def finalize_session(
+    session_id: str = Form(...),
+    authorization: str = Header(None),
+):
     if supabase is None:
-        return {"error": "Supabase is not configured on server."}
+        raise HTTPException(
+            status_code=503,
+            detail="Supabase is not configured on server.",
+        )
 
-    s = supabase.table("sessions").select("*").eq("id", session_id).limit(1).execute()
+    user = authenticated_user(supabase, authorization)
+
+    s = (
+        supabase.table("sessions")
+        .select("*")
+        .eq("id", session_id)
+        .limit(1)
+        .execute()
+    )
     if not s.data:
-        return {"error": "Session not found"}
+        raise HTTPException(
+            status_code=404,
+            detail="Session not found.",
+        )
 
     row = s.data[0]
+
+    if str(row.get("user_id") or "") != user["id"]:
+        raise HTTPException(
+            status_code=403,
+            detail="This screening session belongs to another account.",
+        )
+
     screenings_resp = (
         supabase.table("screenings")
         .select(
@@ -1432,16 +1506,30 @@ def finalize_session(session_id: str = Form(...)):
     if not is_complete_screening_set(screenings):
         found = sorted(deduplicate_screenings(screenings).keys())
         missing = sorted(REQUIRED_SCREENING_TESTS.difference(found))
-        return {
-            "error": "Session cannot be finalized because required tests are missing.",
-            "missing_tests": missing,
-        }
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "INCOMPLETE_SCREENING",
+                "message": (
+                    "Session cannot be finalized because required tests "
+                    "are missing."
+                ),
+                "missing_tests": missing,
+            },
+        )
 
     v3_score = calculate_v3_score_from_screenings(screenings)
     if v3_score is None:
-        return {"error": "Unable to calculate Evidence-Aware Score Engine V3 score."}
+        raise HTTPException(
+            status_code=422,
+            detail="Unable to calculate Evidence-Aware Score Engine V3 score.",
+        )
 
-    effective = session_with_screening_scores(row, screenings, v3_score=v3_score)
+    effective = session_with_screening_scores(
+        row,
+        screenings,
+        v3_score=v3_score,
+    )
     update_payload = {
         "posture_score": effective.get("posture_score"),
         "shoulder_right_score": effective.get("shoulder_right_score"),
@@ -1453,13 +1541,26 @@ def finalize_session(session_id: str = Form(...)):
         "status": "completed",
     }
 
-    supabase.table("sessions").update(update_payload).eq("id", session_id).execute()
+    supabase.table("sessions").update(update_payload).eq(
+        "id",
+        session_id,
+    ).execute()
+
+    credit_result = consume_credit(
+        supabase,
+        user["id"],
+        session_id,
+    )
 
     return {
         "session_id": session_id,
         "status": "completed",
         **update_payload,
         "score_version": "FlexiLab Evidence-Aware Score Engine V3",
+        "screening_credits_remaining": credit_result.get(
+            "credits_remaining",
+            0,
+        ),
     }
 
 
