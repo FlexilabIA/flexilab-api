@@ -1,5 +1,8 @@
 from fastapi import FastAPI, UploadFile, File, Form, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
+
+from account_api import create_account_router
+
 import numpy as np
 import cv2
 import math
@@ -126,6 +129,8 @@ def load_clinical_resources():
 load_clinical_resources()
 
 app = FastAPI()
+app.include_router(create_account_router(supabase))
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
