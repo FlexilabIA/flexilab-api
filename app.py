@@ -226,6 +226,68 @@ def try_save_session_intake(session_id, intake_data):
         return False
     return False
 
+def require_owned_session(user, session_id: str):
+    """Return a session only when it belongs to the authenticated account."""
+    if supabase is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Supabase is not configured on server.",
+        )
+
+    response = (
+        supabase.table("sessions")
+        .select("*")
+        .eq("id", session_id)
+        .limit(1)
+        .execute()
+    )
+    if not response.data:
+        raise HTTPException(status_code=404, detail="Session not found.")
+
+    row = response.data[0]
+    row_user_id = str(row.get("user_id") or "")
+    row_email = str(row.get("user_email") or "").strip().lower()
+
+    if row_user_id:
+        if row_user_id != user["id"]:
+            raise HTTPException(
+                status_code=403,
+                detail="This screening session belongs to another account.",
+            )
+        return row
+
+    # Temporary compatibility for legacy rows created before user_id was stored.
+    if row_email and row_email == user["email"]:
+        try:
+            supabase.table("sessions").update(
+                {"user_id": user["id"]}
+            ).eq("id", session_id).execute()
+            row["user_id"] = user["id"]
+        except Exception:
+            pass
+        return row
+
+    raise HTTPException(
+        status_code=403,
+        detail="This screening session belongs to another account.",
+    )
+
+
+def require_owned_program(user, program_id: str):
+    """Resolve a program using only identity verified from the bearer token."""
+    program_row = resolve_corrective_program(program_id, user["email"])
+    if not program_row:
+        raise HTTPException(status_code=404, detail="Program not found.")
+
+    owner_email = str(program_row.get("user_email") or "").strip().lower()
+    if owner_email != user["email"]:
+        raise HTTPException(
+            status_code=403,
+            detail="This corrective program belongs to another account.",
+        )
+
+    return program_row
+
 
 def make_thresholds(unit, scale_min, scale_max, bands, pointer_value):
     v = float(pointer_value)
@@ -892,50 +954,41 @@ def compute_composite(posture, shoulder_r, shoulder_l, squat, aslr_r=None, aslr_
 
 
 @app.get("/latest_session")
-def latest_session(user_email: str):
-    """
-    Return the newest usable screening session for an email address.
-
-    MVP note:
-    The current app identifies users by email stored in the browser.
-    Production should replace this with authenticated Supabase user identity.
-    """
+def latest_session(authorization: str = Header(None)):
+    """Return the newest usable screening session for the authenticated account."""
     if supabase is None:
-        return {"error": "Supabase is not configured on server."}
+        raise HTTPException(
+            status_code=503,
+            detail="Supabase is not configured on server.",
+        )
 
-    normalized_email = str(user_email or "").strip().lower()
-    if not normalized_email:
-        return {"error": "user_email is required"}
+    user = authenticated_user(supabase, authorization)
 
-    # First prefer completed sessions.
     completed = (
         supabase.table("sessions")
         .select("*")
-        .ilike("user_email", normalized_email)
+        .eq("user_id", user["id"])
         .eq("status", "completed")
         .order("created_at", desc=True)
         .limit(1)
         .execute()
     )
-
     session = completed.data[0] if completed.data else None
 
-    # Compatibility fallback for older rows whose status was not finalized.
+    # Compatibility fallback for legacy rows without user_id.
     if session is None:
-        fallback = (
+        legacy = (
             supabase.table("sessions")
             .select("*")
-            .ilike("user_email", normalized_email)
+            .ilike("user_email", user["email"])
             .order("created_at", desc=True)
             .limit(10)
             .execute()
         )
-
-        for candidate in fallback.data or []:
+        for candidate in legacy.data or []:
             candidate_id = candidate.get("id")
             if not candidate_id:
                 continue
-
             screenings = (
                 supabase.table("screenings")
                 .select("id,test_type")
@@ -944,25 +997,24 @@ def latest_session(user_email: str):
                 .execute()
             )
             if screenings.data:
-                session = candidate
+                session = require_owned_session(user, candidate_id)
                 break
 
     if session is None:
         return {
             "found": False,
-            "user_email": normalized_email,
+            "user_email": user["email"],
             "session_id": None,
         }
 
     return {
         "found": True,
-        "user_email": normalized_email,
+        "user_email": user["email"],
         "session_id": session.get("id"),
         "status": session.get("status"),
         "created_at": session.get("created_at"),
         "composite_score": session.get("composite_score"),
     }
-
 
 def _safe_number(value):
     try:
@@ -1296,7 +1348,10 @@ def build_movement_profile_from_session(session, screenings=None):
 
 
 @app.get("/screening_history")
-def screening_history(user_email: str, limit: int = 6):
+def screening_history(
+    limit: int = 6,
+    authorization: str = Header(None),
+):
     """
     Rebuild the latest valid assessments from their individual screening rows.
 
@@ -1308,24 +1363,34 @@ def screening_history(user_email: str, limit: int = 6):
     if supabase is None:
         return {"error": "Supabase is not configured on server."}
 
-    normalized_email = str(user_email or "").strip().lower()
-    if not normalized_email:
-        return {"error": "user_email is required"}
+    user = authenticated_user(supabase, authorization)
+    normalized_email = user["email"]
 
     safe_limit = max(1, min(int(limit or 6), 12))
 
+    session_columns = (
+        "id,user_id,user_email,status,created_at,composite_score,"
+        "posture_score,shoulder_right_score,shoulder_left_score,"
+        "squat_score,aslr_right_score,aslr_left_score"
+    )
     sessions_resp = (
         supabase.table("sessions")
-        .select(
-            "id,user_email,status,created_at,composite_score,"
-            "posture_score,shoulder_right_score,shoulder_left_score,"
-            "squat_score,aslr_right_score,aslr_left_score"
-        )
-        .ilike("user_email", normalized_email)
+        .select(session_columns)
+        .eq("user_id", user["id"])
         .order("created_at", desc=True)
         .limit(max(safe_limit * 8, 48))
         .execute()
     )
+
+    if not sessions_resp.data:
+        sessions_resp = (
+            supabase.table("sessions")
+            .select(session_columns)
+            .ilike("user_email", normalized_email)
+            .order("created_at", desc=True)
+            .limit(max(safe_limit * 8, 48))
+            .execute()
+        )
 
     usable = []
 
@@ -1919,7 +1984,11 @@ def job_status(job_id: str, background_tasks: BackgroundTasks):
 
 
 @app.get("/report")
-def report(session_id: str, lang: str = "fr"):
+def report(
+    session_id: str,
+    lang: str = "fr",
+    authorization: str = Header(None),
+):
     """
     Bilingual report endpoint.
     Use /report?session_id=...&lang=fr or /report?session_id=...&lang=en
@@ -1930,11 +1999,8 @@ def report(session_id: str, lang: str = "fr"):
     if supabase is None:
         return {"error": "Supabase not configured"}
 
-    s_resp = supabase.table("sessions").select("*").eq("id", session_id).limit(1).execute()
-    if not s_resp.data:
-        return {"error": "Session not found"}
-
-    session = s_resp.data[0]
+    user = authenticated_user(supabase, authorization)
+    session = require_owned_session(user, session_id)
 
     scr_resp = supabase.table("screenings").select("*").eq("session_id", session_id).execute()
     screenings = scr_resp.data or []
@@ -2725,60 +2791,77 @@ def programs_for_user(user_email: str, limit: int = 20):
 
 
 @app.get("/program_progress")
-def get_program_progress(program_id: str, user_email: str = ""):
-    """Load all stored week/day completion states for one program."""
-    try:
-        if not supabase:
-            return {"program_id": program_id, "progress": [], "error": "supabase_not_configured"}
-        program_row = resolve_corrective_program(program_id, user_email or None)
-        if not program_row:
-            return {"program_id": program_id, "progress": [], "error": "program_not_found"}
-
-        durable_id = str(program_row["id"])
-        res = (
-            supabase.table("program_session_progress")
-            .select("id, program_id, user_email, week_number, day_number, status, started_at, completed_at, updated_at, completion_data")
-            .eq("program_id", durable_id)
-            .order("week_number")
-            .order("day_number")
-            .execute()
+def get_program_progress(
+    program_id: str,
+    authorization: str = Header(None),
+):
+    """Load completion states for a program owned by the authenticated account."""
+    if not supabase:
+        raise HTTPException(
+            status_code=503,
+            detail="Supabase is not configured on server.",
         )
-        rows = getattr(res, "data", None) or []
-        return {"program_id": durable_id, "screening_session_id": program_row.get("screening_session_id"), "progress": rows}
-    except Exception as e:
-        return {"program_id": program_id, "progress": [], "error": str(e)}
+
+    user = authenticated_user(supabase, authorization)
+    program_row = require_owned_program(user, program_id)
+    durable_id = str(program_row["id"])
+
+    res = (
+        supabase.table("program_session_progress")
+        .select(
+            "id, program_id, user_email, week_number, day_number, status, "
+            "started_at, completed_at, updated_at, completion_data"
+        )
+        .eq("program_id", durable_id)
+        .order("week_number")
+        .order("day_number")
+        .execute()
+    )
+    rows = getattr(res, "data", None) or []
+    return {
+        "program_id": durable_id,
+        "screening_session_id": program_row.get("screening_session_id"),
+        "progress": rows,
+    }
 
 
 @app.post("/program_progress")
 def save_program_progress(
     program_id: str = Form(...),
-    user_email: str = Form(...),
     week_number: int = Form(...),
     day_number: int = Form(...),
     status: str = Form(...),
     completion_data: str = Form(None),
+    authorization: str = Header(None),
 ):
-    """Upsert one program day as not_started, in_progress, or completed."""
+    """Upsert one program day for the authenticated program owner."""
     allowed = {"not_started", "in_progress", "completed"}
     state = str(status or "").strip().lower()
     if state not in allowed:
-        return {"error": "invalid_status", "allowed": sorted(allowed)}
+        raise HTTPException(
+            status_code=422,
+            detail={"error": "invalid_status", "allowed": sorted(allowed)},
+        )
     if not 1 <= int(week_number) <= 4 or not 1 <= int(day_number) <= 3:
-        return {"error": "invalid_week_or_day"}
+        raise HTTPException(
+            status_code=422,
+            detail="Invalid week or day.",
+        )
     if not supabase:
-        return {"error": "supabase_not_configured"}
+        raise HTTPException(
+            status_code=503,
+            detail="Supabase is not configured on server.",
+        )
 
-    program_row = resolve_corrective_program(program_id, user_email)
-    if not program_row:
-        return {"error": "program_not_found"}
-
+    user = authenticated_user(supabase, authorization)
+    program_row = require_owned_program(user, program_id)
     durable_id = str(program_row["id"])
     now = utc_now_iso()
     extra = safe_json_loads(completion_data) if completion_data else None
 
     payload = {
         "program_id": durable_id,
-        "user_email": str(user_email).strip(),
+        "user_email": user["email"],
         "week_number": int(week_number),
         "day_number": int(day_number),
         "status": state,
@@ -2791,52 +2874,68 @@ def save_program_progress(
         payload["completed_at"] = now
         payload["started_at"] = now
 
-    try:
-        existing = (
+    existing = (
+        supabase.table("program_session_progress")
+        .select("id, started_at")
+        .eq("program_id", durable_id)
+        .eq("week_number", int(week_number))
+        .eq("day_number", int(day_number))
+        .limit(1)
+        .execute()
+    )
+    rows = getattr(existing, "data", None) or []
+    if rows:
+        if rows[0].get("started_at") and state == "completed":
+            payload.pop("started_at", None)
+        saved = (
             supabase.table("program_session_progress")
-            .select("id, started_at")
-            .eq("program_id", durable_id)
-            .eq("week_number", int(week_number))
-            .eq("day_number", int(day_number))
-            .limit(1)
+            .update(payload)
+            .eq("id", rows[0]["id"])
             .execute()
         )
-        rows = getattr(existing, "data", None) or []
-        if rows:
-            if rows[0].get("started_at") and state == "completed":
-                payload.pop("started_at", None)
-            saved = supabase.table("program_session_progress").update(payload).eq("id", rows[0]["id"]).execute()
-        else:
-            saved = supabase.table("program_session_progress").insert(payload).execute()
-
-        # Mark whole program completed when all 12 days are completed.
-        completed_rows = (
+    else:
+        saved = (
             supabase.table("program_session_progress")
-            .select("id")
-            .eq("program_id", durable_id)
-            .eq("status", "completed")
+            .insert(payload)
             .execute()
         )
-        completed_count = len(getattr(completed_rows, "data", None) or [])
-        if completed_count >= 12:
-            supabase.table("corrective_programs").update({"status": "completed", "completed_at": now}).eq("id", durable_id).execute()
 
-        saved_rows = getattr(saved, "data", None) or []
-        return {
-            "saved": True,
-            "program_id": durable_id,
-            "week_number": int(week_number),
-            "day_number": int(day_number),
-            "status": state,
-            "completed_days": completed_count,
-            "progress": saved_rows[0] if saved_rows else payload,
-        }
-    except Exception as e:
-        return {"error": str(e), "program_id": durable_id}
+    completed_rows = (
+        supabase.table("program_session_progress")
+        .select("id")
+        .eq("program_id", durable_id)
+        .eq("status", "completed")
+        .execute()
+    )
+    completed_count = len(getattr(completed_rows, "data", None) or [])
+    if completed_count >= 12:
+        (
+            supabase.table("corrective_programs")
+            .update({"status": "completed", "completed_at": now})
+            .eq("id", durable_id)
+            .execute()
+        )
+
+    saved_rows = getattr(saved, "data", None) or []
+    return {
+        "saved": True,
+        "program_id": durable_id,
+        "week_number": int(week_number),
+        "day_number": int(day_number),
+        "status": state,
+        "completed_days": completed_count,
+        "progress": saved_rows[0] if saved_rows else payload,
+    }
 
 
 @app.get("/program")
-def program(session_id: str, lang: str = "fr", intake_json: str = None, questionnaire_json: str = None):
+def program(
+    session_id: str,
+    lang: str = "fr",
+    intake_json: str = None,
+    questionnaire_json: str = None,
+    authorization: str = Header(None),
+):
     """
     FlexiLab V2.1 clinical program endpoint.
 
@@ -2850,7 +2949,13 @@ def program(session_id: str, lang: str = "fr", intake_json: str = None, question
     lang = "en" if str(lang).lower().startswith("en") else "fr"
 
     try:
-        report_data = report(session_id=session_id, lang=lang)
+        report_data = report(
+            session_id=session_id,
+            lang=lang,
+            authorization=authorization,
+        )
+    except HTTPException:
+        raise
     except Exception as e:
         report_data = {
             "session_id": session_id,
