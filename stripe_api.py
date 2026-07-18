@@ -680,7 +680,7 @@ def create_stripe_router(supabase_client) -> APIRouter:
             "client_reference_id": user["id"],
             "metadata": metadata,
             "success_url": (
-                f"{FRONTEND_URL}/paywall"
+                f"{FRONTEND_URL}/home"
                 "?payment=success"
                 "&session_id={CHECKOUT_SESSION_ID}"
             ),
