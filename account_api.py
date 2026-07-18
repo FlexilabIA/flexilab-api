@@ -215,18 +215,26 @@ def create_account_router(supabase_client) -> APIRouter:
             .execute()
         )
 
-        remaining = 0
-        active_cycle = None
-
         from datetime import datetime, timezone
 
         now = datetime.now(timezone.utc)
+        remaining = 0
+        active_cycle = None
 
         for cycle in cycles_response.data or []:
+            cycle_start_raw = cycle.get("cycle_start")
             expiry_raw = (
                 cycle.get("grace_expires_at")
                 or cycle.get("cycle_end")
             )
+
+            try:
+                cycle_start = datetime.fromisoformat(
+                    str(cycle_start_raw).replace("Z", "+00:00")
+                )
+                started = cycle_start <= now
+            except Exception:
+                started = False
 
             valid = True
             if expiry_raw:
@@ -244,7 +252,7 @@ def create_account_router(supabase_client) -> APIRouter:
                 - int(cycle.get("credits_used") or 0),
             )
 
-            if valid and available > 0:
+            if started and valid and available > 0:
                 remaining += available
                 if active_cycle is None:
                     active_cycle = cycle
