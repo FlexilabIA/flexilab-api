@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from account_api import create_account_router
 from stripe_api import create_stripe_router
+from trainer_api import create_trainer_router
 from screening_access import (
     authenticated_user,
     ensure_email_matches,
@@ -146,6 +147,7 @@ load_clinical_resources()
 app = FastAPI()
 app.include_router(create_account_router(supabase))
 app.include_router(create_stripe_router(supabase))
+app.include_router(create_trainer_router(supabase))
 
 app.add_middleware(
     CORSMiddleware,
@@ -246,10 +248,12 @@ def require_owned_session(user, session_id: str):
 
     row = response.data[0]
     row_user_id = str(row.get("user_id") or "")
+    row_trainer_id = str(row.get("trainer_id") or "")
+    row_performed_by = str(row.get("performed_by_user_id") or "")
     row_email = str(row.get("user_email") or "").strip().lower()
 
     if row_user_id:
-        if row_user_id != user["id"]:
+        if user["id"] not in {row_user_id, row_trainer_id, row_performed_by}:
             raise HTTPException(
                 status_code=403,
                 detail="This screening session belongs to another account.",
@@ -1462,6 +1466,7 @@ def start_session(
     user_email: str = Form(...),
     intake_json: str = Form(None),
     questionnaire_json: str = Form(None),
+    trainer_client_link_id: str = Form(None),
     authorization: str = Header(None),
 ):
     if supabase is None:
@@ -1471,17 +1476,49 @@ def start_session(
         )
 
     user = authenticated_user(supabase, authorization)
-    normalized_email = ensure_email_matches(user["email"], user_email)
+    submitted_email = str(user_email or "").strip().lower()
 
     intake_data = parse_intake_payload(
         intake_json=intake_json,
         questionnaire_json=questionnaire_json,
     )
 
+    credit_owner_user_id = user["id"]
+    session_owner_user_id = user["id"]
+    session_owner_email = ensure_email_matches(user["email"], submitted_email)
+    trainer_id = None
+    trainer_link_id = None
+
+    if trainer_client_link_id:
+        link_response = (
+            supabase.table("trainer_clients")
+            .select("*")
+            .eq("id", trainer_client_link_id)
+            .eq("trainer_id", user["id"])
+            .limit(1)
+            .execute()
+        )
+        if not link_response.data:
+            raise HTTPException(status_code=404, detail="Trainer client not found.")
+        link = link_response.data[0]
+        if link.get("status") != "active" or not link.get("client_user_id"):
+            raise HTTPException(
+                status_code=409,
+                detail="The client must activate their FlexiLab account before screening.",
+            )
+        session_owner_user_id = str(link["client_user_id"])
+        session_owner_email = str(link.get("invited_email") or "").strip().lower()
+        trainer_id = user["id"]
+        trainer_link_id = str(link["id"])
+
     session_row = {
-        "user_email": normalized_email,
-        "user_id": user["id"],
+        "user_email": session_owner_email,
+        "user_id": session_owner_user_id,
         "status": "in_progress",
+        "trainer_id": trainer_id,
+        "performed_by_user_id": user["id"],
+        "trainer_client_link_id": trainer_link_id,
+        "credit_owner_user_id": credit_owner_user_id,
     }
 
     resp = supabase.table("sessions").insert(session_row).execute()
@@ -1496,7 +1533,7 @@ def start_session(
     try:
         reservation = reserve_credit(
             supabase,
-            user["id"],
+            credit_owner_user_id,
             session_id,
         )
     except Exception:
@@ -1551,7 +1588,12 @@ def finalize_session(
 
     row = s.data[0]
 
-    if str(row.get("user_id") or "") != user["id"]:
+    allowed_user_ids = {
+        str(row.get("user_id") or ""),
+        str(row.get("trainer_id") or ""),
+        str(row.get("performed_by_user_id") or ""),
+    }
+    if user["id"] not in allowed_user_ids:
         raise HTTPException(
             status_code=403,
             detail="This screening session belongs to another account.",
@@ -1613,9 +1655,15 @@ def finalize_session(
         session_id,
     ).execute()
 
+    credit_owner_user_id = str(
+        row.get("credit_owner_user_id")
+        or row.get("trainer_id")
+        or row.get("user_id")
+        or user["id"]
+    )
     credit_result = consume_credit(
         supabase,
-        user["id"],
+        credit_owner_user_id,
         session_id,
     )
 
