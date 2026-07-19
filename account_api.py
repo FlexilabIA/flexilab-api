@@ -145,7 +145,7 @@ def create_account_router(supabase_client) -> APIRouter:
         plan_code = str(row.get("plan_code") or "free")
         status = str(row.get("status") or "active")
         is_monthly = plan_code == "pro_monthly"
-        is_prepaid = plan_code in {"pro_three_month", "pro_annual"}
+        is_prepaid = plan_code in {"pro_three_month", "pro_annual", "trainer_pack_30"}
         cancel_at_period_end = bool(row.get("cancel_at_period_end", False))
         period_end = row.get("current_period_end")
 
