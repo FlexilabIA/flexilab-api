@@ -14,6 +14,11 @@ FRONTEND_URL = os.environ.get(
 ).rstrip("/")
 
 
+class TrainerRegister(BaseModel):
+    full_name: str = Field(min_length=2, max_length=120)
+    company_name: str = Field(min_length=2, max_length=160)
+
+
 class TrainerClientCreate(BaseModel):
     full_name: str = Field(min_length=2, max_length=120)
     email: str = Field(min_length=5, max_length=254)
@@ -129,6 +134,69 @@ def create_trainer_router(supabase_client) -> APIRouter:
         response = query.execute()
         return response.data[0] if response.data else None
 
+    @router.post("/trainer/register")
+    def register_trainer(
+        payload: TrainerRegister,
+        user: dict[str, str] = Depends(require_user),
+    ):
+        now = datetime.now(timezone.utc)
+        trial_end = now + timedelta(days=30)
+
+        profile_row = {
+            "user_id": user["id"],
+            "status": "active",
+            "full_name": payload.full_name.strip(),
+            "company_name": payload.company_name.strip(),
+            "updated_at": _iso_now(),
+        }
+        profile_response = (
+            supabase_client.table("trainer_profiles")
+            .upsert(profile_row, on_conflict="user_id")
+            .execute()
+        )
+        if not profile_response.data:
+            raise HTTPException(
+                status_code=500,
+                detail="Unable to create the Trainer profile.",
+            )
+
+        # One free screening token, granted once per Trainer account.
+        existing_trial = (
+            supabase_client.table("screening_credit_cycles")
+            .select("id")
+            .eq("user_id", user["id"])
+            .eq("source", "trainer_free_trial")
+            .limit(1)
+            .execute()
+        )
+        if not existing_trial.data:
+            supabase_client.table("screening_credit_cycles").insert({
+                "user_id": user["id"],
+                "subscription_id": None,
+                "source": "trainer_free_trial",
+                "cycle_start": now.isoformat(),
+                "cycle_end": trial_end.isoformat(),
+                "grace_expires_at": trial_end.isoformat(),
+                "credits_granted": 1,
+                "credits_used": 0,
+            }).execute()
+
+        try:
+            supabase_client.table("profiles").update({
+                "full_name": payload.full_name.strip(),
+                "updated_at": _iso_now(),
+            }).eq("id", user["id"]).execute()
+        except Exception:
+            pass
+
+        tokens, expires_at = remaining_tokens(user["id"])
+        return {
+            "trainer": profile_response.data[0],
+            "tokens_remaining": tokens,
+            "tokens_expires_at": expires_at,
+            "free_token_granted": not bool(existing_trial.data),
+        }
+
     @router.get("/me/account-mode")
     def account_mode(user: dict[str, str] = Depends(require_user)):
         # An invited client becomes active the first time they authenticate.
@@ -175,7 +243,11 @@ def create_trainer_router(supabase_client) -> APIRouter:
             "trainer": profile,
             "tokens_remaining": tokens,
             "tokens_expires_at": expires_at,
-            "active_clients": len(clients_response.data or []),
+            "total_clients": len(clients_response.data or []),
+            "active_clients": sum(
+                1 for row in (clients_response.data or [])
+                if row.get("status") == "active"
+            ),
             "completed_screenings": len(sessions_response.data or []),
             "referral_tokens_earned": sum(int(x.get("tokens_granted") or 0) for x in reward_response.data or []),
         }
