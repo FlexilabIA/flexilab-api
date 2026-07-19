@@ -193,6 +193,41 @@ def create_stripe_router(supabase_client) -> APIRouter:
         )
         return response.data[0] if response.data else None
 
+
+    def latest_user_subscription(user_id: str) -> Optional[dict]:
+        response = (
+            supabase_client.table("subscriptions")
+            .select("*")
+            .eq("user_id", user_id)
+            .eq("provider", "stripe")
+            .order("updated_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+        return response.data[0] if response.data else None
+
+    def require_monthly_subscription(user_id: str) -> dict:
+        saved = latest_user_subscription(user_id)
+        if not saved:
+            raise HTTPException(
+                status_code=404,
+                detail="No Stripe subscription was found for this account.",
+            )
+        if saved.get("plan_code") != "pro_monthly":
+            raise HTTPException(
+                status_code=409,
+                detail="This prepaid plan does not renew automatically.",
+            )
+        provider_subscription_id = str(
+            saved.get("provider_subscription_id") or ""
+        )
+        if not provider_subscription_id:
+            raise HTTPException(
+                status_code=409,
+                detail="This subscription cannot be managed automatically.",
+            )
+        return saved
+
     def save_subscription(
         *,
         user_id: str,
@@ -724,6 +759,147 @@ def create_stripe_router(supabase_client) -> APIRouter:
             "checkout_url": checkout_session.url,
             "session_id": checkout_session.id,
             "plan_code": plan_code,
+        }
+
+
+    @router.post("/billing-portal")
+    def create_billing_portal(
+        authorization: Optional[str] = Header(default=None),
+    ):
+        if not STRIPE_SECRET_KEY:
+            raise HTTPException(
+                status_code=503,
+                detail="Stripe is not configured on the server.",
+            )
+
+        user = require_user(authorization)
+        saved = latest_user_subscription(user["id"])
+        customer_id = str(
+            (saved or {}).get("provider_customer_id") or ""
+        ).strip()
+
+        if not customer_id:
+            raise HTTPException(
+                status_code=409,
+                detail="No Stripe billing profile is available for this account.",
+            )
+
+        try:
+            portal = stripe.billing_portal.Session.create(
+                customer=customer_id,
+                return_url=f"{FRONTEND_URL}/profile",
+            )
+        except stripe.StripeError as exc:
+            message = getattr(exc, "user_message", None) or str(exc)
+            raise HTTPException(
+                status_code=502,
+                detail=f"Unable to open Stripe billing portal: {message}",
+            )
+
+        return {"portal_url": portal.url}
+
+    @router.post("/subscription/cancel")
+    def cancel_subscription(
+        authorization: Optional[str] = Header(default=None),
+    ):
+        if not STRIPE_SECRET_KEY:
+            raise HTTPException(
+                status_code=503,
+                detail="Stripe is not configured on the server.",
+            )
+
+        user = require_user(authorization)
+        saved = require_monthly_subscription(user["id"])
+        provider_subscription_id = str(saved["provider_subscription_id"])
+
+        try:
+            subscription = stripe.Subscription.modify(
+                provider_subscription_id,
+                cancel_at_period_end=True,
+            )
+        except stripe.StripeError as exc:
+            message = getattr(exc, "user_message", None) or str(exc)
+            raise HTTPException(
+                status_code=502,
+                detail=f"Unable to cancel renewal: {message}",
+            )
+
+        period_start, period_end = _subscription_period(subscription)
+        meta = _metadata(subscription)
+        meta.update(saved.get("metadata") or {})
+
+        save_subscription(
+            user_id=user["id"],
+            plan_code="pro_monthly",
+            provider_customer_id=str(
+                _object_value(subscription, "customer", "")
+            ) or saved.get("provider_customer_id"),
+            provider_subscription_id=provider_subscription_id,
+            status=str(_object_value(subscription, "status", "active")),
+            period_start=period_start,
+            period_end=period_end,
+            cancel_at_period_end=True,
+            metadata=meta,
+        )
+
+        return {
+            "ok": True,
+            "status": str(_object_value(subscription, "status", "active")),
+            "cancel_at_period_end": True,
+            "current_period_end": _iso(period_end),
+            "message": "Automatic renewal has been canceled.",
+        }
+
+    @router.post("/subscription/reactivate")
+    def reactivate_subscription(
+        authorization: Optional[str] = Header(default=None),
+    ):
+        if not STRIPE_SECRET_KEY:
+            raise HTTPException(
+                status_code=503,
+                detail="Stripe is not configured on the server.",
+            )
+
+        user = require_user(authorization)
+        saved = require_monthly_subscription(user["id"])
+        provider_subscription_id = str(saved["provider_subscription_id"])
+
+        try:
+            subscription = stripe.Subscription.modify(
+                provider_subscription_id,
+                cancel_at_period_end=False,
+            )
+        except stripe.StripeError as exc:
+            message = getattr(exc, "user_message", None) or str(exc)
+            raise HTTPException(
+                status_code=502,
+                detail=f"Unable to reactivate renewal: {message}",
+            )
+
+        period_start, period_end = _subscription_period(subscription)
+        meta = _metadata(subscription)
+        meta.update(saved.get("metadata") or {})
+
+        save_subscription(
+            user_id=user["id"],
+            plan_code="pro_monthly",
+            provider_customer_id=str(
+                _object_value(subscription, "customer", "")
+            ) or saved.get("provider_customer_id"),
+            provider_subscription_id=provider_subscription_id,
+            status=str(_object_value(subscription, "status", "active")),
+            period_start=period_start,
+            period_end=period_end,
+            cancel_at_period_end=False,
+            metadata=meta,
+        )
+
+        return {
+            "ok": True,
+            "status": str(_object_value(subscription, "status", "active")),
+            "cancel_at_period_end": False,
+            "current_period_end": _iso(period_end),
+            "message": "Automatic renewal has been reactivated.",
         }
 
     @router.post("/webhook")
