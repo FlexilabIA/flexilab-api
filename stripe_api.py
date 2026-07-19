@@ -868,7 +868,9 @@ def create_stripe_router(supabase_client) -> APIRouter:
                 + ("/trainer" if plan_code == "trainer_pack_30" else "/paywall")
                 + "?payment=cancelled"
             ),
-            "allow_promotion_codes": False,
+            # Display Stripe's secure promotion-code field for every
+            # client plan and the Trainer 30-token pack.
+            "allow_promotion_codes": True,
         }
 
         if plan["mode"] == "subscription":
