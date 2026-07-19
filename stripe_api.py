@@ -421,58 +421,88 @@ def create_stripe_router(supabase_client) -> APIRouter:
             }).execute()
 
     def grant_referral_reward(*, client_user_id: str, source_payment_id: str) -> None:
+        """
+        Grant two screening tokens to the original Trainer after the referred
+        client completes their first successful paid FlexiLab purchase.
+
+        The reward is intentionally granted once per Trainer/client pair, not
+        once per invoice or renewal. This prevents duplicate rewards from
+        recurring monthly invoices and repeated Stripe webhook delivery.
+        """
         links = (
             supabase_client.table("trainer_clients")
-            .select("trainer_id")
+            .select("id,trainer_id")
             .eq("client_user_id", client_user_id)
             .eq("status", "active")
+            .order("created_at", desc=False)
+            .limit(1)
             .execute()
         )
-        for link in links.data or []:
-            trainer_id = str(link.get("trainer_id") or "")
-            if not trainer_id:
-                continue
-            existing = (
-                supabase_client.table("trainer_referral_rewards")
-                .select("id")
-                .eq("trainer_id", trainer_id)
-                .eq("client_user_id", client_user_id)
-                .eq("source_payment_id", source_payment_id)
-                .limit(1)
+
+        if not links.data:
+            return
+
+        link = links.data[0]
+        trainer_id = str(link.get("trainer_id") or "")
+        trainer_client_link_id = str(link.get("id") or "")
+        if not trainer_id:
+            return
+
+        existing_reward = (
+            supabase_client.table("trainer_referral_rewards")
+            .select("id")
+            .eq("trainer_id", trainer_id)
+            .eq("client_user_id", client_user_id)
+            .limit(1)
+            .execute()
+        )
+        if existing_reward.data:
+            return
+
+        now = _utc_now()
+        reward_end = _add_months(now, 12)
+        reward_source = f"trainer_referral:{trainer_id}:{client_user_id}"
+
+        existing_cycle = (
+            supabase_client.table("screening_credit_cycles")
+            .select("id")
+            .eq("user_id", trainer_id)
+            .eq("source", reward_source)
+            .limit(1)
+            .execute()
+        )
+
+        if not existing_cycle.data:
+            cycle_response = (
+                supabase_client.table("screening_credit_cycles")
+                .insert({
+                    "user_id": trainer_id,
+                    "subscription_id": None,
+                    "source": reward_source,
+                    "cycle_start": _iso(now),
+                    "cycle_end": _iso(reward_end),
+                    "grace_expires_at": _iso(reward_end),
+                    "credits_granted": 2,
+                    "credits_used": 0,
+                })
                 .execute()
             )
-            if existing.data:
-                continue
-            reward = supabase_client.table("trainer_referral_rewards").insert({
+            if not cycle_response.data:
+                raise RuntimeError("Unable to grant Trainer referral tokens.")
+
+        reward_response = (
+            supabase_client.table("trainer_referral_rewards")
+            .insert({
                 "trainer_id": trainer_id,
                 "client_user_id": client_user_id,
+                "trainer_client_link_id": trainer_client_link_id or None,
                 "source_payment_id": source_payment_id,
-                "tokens_granted": 1,
-            }).execute()
-            if not reward.data:
-                continue
-            trainer_subscription = (
-                supabase_client.table("subscriptions")
-                .select("id")
-                .eq("user_id", trainer_id)
-                .eq("plan_code", "trainer_pack_30")
-                .order("current_period_end", desc=True)
-                .limit(1)
-                .execute()
-            )
-            if not trainer_subscription.data:
-                continue
-            now = _utc_now()
-            supabase_client.table("screening_credit_cycles").insert({
-                "user_id": trainer_id,
-                "subscription_id": trainer_subscription.data[0]["id"],
-                "source": f"referral:{source_payment_id}",
-                "cycle_start": _iso(now),
-                "cycle_end": _iso(_add_months(now, 12)),
-                "grace_expires_at": _iso(_add_months(now, 12)),
-                "credits_granted": 1,
-                "credits_used": 0,
-            }).execute()
+                "tokens_granted": 2,
+            })
+            .execute()
+        )
+        if not reward_response.data:
+            raise RuntimeError("Unable to record the Trainer referral reward.")
 
     def process_checkout_completed(session: Any) -> None:
         payment_status = str(
