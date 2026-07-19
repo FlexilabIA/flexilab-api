@@ -1502,26 +1502,17 @@ def start_session(
             raise HTTPException(status_code=404, detail="Trainer client not found.")
         link = link_response.data[0]
         link_status = str(link.get("status") or "").strip().lower()
-        client_user_id = str(link.get("client_user_id") or "").strip()
-
-        # A Trainer may screen a newly invited client before that client signs in.
-        # Supabase creates/reserves the client's Auth UUID when the invitation is
-        # issued, so the result can already belong to that future client account.
-        # Archived/revoked links remain blocked.
         if link_status not in {"pending", "active"}:
             raise HTTPException(
                 status_code=409,
                 detail="This Trainer-client link is not available for screening.",
             )
-        if not client_user_id:
-            raise HTTPException(
-                status_code=409,
-                detail=(
-                    "The client invitation did not create an account identifier. "
-                    "Resend or recreate the invitation before screening."
-                ),
-            )
-        session_owner_user_id = client_user_id
+
+        # The invitation email can fail to create a Supabase Auth UUID immediately.
+        # In that case, create the screening under the invited email and link ID.
+        # The session user_id is backfilled automatically when the client first signs in.
+        client_user_id = str(link.get("client_user_id") or "").strip()
+        session_owner_user_id = client_user_id or None
         session_owner_email = str(link.get("invited_email") or "").strip().lower()
         trainer_id = user["id"]
         trainer_link_id = str(link["id"])
