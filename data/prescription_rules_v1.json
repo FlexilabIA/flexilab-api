@@ -1,246 +1,173 @@
 {
-  "engine_version": "FlexiLab Clinical Prescription Engine v1.0",
-  "library_version_required": "FlexiLab Exercise Library v1.0",
+  "engine_version": "FlexiLab Clinical Prescription Engine v3.0",
   "principles": {
-    "pain_is_gatekeeper": "Pain does not directly reduce movement score; it creates clinical readiness and modifies the program.",
-    "priority_weighting": "Exercise volume is driven by the lowest movement domains, not equal distribution.",
-    "cumulative_progression": "High-value corrective drills are maintained until the related domain reaches >=80 twice or reassessment confirms improvement.",
-    "replacement_model": "Do not let programs grow indefinitely; keep 5-8 exercises/session by replacing low-value drills when progression is appropriate.",
-    "symmetry_rule": "When side-to-side asymmetry is >10%, add extra volume or hold time to the restricted side."
+    "user_delegates_complexity": "The user should never need to choose exercises or understand programming complexity.",
+    "clinical_targets_stable_exercises_rotate": "Maintain stable clinical targets while rotating coherent exercise variations.",
+    "visible_progression": "Week 1 learns, week 2 controls, week 3 loads, week 4 integrates.",
+    "engagement_without_randomness": "Variation must preserve biomechanical purpose and never become random.",
+    "questionnaire_is_operational": "Pain, goal, activity level, restrictions and available equipment must change prescription decisions.",
+    "exercise_specific_dosage": "Exercise metadata controls dosage; generic set overrides are forbidden."
   },
-  "domain_map": {
-    "cervical_control": {
-      "category_codes": [
-        "CC",
-        "RB"
-      ],
-      "label_en": "Cervical Control",
-      "label_fr": "Contrôle cervical"
-    },
-    "thoracic_mobility": {
-      "category_codes": [
-        "TM",
-        "RB"
-      ],
-      "label_en": "Thoracic Mobility",
-      "label_fr": "Mobilité thoracique"
-    },
-    "shoulder_mobility": {
-      "category_codes": [
-        "SH",
-        "TM"
-      ],
-      "label_en": "Shoulder Mobility",
-      "label_fr": "Mobilité des épaules"
-    },
-    "core_stability": {
-      "category_codes": [
-        "CS",
-        "RB"
-      ],
-      "label_en": "Core Stability",
-      "label_fr": "Stabilité du tronc"
-    },
-    "hip_mobility": {
-      "category_codes": [
-        "HM",
-        "HS"
-      ],
-      "label_en": "Hip Mobility",
-      "label_fr": "Mobilité de hanche"
-    },
-    "hamstring_mobility": {
-      "category_codes": [
-        "HS",
-        "HM"
-      ],
-      "label_en": "Hamstring Mobility",
-      "label_fr": "Mobilité ischio-jambiers"
-    },
-    "ankle_mobility": {
-      "category_codes": [
-        "AM",
-        "BP"
-      ],
-      "label_en": "Ankle Mobility",
-      "label_fr": "Mobilité de cheville"
-    },
-    "functional_integration": {
-      "category_codes": [
-        "FI",
-        "CS",
-        "BP"
-      ],
-      "label_en": "Functional Integration",
-      "label_fr": "Intégration fonctionnelle"
-    },
-    "balance_proprioception": {
-      "category_codes": [
-        "BP",
-        "FI"
-      ],
-      "label_en": "Balance & Proprioception",
-      "label_fr": "Équilibre & proprioception"
-    },
-    "recovery_breathing": {
-      "category_codes": [
-        "RB"
-      ],
-      "label_en": "Recovery & Breathing",
-      "label_fr": "Récupération & respiration"
-    }
-  },
-  "score_bands": {
-    "red": {
-      "max": 59,
-      "label_en": "Limited",
-      "label_fr": "Limité"
-    },
-    "orange": {
-      "min": 60,
-      "max": 69,
-      "label_en": "Needs improvement",
-      "label_fr": "À améliorer"
-    },
-    "yellow": {
-      "min": 70,
-      "max": 79,
-      "label_en": "Fair",
-      "label_fr": "Correct"
-    },
-    "green": {
-      "min": 80,
-      "label_en": "Good",
-      "label_fr": "Bon"
-    }
-  },
-  "pain_readiness": {
-    "none": {
-      "min": 0,
-      "max": 0,
-      "readiness": "normal",
-      "program_mode": "corrective"
-    },
-    "mild": {
-      "min": 1,
-      "max": 3,
-      "readiness": "caution",
-      "program_mode": "pain_free_corrective"
-    },
-    "moderate": {
-      "min": 4,
-      "max": 6,
-      "readiness": "limited",
-      "program_mode": "recovery_control",
-      "recommend_medical_advice": true
-    },
-    "severe": {
-      "min": 7,
-      "max": 10,
-      "readiness": "medical_clearance_recommended",
-      "program_mode": "recovery_only",
-      "recommend_medical_advice": true
-    }
-  },
-  "weekly_progression": [
-    {
-      "week": 1,
-      "phase": "Restore",
-      "phase_fr": "Restaurer",
+  "week_models": {
+    "1": {
+      "phase": "Restore & Learn",
       "difficulty_max": 2,
-      "objectives": [
-        "recovery",
-        "mobility",
-        "motor_control"
-      ],
-      "session_target_exercises": [
-        5,
-        6
-      ]
+      "load_max": 1,
+      "new_exercise_ratio_min": 0.45
     },
-    {
-      "week": 2,
-      "phase": "Control",
-      "phase_fr": "Contrôler",
+    "2": {
+      "phase": "Control & Build Capacity",
       "difficulty_max": 3,
-      "objectives": [
-        "mobility",
-        "motor_control",
-        "activation"
-      ],
-      "session_target_exercises": [
-        6,
-        7
-      ]
+      "load_max": 3,
+      "new_exercise_ratio_min": 0.4
     },
-    {
-      "week": 3,
-      "phase": "Stabilize",
-      "phase_fr": "Stabiliser",
+    "3": {
+      "phase": "Strengthen & Stabilize",
       "difficulty_max": 4,
-      "objectives": [
-        "mobility",
-        "stability",
-        "activation",
-        "integration"
-      ],
-      "session_target_exercises": [
-        6,
-        8
-      ]
+      "load_max": 5,
+      "new_exercise_ratio_min": 0.35
     },
-    {
-      "week": 4,
-      "phase": "Integrate",
-      "phase_fr": "Intégrer",
+    "4": {
+      "phase": "Integrate & Challenge",
       "difficulty_max": 5,
-      "objectives": [
-        "stability",
-        "integration",
-        "functional_strength"
-      ],
-      "session_target_exercises": [
-        6,
-        8
-      ]
+      "load_max": 5,
+      "new_exercise_ratio_min": 0.3
     }
-  ],
-  "session_structure": {
-    "day_1": {
-      "focus_en": "Mobility / Restore",
-      "focus_fr": "Mobilité / restauration",
-      "bias": [
+  },
+  "day_models": {
+    "1": {
+      "focus": "Mobility & Movement Quality",
+      "roles": [
         "mobility",
+        "activation",
+        "stability",
         "recovery"
       ]
     },
-    "day_2": {
-      "focus_en": "Control / Stability",
-      "focus_fr": "Contrôle / stabilité",
-      "bias": [
-        "motor_control",
+    "2": {
+      "focus": "Stability & Strength",
+      "roles": [
+        "activation",
         "stability",
-        "activation"
+        "integration",
+        "mobility"
       ]
     },
-    "day_3": {
-      "focus_en": "Integration / Movement Pattern",
-      "focus_fr": "Intégration / schéma moteur",
-      "bias": [
+    "3": {
+      "focus": "Functional Integration",
+      "roles": [
         "integration",
-        "functional_strength",
-        "stability"
+        "stability",
+        "mobility",
+        "activation"
       ]
     }
   },
-  "selection_rules": {
-    "priority_1_volume_multiplier": 1.5,
-    "priority_2_volume_multiplier": 1.2,
-    "priority_3_volume_multiplier": 1.0,
-    "minimum_recovery_exercises_per_session": 1,
-    "maximum_same_category_per_session": 3,
-    "keep_foundational_mobility_until_domain_score": 80,
-    "minimum_session_duration_min": 15,
-    "maximum_session_duration_min": 30
+  "session_rules": {
+    "target_exercises": 6,
+    "minimum_exercises": 5,
+    "maximum_exercises": 7,
+    "minimum_difference_between_sessions": 0.45,
+    "maximum_recovery_exercises": 1,
+    "maximum_same_category": 2,
+    "maximum_same_exercise_per_week": 2,
+    "maximum_recovery_exposure_per_week": 2,
+    "priority_exposure_per_week_min": 4
+  },
+  "loading_rules": {
+    "no_pain": {
+      "band_from_week": 2,
+      "light_weight_from_week": 3
+    },
+    "discomfort": {
+      "band_from_week": 3,
+      "light_weight_from_week": 99
+    },
+    "pain": {
+      "band_from_week": 99,
+      "light_weight_from_week": 99
+    },
+    "beginner": {
+      "light_weight_from_week": 4
+    },
+    "intermediate": {
+      "light_weight_from_week": 3
+    },
+    "advanced": {
+      "light_weight_from_week": 2
+    }
+  },
+  "dosage_rules": {
+    "recovery_hold": {
+      "sets": [
+        1,
+        1
+      ],
+      "duration_seconds": [
+        30,
+        60
+      ],
+      "max_total_seconds": 75
+    },
+    "soft_tissue_time": {
+      "sets": [
+        1,
+        1
+      ],
+      "duration_seconds": [
+        30,
+        60
+      ],
+      "max_total_seconds": 60
+    },
+    "static_hold": {
+      "sets": [
+        1,
+        2
+      ],
+      "duration_seconds": [
+        20,
+        45
+      ],
+      "max_total_seconds": 90
+    },
+    "dynamic_mobility_reps": {
+      "sets": [
+        1,
+        2
+      ],
+      "reps": [
+        6,
+        12
+      ]
+    },
+    "motor_control_reps": {
+      "sets": [
+        2,
+        3
+      ],
+      "reps": [
+        6,
+        12
+      ]
+    },
+    "strength_reps": {
+      "sets": [
+        2,
+        3
+      ],
+      "reps": [
+        6,
+        15
+      ]
+    }
+  },
+  "quality_gates": {
+    "reject_identical_sessions": true,
+    "reject_week4_not_harder_than_week2": true,
+    "reject_generic_timed_hold_multiple_sets": true,
+    "reject_missing_loaded_work_when_allowed": true,
+    "reject_priority_underexposure": true,
+    "reject_recovery_dominance": true
   }
 }
