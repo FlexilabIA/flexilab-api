@@ -1,7 +1,7 @@
 {
-  "library_version": "v69_filmed_demo_enriched_2026_07",
+  "library_version": "v3.0_filmed_demo_clinical_progression_2026_07",
   "exercise_count": 78,
-  "description": "FlexiLab filmed-only demo exercise library with exercise-specific bilingual coaching cues, common errors, clinical rationale, instructions and tips.",
+  "description": "FlexiLab filmed-only clinical exercise library with enforceable dosage, loading, progression, repetition and engagement metadata.",
   "selection_policy": {
     "demo_ready_only": true,
     "video_ready_only": true,
@@ -65,7 +65,25 @@
       "instructions_en": "Step into a long lunge, keep the front foot flat, rotate from the upper back, and follow the hand with your eyes.",
       "instructions_fr": "Avancez en fente longue, gardez le pied avant à plat, tournez depuis le haut du dos et suivez la main du regard.",
       "tips_en": "Use it to open the hips and upper back while keeping the pelvis and knee controlled.",
-      "tips_fr": "Utilisez-le pour ouvrir les hanches et le haut du dos tout en contrôlant le bassin et le genou."
+      "tips_fr": "Utilisez-le pour ouvrir les hanches et le haut du dos tout en contrôlant le bassin et le genou.",
+      "dosage_type": "dynamic_mobility_reps",
+      "intervention_role": "mobility",
+      "default_sets_v3": 2,
+      "min_sets_v3": 1,
+      "max_sets_v3": 2,
+      "default_reps_v3": 8,
+      "default_duration_seconds_v3": null,
+      "default_hold_seconds_v3": null,
+      "max_total_exposure_seconds_v3": null,
+      "load_level_v3": 0,
+      "progression_stage_v3": 1,
+      "repeat_limit_per_week_v3": 2,
+      "repeat_limit_program_v3": 5,
+      "experience_requirement_v3": "all",
+      "engagement_tags_v3": [
+        "mobility",
+        "unloaded"
+      ]
     },
     {
       "exercise_id": "DMTM001",
@@ -123,7 +141,25 @@
       "instructions_en": "Place the roller across the upper back, support the head, keep the ribs controlled, and extend through the thoracic spine.",
       "instructions_fr": "Placez le rouleau sous le haut du dos, soutenez la tête, contrôlez les côtes et étendez le rachis thoracique.",
       "tips_en": "Move over one upper-back segment at a time and keep the lower ribs gently down.",
-      "tips_fr": "Travaillez un segment du haut du dos à la fois en gardant les côtes basses."
+      "tips_fr": "Travaillez un segment du haut du dos à la fois en gardant les côtes basses.",
+      "dosage_type": "dynamic_mobility_reps",
+      "intervention_role": "mobility",
+      "default_sets_v3": 2,
+      "min_sets_v3": 1,
+      "max_sets_v3": 2,
+      "default_reps_v3": 15,
+      "default_duration_seconds_v3": null,
+      "default_hold_seconds_v3": null,
+      "max_total_exposure_seconds_v3": null,
+      "load_level_v3": 0,
+      "progression_stage_v3": 1,
+      "repeat_limit_per_week_v3": 2,
+      "repeat_limit_program_v3": 5,
+      "experience_requirement_v3": "all",
+      "engagement_tags_v3": [
+        "mobility",
+        "unloaded"
+      ]
     },
     {
       "exercise_id": "DMTM002",
@@ -181,7 +217,25 @@
       "instructions_en": "Keep the knees and pelvis stacked, rotate through the upper back, and let the shoulder blade glide around the rib cage.",
       "instructions_fr": "Gardez les genoux et le bassin superposés, tournez depuis le haut du dos et laissez l’omoplate glisser sur la cage thoracique.",
       "tips_en": "Exhale into the rotation and stop before the pelvis begins to move.",
-      "tips_fr": "Expirez pendant la rotation et arrêtez avant que le bassin ne bouge."
+      "tips_fr": "Expirez pendant la rotation et arrêtez avant que le bassin ne bouge.",
+      "dosage_type": "dynamic_mobility_reps",
+      "intervention_role": "mobility",
+      "default_sets_v3": 2,
+      "min_sets_v3": 1,
+      "max_sets_v3": 2,
+      "default_reps_v3": 15,
+      "default_duration_seconds_v3": null,
+      "default_hold_seconds_v3": null,
+      "max_total_exposure_seconds_v3": null,
+      "load_level_v3": 0,
+      "progression_stage_v3": 1,
+      "repeat_limit_per_week_v3": 2,
+      "repeat_limit_program_v3": 5,
+      "experience_requirement_v3": "all",
+      "engagement_tags_v3": [
+        "mobility",
+        "unloaded"
+      ]
     },
     {
       "exercise_id": "DMSH001",
@@ -239,7 +293,25 @@
       "instructions_en": "Keep the ribs down and neck long, slide the arms upward while the shoulder blades rotate smoothly, and avoid shrugging.",
       "instructions_fr": "Gardez les côtes basses et la nuque longue, faites glisser les bras vers le haut en laissant les omoplates tourner sans hausser les épaules.",
       "tips_en": "Reach only as high as you can without losing rib and pelvic alignment.",
-      "tips_fr": "Montez seulement jusqu’à la hauteur permettant de conserver l’alignement des côtes et du bassin."
+      "tips_fr": "Montez seulement jusqu’à la hauteur permettant de conserver l’alignement des côtes et du bassin.",
+      "dosage_type": "dynamic_mobility_reps",
+      "intervention_role": "mobility",
+      "default_sets_v3": 2,
+      "min_sets_v3": 1,
+      "max_sets_v3": 2,
+      "default_reps_v3": 15,
+      "default_duration_seconds_v3": null,
+      "default_hold_seconds_v3": null,
+      "max_total_exposure_seconds_v3": null,
+      "load_level_v3": 0,
+      "progression_stage_v3": 2,
+      "repeat_limit_per_week_v3": 2,
+      "repeat_limit_program_v3": 5,
+      "experience_requirement_v3": "all",
+      "engagement_tags_v3": [
+        "mobility",
+        "unloaded"
+      ]
     },
     {
       "exercise_id": "DMSH002",
@@ -297,7 +369,25 @@
       "instructions_en": "Keep the forehead supported, draw the shoulder blades gently down and back, and lift the arms without extending the lower back.",
       "instructions_fr": "Gardez le front soutenu, abaissez doucement les omoplates et soulevez les bras sans cambrer le bas du dos.",
       "tips_en": "Use a small, controlled lift and pause briefly in each W, T, and Y position.",
-      "tips_fr": "Réalisez une petite élévation contrôlée avec une courte pause en W, T et Y."
+      "tips_fr": "Réalisez une petite élévation contrôlée avec une courte pause en W, T et Y.",
+      "dosage_type": "dynamic_mobility_reps",
+      "intervention_role": "mobility",
+      "default_sets_v3": 2,
+      "min_sets_v3": 1,
+      "max_sets_v3": 2,
+      "default_reps_v3": 10,
+      "default_duration_seconds_v3": null,
+      "default_hold_seconds_v3": null,
+      "max_total_exposure_seconds_v3": null,
+      "load_level_v3": 0,
+      "progression_stage_v3": 2,
+      "repeat_limit_per_week_v3": 2,
+      "repeat_limit_program_v3": 5,
+      "experience_requirement_v3": "all",
+      "engagement_tags_v3": [
+        "mobility",
+        "unloaded"
+      ]
     },
     {
       "exercise_id": "DMSH003",
@@ -355,7 +445,25 @@
       "instructions_en": "Keep the ribs down and neck long, slide the arms upward while the shoulder blades rotate smoothly, and avoid shrugging.",
       "instructions_fr": "Gardez les côtes basses et la nuque longue, faites glisser les bras vers le haut en laissant les omoplates tourner sans hausser les épaules.",
       "tips_en": "Reach only as high as you can without losing rib and pelvic alignment.",
-      "tips_fr": "Montez seulement jusqu’à la hauteur permettant de conserver l’alignement des côtes et du bassin."
+      "tips_fr": "Montez seulement jusqu’à la hauteur permettant de conserver l’alignement des côtes et du bassin.",
+      "dosage_type": "dynamic_mobility_reps",
+      "intervention_role": "mobility",
+      "default_sets_v3": 2,
+      "min_sets_v3": 1,
+      "max_sets_v3": 2,
+      "default_reps_v3": 15,
+      "default_duration_seconds_v3": null,
+      "default_hold_seconds_v3": null,
+      "max_total_exposure_seconds_v3": null,
+      "load_level_v3": 0,
+      "progression_stage_v3": 2,
+      "repeat_limit_per_week_v3": 2,
+      "repeat_limit_program_v3": 5,
+      "experience_requirement_v3": "all",
+      "engagement_tags_v3": [
+        "mobility",
+        "unloaded"
+      ]
     },
     {
       "exercise_id": "DMTM003",
@@ -413,7 +521,25 @@
       "instructions_en": "Keep the knees and pelvis stacked, rotate through the upper back, and let the shoulder blade glide around the rib cage.",
       "instructions_fr": "Gardez les genoux et le bassin superposés, tournez depuis le haut du dos et laissez l’omoplate glisser sur la cage thoracique.",
       "tips_en": "Exhale into the rotation and stop before the pelvis begins to move.",
-      "tips_fr": "Expirez pendant la rotation et arrêtez avant que le bassin ne bouge."
+      "tips_fr": "Expirez pendant la rotation et arrêtez avant que le bassin ne bouge.",
+      "dosage_type": "dynamic_mobility_reps",
+      "intervention_role": "mobility",
+      "default_sets_v3": 2,
+      "min_sets_v3": 1,
+      "max_sets_v3": 2,
+      "default_reps_v3": 15,
+      "default_duration_seconds_v3": null,
+      "default_hold_seconds_v3": null,
+      "max_total_exposure_seconds_v3": null,
+      "load_level_v3": 0,
+      "progression_stage_v3": 1,
+      "repeat_limit_per_week_v3": 2,
+      "repeat_limit_program_v3": 5,
+      "experience_requirement_v3": "all",
+      "engagement_tags_v3": [
+        "mobility",
+        "unloaded"
+      ]
     },
     {
       "exercise_id": "DMSH004",
@@ -471,7 +597,25 @@
       "instructions_en": "Set the shoulder slightly below ear level, keep it relaxed, and rotate the chest away without twisting the pelvis.",
       "instructions_fr": "Placez l’épaule légèrement sous le niveau de l’oreille, relâchez-la et tournez le thorax sans entraîner le bassin.",
       "tips_en": "Create a gentle stretch across the chest, not pressure at the front of the shoulder.",
-      "tips_fr": "Recherchez un étirement doux du pectoral, sans pression à l’avant de l’épaule."
+      "tips_fr": "Recherchez un étirement doux du pectoral, sans pression à l’avant de l’épaule.",
+      "dosage_type": "dynamic_mobility_reps",
+      "intervention_role": "mobility",
+      "default_sets_v3": 2,
+      "min_sets_v3": 1,
+      "max_sets_v3": 2,
+      "default_reps_v3": 15,
+      "default_duration_seconds_v3": null,
+      "default_hold_seconds_v3": null,
+      "max_total_exposure_seconds_v3": null,
+      "load_level_v3": 0,
+      "progression_stage_v3": 1,
+      "repeat_limit_per_week_v3": 2,
+      "repeat_limit_program_v3": 5,
+      "experience_requirement_v3": "all",
+      "engagement_tags_v3": [
+        "mobility",
+        "unloaded"
+      ]
     },
     {
       "exercise_id": "DMCC001",
@@ -529,7 +673,25 @@
       "instructions_en": "Lengthen the back of the neck and glide the chin straight backward without looking down.",
       "instructions_fr": "Allongez l’arrière de la nuque et reculez le menton horizontalement sans regarder vers le bas.",
       "tips_en": "Use a gentle effort and keep breathing normally.",
-      "tips_fr": "Utilisez un effort léger et respirez normalement."
+      "tips_fr": "Utilisez un effort léger et respirez normalement.",
+      "dosage_type": "recovery_hold",
+      "intervention_role": "recovery",
+      "default_sets_v3": 1,
+      "min_sets_v3": 1,
+      "max_sets_v3": 1,
+      "default_reps_v3": 15,
+      "default_duration_seconds_v3": 45,
+      "default_hold_seconds_v3": null,
+      "max_total_exposure_seconds_v3": 75,
+      "load_level_v3": 0,
+      "progression_stage_v3": 1,
+      "repeat_limit_per_week_v3": 1,
+      "repeat_limit_program_v3": 3,
+      "experience_requirement_v3": "all",
+      "engagement_tags_v3": [
+        "recovery",
+        "unloaded"
+      ]
     },
     {
       "exercise_id": "DMSH005",
@@ -587,7 +749,25 @@
       "instructions_en": "Keep the ribs down and neck long, slide the arms upward while the shoulder blades rotate smoothly, and avoid shrugging.",
       "instructions_fr": "Gardez les côtes basses et la nuque longue, faites glisser les bras vers le haut en laissant les omoplates tourner sans hausser les épaules.",
       "tips_en": "Reach only as high as you can without losing rib and pelvic alignment.",
-      "tips_fr": "Montez seulement jusqu’à la hauteur permettant de conserver l’alignement des côtes et du bassin."
+      "tips_fr": "Montez seulement jusqu’à la hauteur permettant de conserver l’alignement des côtes et du bassin.",
+      "dosage_type": "dynamic_mobility_reps",
+      "intervention_role": "mobility",
+      "default_sets_v3": 2,
+      "min_sets_v3": 1,
+      "max_sets_v3": 2,
+      "default_reps_v3": 15,
+      "default_duration_seconds_v3": null,
+      "default_hold_seconds_v3": null,
+      "max_total_exposure_seconds_v3": null,
+      "load_level_v3": 3,
+      "progression_stage_v3": 2,
+      "repeat_limit_per_week_v3": 2,
+      "repeat_limit_program_v3": 5,
+      "experience_requirement_v3": "all",
+      "engagement_tags_v3": [
+        "mobility",
+        "loaded"
+      ]
     },
     {
       "exercise_id": "DMSH006",
@@ -645,7 +825,25 @@
       "instructions_en": "Keep the elbows straight and ribs controlled, then reach the shoulder blades forward around the rib cage.",
       "instructions_fr": "Gardez les coudes tendus et les côtes contrôlées, puis poussez les omoplates vers l’avant autour de la cage thoracique.",
       "tips_en": "Move through the shoulder blades without rounding the lower back.",
-      "tips_fr": "Bougez depuis les omoplates sans arrondir le bas du dos."
+      "tips_fr": "Bougez depuis les omoplates sans arrondir le bas du dos.",
+      "dosage_type": "dynamic_mobility_reps",
+      "intervention_role": "mobility",
+      "default_sets_v3": 2,
+      "min_sets_v3": 1,
+      "max_sets_v3": 2,
+      "default_reps_v3": 15,
+      "default_duration_seconds_v3": null,
+      "default_hold_seconds_v3": null,
+      "max_total_exposure_seconds_v3": null,
+      "load_level_v3": 0,
+      "progression_stage_v3": 3,
+      "repeat_limit_per_week_v3": 2,
+      "repeat_limit_program_v3": 5,
+      "experience_requirement_v3": "all",
+      "engagement_tags_v3": [
+        "mobility",
+        "unloaded"
+      ]
     },
     {
       "exercise_id": "DMSH007",
@@ -703,7 +901,25 @@
       "instructions_en": "Keep the ribs down and elbows soft, pull the band apart by moving the shoulder blades without leaning backward.",
       "instructions_fr": "Gardez les côtes basses et les coudes légèrement souples, écartez l’élastique avec les omoplates sans vous pencher en arrière.",
       "tips_en": "Finish with the hands wide and the shoulders relaxed.",
-      "tips_fr": "Terminez les mains écartées et les épaules relâchées."
+      "tips_fr": "Terminez les mains écartées et les épaules relâchées.",
+      "dosage_type": "dynamic_mobility_reps",
+      "intervention_role": "mobility",
+      "default_sets_v3": 2,
+      "min_sets_v3": 1,
+      "max_sets_v3": 2,
+      "default_reps_v3": 15,
+      "default_duration_seconds_v3": null,
+      "default_hold_seconds_v3": null,
+      "max_total_exposure_seconds_v3": null,
+      "load_level_v3": 3,
+      "progression_stage_v3": 2,
+      "repeat_limit_per_week_v3": 2,
+      "repeat_limit_program_v3": 5,
+      "experience_requirement_v3": "all",
+      "engagement_tags_v3": [
+        "mobility",
+        "loaded"
+      ]
     },
     {
       "exercise_id": "DMTM004",
@@ -761,7 +977,25 @@
       "instructions_en": "Position the tool on the target muscle, apply tolerable pressure, and roll slowly while keeping the surrounding joints relaxed.",
       "instructions_fr": "Placez l’outil sur le muscle ciblé, appliquez une pression tolérable et roulez lentement en relâchant les articulations voisines.",
       "tips_en": "Pause on a sensitive muscular point and breathe; avoid sharp, radiating, or neurological symptoms.",
-      "tips_fr": "Faites une pause sur un point musculaire sensible en respirant; évitez toute douleur vive ou irradiante."
+      "tips_fr": "Faites une pause sur un point musculaire sensible en respirant; évitez toute douleur vive ou irradiante.",
+      "dosage_type": "soft_tissue_time",
+      "intervention_role": "recovery",
+      "default_sets_v3": 1,
+      "min_sets_v3": 1,
+      "max_sets_v3": 1,
+      "default_reps_v3": null,
+      "default_duration_seconds_v3": 60,
+      "default_hold_seconds_v3": null,
+      "max_total_exposure_seconds_v3": 60,
+      "load_level_v3": 0,
+      "progression_stage_v3": 1,
+      "repeat_limit_per_week_v3": 1,
+      "repeat_limit_program_v3": 3,
+      "experience_requirement_v3": "all",
+      "engagement_tags_v3": [
+        "recovery",
+        "unloaded"
+      ]
     },
     {
       "exercise_id": "DMTM005",
@@ -819,7 +1053,25 @@
       "instructions_en": "Position the tool on the target muscle, apply tolerable pressure, and roll slowly while keeping the surrounding joints relaxed.",
       "instructions_fr": "Placez l’outil sur le muscle ciblé, appliquez une pression tolérable et roulez lentement en relâchant les articulations voisines.",
       "tips_en": "Pause on a sensitive muscular point and breathe; avoid sharp, radiating, or neurological symptoms.",
-      "tips_fr": "Faites une pause sur un point musculaire sensible en respirant; évitez toute douleur vive ou irradiante."
+      "tips_fr": "Faites une pause sur un point musculaire sensible en respirant; évitez toute douleur vive ou irradiante.",
+      "dosage_type": "soft_tissue_time",
+      "intervention_role": "recovery",
+      "default_sets_v3": 1,
+      "min_sets_v3": 1,
+      "max_sets_v3": 1,
+      "default_reps_v3": null,
+      "default_duration_seconds_v3": 30,
+      "default_hold_seconds_v3": null,
+      "max_total_exposure_seconds_v3": 60,
+      "load_level_v3": 0,
+      "progression_stage_v3": 1,
+      "repeat_limit_per_week_v3": 1,
+      "repeat_limit_program_v3": 3,
+      "experience_requirement_v3": "all",
+      "engagement_tags_v3": [
+        "recovery",
+        "unloaded"
+      ]
     },
     {
       "exercise_id": "DMTM006",
@@ -877,7 +1129,25 @@
       "instructions_en": "Keep the thoracic spine aligned, move through a comfortable range, and control the return phase.",
       "instructions_fr": "Gardez rachis thoracique aligné(e), utilisez une amplitude confortable et contrôlez le retour.",
       "tips_en": "Prioritize smooth execution and consistent alignment throughout Spine release on foam roller (lay on the foamroller spine on it, relax with arm oppen breathing).",
-      "tips_fr": "Privilégiez une exécution fluide et un alignement constant pendant Spine release on foam roller (lay on the foamroller spine on it, relax with arm oppen breathing)."
+      "tips_fr": "Privilégiez une exécution fluide et un alignement constant pendant Spine release on foam roller (lay on the foamroller spine on it, relax with arm oppen breathing).",
+      "dosage_type": "recovery_hold",
+      "intervention_role": "recovery",
+      "default_sets_v3": 1,
+      "min_sets_v3": 1,
+      "max_sets_v3": 1,
+      "default_reps_v3": null,
+      "default_duration_seconds_v3": 60,
+      "default_hold_seconds_v3": null,
+      "max_total_exposure_seconds_v3": 75,
+      "load_level_v3": 0,
+      "progression_stage_v3": 1,
+      "repeat_limit_per_week_v3": 1,
+      "repeat_limit_program_v3": 3,
+      "experience_requirement_v3": "all",
+      "engagement_tags_v3": [
+        "recovery",
+        "unloaded"
+      ]
     },
     {
       "exercise_id": "DMCC002",
@@ -935,7 +1205,25 @@
       "instructions_en": "Position the tool on the target muscle, apply tolerable pressure, and roll slowly while keeping the surrounding joints relaxed.",
       "instructions_fr": "Placez l’outil sur le muscle ciblé, appliquez une pression tolérable et roulez lentement en relâchant les articulations voisines.",
       "tips_en": "Pause on a sensitive muscular point and breathe; avoid sharp, radiating, or neurological symptoms.",
-      "tips_fr": "Faites une pause sur un point musculaire sensible en respirant; évitez toute douleur vive ou irradiante."
+      "tips_fr": "Faites une pause sur un point musculaire sensible en respirant; évitez toute douleur vive ou irradiante.",
+      "dosage_type": "soft_tissue_time",
+      "intervention_role": "recovery",
+      "default_sets_v3": 1,
+      "min_sets_v3": 1,
+      "max_sets_v3": 1,
+      "default_reps_v3": null,
+      "default_duration_seconds_v3": 30,
+      "default_hold_seconds_v3": null,
+      "max_total_exposure_seconds_v3": 60,
+      "load_level_v3": 0,
+      "progression_stage_v3": 1,
+      "repeat_limit_per_week_v3": 1,
+      "repeat_limit_program_v3": 3,
+      "experience_requirement_v3": "all",
+      "engagement_tags_v3": [
+        "recovery",
+        "unloaded"
+      ]
     },
     {
       "exercise_id": "DMSH008",
@@ -993,7 +1281,25 @@
       "instructions_en": "Position the tool on the target muscle, apply tolerable pressure, and roll slowly while keeping the surrounding joints relaxed.",
       "instructions_fr": "Placez l’outil sur le muscle ciblé, appliquez une pression tolérable et roulez lentement en relâchant les articulations voisines.",
       "tips_en": "Pause on a sensitive muscular point and breathe; avoid sharp, radiating, or neurological symptoms.",
-      "tips_fr": "Faites une pause sur un point musculaire sensible en respirant; évitez toute douleur vive ou irradiante."
+      "tips_fr": "Faites une pause sur un point musculaire sensible en respirant; évitez toute douleur vive ou irradiante.",
+      "dosage_type": "soft_tissue_time",
+      "intervention_role": "recovery",
+      "default_sets_v3": 1,
+      "min_sets_v3": 1,
+      "max_sets_v3": 1,
+      "default_reps_v3": null,
+      "default_duration_seconds_v3": 30,
+      "default_hold_seconds_v3": null,
+      "max_total_exposure_seconds_v3": 60,
+      "load_level_v3": 0,
+      "progression_stage_v3": 1,
+      "repeat_limit_per_week_v3": 1,
+      "repeat_limit_program_v3": 3,
+      "experience_requirement_v3": "all",
+      "engagement_tags_v3": [
+        "recovery",
+        "unloaded"
+      ]
     },
     {
       "exercise_id": "DMSH009",
@@ -1051,7 +1357,25 @@
       "instructions_en": "Position the tool on the target muscle, apply tolerable pressure, and roll slowly while keeping the surrounding joints relaxed.",
       "instructions_fr": "Placez l’outil sur le muscle ciblé, appliquez une pression tolérable et roulez lentement en relâchant les articulations voisines.",
       "tips_en": "Pause on a sensitive muscular point and breathe; avoid sharp, radiating, or neurological symptoms.",
-      "tips_fr": "Faites une pause sur un point musculaire sensible en respirant; évitez toute douleur vive ou irradiante."
+      "tips_fr": "Faites une pause sur un point musculaire sensible en respirant; évitez toute douleur vive ou irradiante.",
+      "dosage_type": "soft_tissue_time",
+      "intervention_role": "recovery",
+      "default_sets_v3": 1,
+      "min_sets_v3": 1,
+      "max_sets_v3": 1,
+      "default_reps_v3": null,
+      "default_duration_seconds_v3": 30,
+      "default_hold_seconds_v3": null,
+      "max_total_exposure_seconds_v3": 60,
+      "load_level_v3": 0,
+      "progression_stage_v3": 1,
+      "repeat_limit_per_week_v3": 1,
+      "repeat_limit_program_v3": 3,
+      "experience_requirement_v3": "all",
+      "engagement_tags_v3": [
+        "recovery",
+        "unloaded"
+      ]
     },
     {
       "exercise_id": "DMHM002",
@@ -1109,7 +1433,25 @@
       "instructions_en": "Keep both sit bones grounded, rotate from the hips, and move between sides without forcing the knees.",
       "instructions_fr": "Gardez les deux ischions en appui, tournez depuis les hanches et alternez sans forcer les genoux.",
       "tips_en": "Reduce the range or support yourself with the hands while keeping the movement hip-driven.",
-      "tips_fr": "Réduisez l’amplitude ou utilisez les mains en appui tout en gardant le mouvement centré sur les hanches."
+      "tips_fr": "Réduisez l’amplitude ou utilisez les mains en appui tout en gardant le mouvement centré sur les hanches.",
+      "dosage_type": "dynamic_mobility_reps",
+      "intervention_role": "mobility",
+      "default_sets_v3": 2,
+      "min_sets_v3": 1,
+      "max_sets_v3": 2,
+      "default_reps_v3": 10,
+      "default_duration_seconds_v3": null,
+      "default_hold_seconds_v3": null,
+      "max_total_exposure_seconds_v3": null,
+      "load_level_v3": 0,
+      "progression_stage_v3": 1,
+      "repeat_limit_per_week_v3": 2,
+      "repeat_limit_program_v3": 5,
+      "experience_requirement_v3": "all",
+      "engagement_tags_v3": [
+        "mobility",
+        "unloaded"
+      ]
     },
     {
       "exercise_id": "DMHM003",
@@ -1167,7 +1509,25 @@
       "instructions_en": "Push the hips backward with a long spine, keep the load close, and stand by driving the floor away.",
       "instructions_fr": "Reculez les hanches avec le dos long, gardez la charge près du corps et remontez en poussant le sol.",
       "tips_en": "Stop the descent when hamstring tension increases or spinal position begins to change.",
-      "tips_fr": "Arrêtez la descente lorsque la tension des ischio-jambiers augmente ou que le dos commence à changer de position."
+      "tips_fr": "Arrêtez la descente lorsque la tension des ischio-jambiers augmente ou que le dos commence à changer de position.",
+      "dosage_type": "dynamic_mobility_reps",
+      "intervention_role": "mobility",
+      "default_sets_v3": 2,
+      "min_sets_v3": 1,
+      "max_sets_v3": 2,
+      "default_reps_v3": 10,
+      "default_duration_seconds_v3": null,
+      "default_hold_seconds_v3": null,
+      "max_total_exposure_seconds_v3": null,
+      "load_level_v3": 5,
+      "progression_stage_v3": 4,
+      "repeat_limit_per_week_v3": 2,
+      "repeat_limit_program_v3": 5,
+      "experience_requirement_v3": "intermediate",
+      "engagement_tags_v3": [
+        "mobility",
+        "loaded"
+      ]
     },
     {
       "exercise_id": "DMHM004",
@@ -1225,7 +1585,25 @@
       "instructions_en": "Press through the feet, keep the ribs down, and lift the pelvis by squeezing the glutes rather than arching the back.",
       "instructions_fr": "Poussez dans les pieds, gardez les côtes basses et soulevez le bassin avec les fessiers sans cambrer.",
       "tips_en": "Finish with the hips level and a straight line from shoulders to knees.",
-      "tips_fr": "Terminez avec le bassin horizontal et une ligne droite des épaules aux genoux."
+      "tips_fr": "Terminez avec le bassin horizontal et une ligne droite des épaules aux genoux.",
+      "dosage_type": "dynamic_mobility_reps",
+      "intervention_role": "mobility",
+      "default_sets_v3": 2,
+      "min_sets_v3": 1,
+      "max_sets_v3": 2,
+      "default_reps_v3": 5,
+      "default_duration_seconds_v3": null,
+      "default_hold_seconds_v3": null,
+      "max_total_exposure_seconds_v3": null,
+      "load_level_v3": 0,
+      "progression_stage_v3": 2,
+      "repeat_limit_per_week_v3": 2,
+      "repeat_limit_program_v3": 5,
+      "experience_requirement_v3": "all",
+      "engagement_tags_v3": [
+        "mobility",
+        "unloaded"
+      ]
     },
     {
       "exercise_id": "DMCS001",
@@ -1283,7 +1661,25 @@
       "instructions_en": "Keep the lower ribs heavy, exhale as the limb moves away, and stop before the lower back lifts.",
       "instructions_fr": "Gardez les côtes basses, expirez pendant l’éloignement du membre et arrêtez avant que le bas du dos ne se soulève.",
       "tips_en": "Use a shorter limb reach if you cannot keep the trunk still.",
-      "tips_fr": "Réduisez l’amplitude du bras ou de la jambe si le tronc ne reste pas stable."
+      "tips_fr": "Réduisez l’amplitude du bras ou de la jambe si le tronc ne reste pas stable.",
+      "dosage_type": "strength_reps",
+      "intervention_role": "stability",
+      "default_sets_v3": 2,
+      "min_sets_v3": 2,
+      "max_sets_v3": 3,
+      "default_reps_v3": 10,
+      "default_duration_seconds_v3": null,
+      "default_hold_seconds_v3": null,
+      "max_total_exposure_seconds_v3": null,
+      "load_level_v3": 5,
+      "progression_stage_v3": 3,
+      "repeat_limit_per_week_v3": 2,
+      "repeat_limit_program_v3": 5,
+      "experience_requirement_v3": "intermediate",
+      "engagement_tags_v3": [
+        "stability",
+        "loaded"
+      ]
     },
     {
       "exercise_id": "DMCS002",
@@ -1341,7 +1737,25 @@
       "instructions_en": "Stack the shoulders and hips, push the floor away, and keep the body in one long line.",
       "instructions_fr": "Alignez les épaules et les hanches, repoussez le sol et gardez le corps sur une ligne.",
       "tips_en": "Use the knee-supported version if alignment cannot be maintained.",
-      "tips_fr": "Utilisez la variante sur le genou si l’alignement ne peut pas être maintenu."
+      "tips_fr": "Utilisez la variante sur le genou si l’alignement ne peut pas être maintenu.",
+      "dosage_type": "static_hold",
+      "intervention_role": "mobility",
+      "default_sets_v3": 1,
+      "min_sets_v3": 1,
+      "max_sets_v3": 2,
+      "default_reps_v3": null,
+      "default_duration_seconds_v3": 20,
+      "default_hold_seconds_v3": null,
+      "max_total_exposure_seconds_v3": 90,
+      "load_level_v3": 0,
+      "progression_stage_v3": 3,
+      "repeat_limit_per_week_v3": 2,
+      "repeat_limit_program_v3": 5,
+      "experience_requirement_v3": "all",
+      "engagement_tags_v3": [
+        "mobility",
+        "unloaded"
+      ]
     },
     {
       "exercise_id": "DMCS003",
@@ -1399,7 +1813,25 @@
       "instructions_en": "Reach the opposite arm and leg long while keeping the pelvis square and the spine still.",
       "instructions_fr": "Allongez le bras et la jambe opposés en gardant le bassin de face et la colonne immobile.",
       "tips_en": "Imagine balancing a glass on the lower back.",
-      "tips_fr": "Imaginez un verre posé sur le bas du dos."
+      "tips_fr": "Imaginez un verre posé sur le bas du dos.",
+      "dosage_type": "strength_reps",
+      "intervention_role": "stability",
+      "default_sets_v3": 2,
+      "min_sets_v3": 2,
+      "max_sets_v3": 3,
+      "default_reps_v3": 10,
+      "default_duration_seconds_v3": null,
+      "default_hold_seconds_v3": null,
+      "max_total_exposure_seconds_v3": null,
+      "load_level_v3": 5,
+      "progression_stage_v3": 3,
+      "repeat_limit_per_week_v3": 2,
+      "repeat_limit_program_v3": 5,
+      "experience_requirement_v3": "intermediate",
+      "engagement_tags_v3": [
+        "stability",
+        "loaded"
+      ]
     },
     {
       "exercise_id": "DMHM005",
@@ -1457,7 +1889,25 @@
       "instructions_en": "Press through the feet, keep the ribs down, and lift the pelvis by squeezing the glutes rather than arching the back.",
       "instructions_fr": "Poussez dans les pieds, gardez les côtes basses et soulevez le bassin avec les fessiers sans cambrer.",
       "tips_en": "Finish with the hips level and a straight line from shoulders to knees.",
-      "tips_fr": "Terminez avec le bassin horizontal et une ligne droite des épaules aux genoux."
+      "tips_fr": "Terminez avec le bassin horizontal et une ligne droite des épaules aux genoux.",
+      "dosage_type": "dynamic_mobility_reps",
+      "intervention_role": "mobility",
+      "default_sets_v3": 2,
+      "min_sets_v3": 1,
+      "max_sets_v3": 2,
+      "default_reps_v3": 10,
+      "default_duration_seconds_v3": null,
+      "default_hold_seconds_v3": null,
+      "max_total_exposure_seconds_v3": null,
+      "load_level_v3": 0,
+      "progression_stage_v3": 3,
+      "repeat_limit_per_week_v3": 2,
+      "repeat_limit_program_v3": 5,
+      "experience_requirement_v3": "all",
+      "engagement_tags_v3": [
+        "mobility",
+        "unloaded"
+      ]
     },
     {
       "exercise_id": "DMFI001",
@@ -1515,7 +1965,25 @@
       "instructions_en": "Keep the whole foot grounded, track the knees over the toes, and maintain the trunk position throughout the repetition.",
       "instructions_fr": "Gardez tout le pied au sol, dirigez les genoux dans l’axe des orteils et contrôlez le tronc pendant tout le mouvement.",
       "tips_en": "Use a depth that allows stable feet, knees, and spine.",
-      "tips_fr": "Choisissez une profondeur permettant de stabiliser les pieds, les genoux et la colonne."
+      "tips_fr": "Choisissez une profondeur permettant de stabiliser les pieds, les genoux et la colonne.",
+      "dosage_type": "strength_reps",
+      "intervention_role": "integration",
+      "default_sets_v3": 2,
+      "min_sets_v3": 2,
+      "max_sets_v3": 3,
+      "default_reps_v3": 10,
+      "default_duration_seconds_v3": null,
+      "default_hold_seconds_v3": null,
+      "max_total_exposure_seconds_v3": null,
+      "load_level_v3": 5,
+      "progression_stage_v3": 4,
+      "repeat_limit_per_week_v3": 2,
+      "repeat_limit_program_v3": 5,
+      "experience_requirement_v3": "intermediate",
+      "engagement_tags_v3": [
+        "integration",
+        "loaded"
+      ]
     },
     {
       "exercise_id": "DMFI002",
@@ -1573,7 +2041,25 @@
       "instructions_en": "Keep the front foot grounded, lower the back knee vertically, and keep the pelvis facing forward.",
       "instructions_fr": "Gardez le pied avant au sol, descendez le genou arrière verticalement et maintenez le bassin de face.",
       "tips_en": "Use a shorter range and external support if balance limits alignment.",
-      "tips_fr": "Réduisez l’amplitude et utilisez un appui si l’équilibre limite l’alignement."
+      "tips_fr": "Réduisez l’amplitude et utilisez un appui si l’équilibre limite l’alignement.",
+      "dosage_type": "strength_reps",
+      "intervention_role": "integration",
+      "default_sets_v3": 2,
+      "min_sets_v3": 2,
+      "max_sets_v3": 3,
+      "default_reps_v3": 10,
+      "default_duration_seconds_v3": null,
+      "default_hold_seconds_v3": null,
+      "max_total_exposure_seconds_v3": null,
+      "load_level_v3": 5,
+      "progression_stage_v3": 4,
+      "repeat_limit_per_week_v3": 2,
+      "repeat_limit_program_v3": 5,
+      "experience_requirement_v3": "intermediate",
+      "engagement_tags_v3": [
+        "integration",
+        "loaded"
+      ]
     },
     {
       "exercise_id": "DMFI003",
@@ -1631,7 +2117,25 @@
       "instructions_en": "Keep the whole foot grounded, track the knees over the toes, and maintain the trunk position throughout the repetition.",
       "instructions_fr": "Gardez tout le pied au sol, dirigez les genoux dans l’axe des orteils et contrôlez le tronc pendant tout le mouvement.",
       "tips_en": "Use a depth that allows stable feet, knees, and spine.",
-      "tips_fr": "Choisissez une profondeur permettant de stabiliser les pieds, les genoux et la colonne."
+      "tips_fr": "Choisissez une profondeur permettant de stabiliser les pieds, les genoux et la colonne.",
+      "dosage_type": "strength_reps",
+      "intervention_role": "integration",
+      "default_sets_v3": 2,
+      "min_sets_v3": 2,
+      "max_sets_v3": 3,
+      "default_reps_v3": 5,
+      "default_duration_seconds_v3": null,
+      "default_hold_seconds_v3": null,
+      "max_total_exposure_seconds_v3": null,
+      "load_level_v3": 5,
+      "progression_stage_v3": 4,
+      "repeat_limit_per_week_v3": 2,
+      "repeat_limit_program_v3": 5,
+      "experience_requirement_v3": "intermediate",
+      "engagement_tags_v3": [
+        "integration",
+        "loaded"
+      ]
     },
     {
       "exercise_id": "DMFI004",
@@ -1689,7 +2193,25 @@
       "instructions_en": "Keep the whole foot grounded, track the knees over the toes, and maintain the trunk position throughout the repetition.",
       "instructions_fr": "Gardez tout le pied au sol, dirigez les genoux dans l’axe des orteils et contrôlez le tronc pendant tout le mouvement.",
       "tips_en": "Use a depth that allows stable feet, knees, and spine.",
-      "tips_fr": "Choisissez une profondeur permettant de stabiliser les pieds, les genoux et la colonne."
+      "tips_fr": "Choisissez une profondeur permettant de stabiliser les pieds, les genoux et la colonne.",
+      "dosage_type": "strength_reps",
+      "intervention_role": "integration",
+      "default_sets_v3": 2,
+      "min_sets_v3": 2,
+      "max_sets_v3": 3,
+      "default_reps_v3": 10,
+      "default_duration_seconds_v3": null,
+      "default_hold_seconds_v3": null,
+      "max_total_exposure_seconds_v3": null,
+      "load_level_v3": 0,
+      "progression_stage_v3": 2,
+      "repeat_limit_per_week_v3": 2,
+      "repeat_limit_program_v3": 5,
+      "experience_requirement_v3": "all",
+      "engagement_tags_v3": [
+        "integration",
+        "unloaded"
+      ]
     },
     {
       "exercise_id": "DMFI005",
@@ -1747,7 +2269,25 @@
       "instructions_en": "Push the hips backward with a long spine, keep the load close, and stand by driving the floor away.",
       "instructions_fr": "Reculez les hanches avec le dos long, gardez la charge près du corps et remontez en poussant le sol.",
       "tips_en": "Stop the descent when hamstring tension increases or spinal position begins to change.",
-      "tips_fr": "Arrêtez la descente lorsque la tension des ischio-jambiers augmente ou que le dos commence à changer de position."
+      "tips_fr": "Arrêtez la descente lorsque la tension des ischio-jambiers augmente ou que le dos commence à changer de position.",
+      "dosage_type": "strength_reps",
+      "intervention_role": "integration",
+      "default_sets_v3": 2,
+      "min_sets_v3": 2,
+      "max_sets_v3": 3,
+      "default_reps_v3": 10,
+      "default_duration_seconds_v3": null,
+      "default_hold_seconds_v3": null,
+      "max_total_exposure_seconds_v3": null,
+      "load_level_v3": 5,
+      "progression_stage_v3": 4,
+      "repeat_limit_per_week_v3": 2,
+      "repeat_limit_program_v3": 5,
+      "experience_requirement_v3": "intermediate",
+      "engagement_tags_v3": [
+        "integration",
+        "loaded"
+      ]
     },
     {
       "exercise_id": "DMFI006",
@@ -1805,7 +2345,25 @@
       "instructions_en": "Push the hips backward with a long spine, keep the load close, and stand by driving the floor away.",
       "instructions_fr": "Reculez les hanches avec le dos long, gardez la charge près du corps et remontez en poussant le sol.",
       "tips_en": "Stop the descent when hamstring tension increases or spinal position begins to change.",
-      "tips_fr": "Arrêtez la descente lorsque la tension des ischio-jambiers augmente ou que le dos commence à changer de position."
+      "tips_fr": "Arrêtez la descente lorsque la tension des ischio-jambiers augmente ou que le dos commence à changer de position.",
+      "dosage_type": "strength_reps",
+      "intervention_role": "integration",
+      "default_sets_v3": 2,
+      "min_sets_v3": 2,
+      "max_sets_v3": 3,
+      "default_reps_v3": 10,
+      "default_duration_seconds_v3": null,
+      "default_hold_seconds_v3": null,
+      "max_total_exposure_seconds_v3": null,
+      "load_level_v3": 5,
+      "progression_stage_v3": 4,
+      "repeat_limit_per_week_v3": 2,
+      "repeat_limit_program_v3": 5,
+      "experience_requirement_v3": "intermediate",
+      "engagement_tags_v3": [
+        "integration",
+        "loaded"
+      ]
     },
     {
       "exercise_id": "DMFI007",
@@ -1863,7 +2421,25 @@
       "instructions_en": "Keep the ribs down and move the load smoothly around the head while the neck stays relaxed.",
       "instructions_fr": "Gardez les côtes basses et déplacez la charge autour de la tête en relâchant la nuque.",
       "tips_en": "Use a light load and keep the circle close to the head.",
-      "tips_fr": "Utilisez une charge légère et gardez le cercle proche de la tête."
+      "tips_fr": "Utilisez une charge légère et gardez le cercle proche de la tête.",
+      "dosage_type": "strength_reps",
+      "intervention_role": "integration",
+      "default_sets_v3": 2,
+      "min_sets_v3": 2,
+      "max_sets_v3": 3,
+      "default_reps_v3": 8,
+      "default_duration_seconds_v3": null,
+      "default_hold_seconds_v3": null,
+      "max_total_exposure_seconds_v3": null,
+      "load_level_v3": 5,
+      "progression_stage_v3": 4,
+      "repeat_limit_per_week_v3": 2,
+      "repeat_limit_program_v3": 5,
+      "experience_requirement_v3": "intermediate",
+      "engagement_tags_v3": [
+        "integration",
+        "loaded"
+      ]
     },
     {
       "exercise_id": "DMCS004",
@@ -1921,7 +2497,25 @@
       "instructions_en": "Keep the lower ribs heavy, exhale as the limb moves away, and stop before the lower back lifts.",
       "instructions_fr": "Gardez les côtes basses, expirez pendant l’éloignement du membre et arrêtez avant que le bas du dos ne se soulève.",
       "tips_en": "Use a shorter limb reach if you cannot keep the trunk still.",
-      "tips_fr": "Réduisez l’amplitude du bras ou de la jambe si le tronc ne reste pas stable."
+      "tips_fr": "Réduisez l’amplitude du bras ou de la jambe si le tronc ne reste pas stable.",
+      "dosage_type": "strength_reps",
+      "intervention_role": "stability",
+      "default_sets_v3": 2,
+      "min_sets_v3": 2,
+      "max_sets_v3": 3,
+      "default_reps_v3": 10,
+      "default_duration_seconds_v3": null,
+      "default_hold_seconds_v3": null,
+      "max_total_exposure_seconds_v3": null,
+      "load_level_v3": 5,
+      "progression_stage_v3": 3,
+      "repeat_limit_per_week_v3": 2,
+      "repeat_limit_program_v3": 5,
+      "experience_requirement_v3": "intermediate",
+      "engagement_tags_v3": [
+        "stability",
+        "loaded"
+      ]
     },
     {
       "exercise_id": "DMSH010",
@@ -1979,7 +2573,25 @@
       "instructions_en": "Make the largest pain-free arm circle possible while keeping the ribs, trunk, and neck still.",
       "instructions_fr": "Réalisez le plus grand cercle de bras indolore en gardant les côtes, le tronc et la nuque immobiles.",
       "tips_en": "Move slowly enough to identify and control the tightest part of the circle.",
-      "tips_fr": "Bougez assez lentement pour contrôler la partie la plus limitée du cercle."
+      "tips_fr": "Bougez assez lentement pour contrôler la partie la plus limitée du cercle.",
+      "dosage_type": "dynamic_mobility_reps",
+      "intervention_role": "mobility",
+      "default_sets_v3": 2,
+      "min_sets_v3": 1,
+      "max_sets_v3": 2,
+      "default_reps_v3": 10,
+      "default_duration_seconds_v3": null,
+      "default_hold_seconds_v3": null,
+      "max_total_exposure_seconds_v3": null,
+      "load_level_v3": 0,
+      "progression_stage_v3": 2,
+      "repeat_limit_per_week_v3": 2,
+      "repeat_limit_program_v3": 5,
+      "experience_requirement_v3": "all",
+      "engagement_tags_v3": [
+        "mobility",
+        "unloaded"
+      ]
     },
     {
       "exercise_id": "DMCS005",
@@ -2037,7 +2649,25 @@
       "instructions_en": "Stack the shoulders and hips, push the floor away, and keep the body in one long line.",
       "instructions_fr": "Alignez les épaules et les hanches, repoussez le sol et gardez le corps sur une ligne.",
       "tips_en": "Use the knee-supported version if alignment cannot be maintained.",
-      "tips_fr": "Utilisez la variante sur le genou si l’alignement ne peut pas être maintenu."
+      "tips_fr": "Utilisez la variante sur le genou si l’alignement ne peut pas être maintenu.",
+      "dosage_type": "strength_reps",
+      "intervention_role": "stability",
+      "default_sets_v3": 2,
+      "min_sets_v3": 2,
+      "max_sets_v3": 3,
+      "default_reps_v3": 10,
+      "default_duration_seconds_v3": null,
+      "default_hold_seconds_v3": null,
+      "max_total_exposure_seconds_v3": null,
+      "load_level_v3": 5,
+      "progression_stage_v3": 3,
+      "repeat_limit_per_week_v3": 2,
+      "repeat_limit_program_v3": 5,
+      "experience_requirement_v3": "intermediate",
+      "engagement_tags_v3": [
+        "stability",
+        "loaded"
+      ]
     },
     {
       "exercise_id": "DMCS006",
@@ -2095,7 +2725,25 @@
       "instructions_en": "Reach the opposite arm and leg long while keeping the pelvis square and the spine still.",
       "instructions_fr": "Allongez le bras et la jambe opposés en gardant le bassin de face et la colonne immobile.",
       "tips_en": "Imagine balancing a glass on the lower back.",
-      "tips_fr": "Imaginez un verre posé sur le bas du dos."
+      "tips_fr": "Imaginez un verre posé sur le bas du dos.",
+      "dosage_type": "strength_reps",
+      "intervention_role": "stability",
+      "default_sets_v3": 2,
+      "min_sets_v3": 2,
+      "max_sets_v3": 3,
+      "default_reps_v3": 10,
+      "default_duration_seconds_v3": null,
+      "default_hold_seconds_v3": null,
+      "max_total_exposure_seconds_v3": null,
+      "load_level_v3": 0,
+      "progression_stage_v3": 3,
+      "repeat_limit_per_week_v3": 2,
+      "repeat_limit_program_v3": 5,
+      "experience_requirement_v3": "all",
+      "engagement_tags_v3": [
+        "stability",
+        "unloaded"
+      ]
     },
     {
       "exercise_id": "DMCS007",
@@ -2153,7 +2801,25 @@
       "instructions_en": "Keep the trunk and core aligned, move through a comfortable range, and control the return phase.",
       "instructions_fr": "Gardez tronc et gainage aligné(e), utilisez une amplitude confortable et contrôlez le retour.",
       "tips_en": "Prioritize smooth execution and consistent alignment throughout Plank pull through.",
-      "tips_fr": "Privilégiez une exécution fluide et un alignement constant pendant Plank pull through."
+      "tips_fr": "Privilégiez une exécution fluide et un alignement constant pendant Plank pull through.",
+      "dosage_type": "strength_reps",
+      "intervention_role": "stability",
+      "default_sets_v3": 2,
+      "min_sets_v3": 2,
+      "max_sets_v3": 3,
+      "default_reps_v3": 10,
+      "default_duration_seconds_v3": null,
+      "default_hold_seconds_v3": null,
+      "max_total_exposure_seconds_v3": null,
+      "load_level_v3": 5,
+      "progression_stage_v3": 3,
+      "repeat_limit_per_week_v3": 2,
+      "repeat_limit_program_v3": 5,
+      "experience_requirement_v3": "intermediate",
+      "engagement_tags_v3": [
+        "stability",
+        "loaded"
+      ]
     },
     {
       "exercise_id": "DMCS008",
@@ -2211,7 +2877,25 @@
       "instructions_en": "Keep the trunk and core aligned, move through a comfortable range, and control the return phase.",
       "instructions_fr": "Gardez tronc et gainage aligné(e), utilisez une amplitude confortable et contrôlez le retour.",
       "tips_en": "Prioritize smooth execution and consistent alignment throughout Russian twist.",
-      "tips_fr": "Privilégiez une exécution fluide et un alignement constant pendant Russian twist."
+      "tips_fr": "Privilégiez une exécution fluide et un alignement constant pendant Russian twist.",
+      "dosage_type": "strength_reps",
+      "intervention_role": "stability",
+      "default_sets_v3": 2,
+      "min_sets_v3": 2,
+      "max_sets_v3": 3,
+      "default_reps_v3": 15,
+      "default_duration_seconds_v3": null,
+      "default_hold_seconds_v3": null,
+      "max_total_exposure_seconds_v3": null,
+      "load_level_v3": 5,
+      "progression_stage_v3": 4,
+      "repeat_limit_per_week_v3": 2,
+      "repeat_limit_program_v3": 5,
+      "experience_requirement_v3": "intermediate",
+      "engagement_tags_v3": [
+        "stability",
+        "loaded"
+      ]
     },
     {
       "exercise_id": "DMFI008",
@@ -2269,7 +2953,25 @@
       "instructions_en": "Keep the full body movement integration aligned, move through a comfortable range, and control the return phase.",
       "instructions_fr": "Gardez intégration fonctionnelle globale aligné(e), utilisez une amplitude confortable et contrôlez le retour.",
       "tips_en": "Prioritize smooth execution and consistent alignment throughout Bent over DB fly.",
-      "tips_fr": "Privilégiez une exécution fluide et un alignement constant pendant Bent over DB fly."
+      "tips_fr": "Privilégiez une exécution fluide et un alignement constant pendant Bent over DB fly.",
+      "dosage_type": "strength_reps",
+      "intervention_role": "integration",
+      "default_sets_v3": 2,
+      "min_sets_v3": 2,
+      "max_sets_v3": 3,
+      "default_reps_v3": 10,
+      "default_duration_seconds_v3": null,
+      "default_hold_seconds_v3": null,
+      "max_total_exposure_seconds_v3": null,
+      "load_level_v3": 5,
+      "progression_stage_v3": 4,
+      "repeat_limit_per_week_v3": 2,
+      "repeat_limit_program_v3": 5,
+      "experience_requirement_v3": "intermediate",
+      "engagement_tags_v3": [
+        "integration",
+        "loaded"
+      ]
     },
     {
       "exercise_id": "DMFI009",
@@ -2327,7 +3029,25 @@
       "instructions_en": "Keep the full body movement integration aligned, move through a comfortable range, and control the return phase.",
       "instructions_fr": "Gardez intégration fonctionnelle globale aligné(e), utilisez une amplitude confortable et contrôlez le retour.",
       "tips_en": "Prioritize smooth execution and consistent alignment throughout Half kneeling clean press.",
-      "tips_fr": "Privilégiez une exécution fluide et un alignement constant pendant Half kneeling clean press."
+      "tips_fr": "Privilégiez une exécution fluide et un alignement constant pendant Half kneeling clean press.",
+      "dosage_type": "strength_reps",
+      "intervention_role": "integration",
+      "default_sets_v3": 2,
+      "min_sets_v3": 2,
+      "max_sets_v3": 3,
+      "default_reps_v3": 10,
+      "default_duration_seconds_v3": null,
+      "default_hold_seconds_v3": null,
+      "max_total_exposure_seconds_v3": null,
+      "load_level_v3": 5,
+      "progression_stage_v3": 4,
+      "repeat_limit_per_week_v3": 2,
+      "repeat_limit_program_v3": 5,
+      "experience_requirement_v3": "intermediate",
+      "engagement_tags_v3": [
+        "integration",
+        "loaded"
+      ]
     },
     {
       "exercise_id": "DMFI010",
@@ -2385,7 +3105,25 @@
       "instructions_en": "Keep the full body movement integration aligned, move through a comfortable range, and control the return phase.",
       "instructions_fr": "Gardez intégration fonctionnelle globale aligné(e), utilisez une amplitude confortable et contrôlez le retour.",
       "tips_en": "Prioritize smooth execution and consistent alignment throughout Single arm KB chest press.",
-      "tips_fr": "Privilégiez une exécution fluide et un alignement constant pendant Single arm KB chest press."
+      "tips_fr": "Privilégiez une exécution fluide et un alignement constant pendant Single arm KB chest press.",
+      "dosage_type": "strength_reps",
+      "intervention_role": "integration",
+      "default_sets_v3": 2,
+      "min_sets_v3": 2,
+      "max_sets_v3": 3,
+      "default_reps_v3": 10,
+      "default_duration_seconds_v3": null,
+      "default_hold_seconds_v3": null,
+      "max_total_exposure_seconds_v3": null,
+      "load_level_v3": 5,
+      "progression_stage_v3": 4,
+      "repeat_limit_per_week_v3": 2,
+      "repeat_limit_program_v3": 5,
+      "experience_requirement_v3": "intermediate",
+      "engagement_tags_v3": [
+        "integration",
+        "loaded"
+      ]
     },
     {
       "exercise_id": "DMFI011",
@@ -2443,7 +3181,25 @@
       "instructions_en": "Keep the full body movement integration aligned, move through a comfortable range, and control the return phase.",
       "instructions_fr": "Gardez intégration fonctionnelle globale aligné(e), utilisez une amplitude confortable et contrôlez le retour.",
       "tips_en": "Prioritize smooth execution and consistent alignment throughout Tall kneeling press.",
-      "tips_fr": "Privilégiez une exécution fluide et un alignement constant pendant Tall kneeling press."
+      "tips_fr": "Privilégiez une exécution fluide et un alignement constant pendant Tall kneeling press.",
+      "dosage_type": "strength_reps",
+      "intervention_role": "integration",
+      "default_sets_v3": 2,
+      "min_sets_v3": 2,
+      "max_sets_v3": 3,
+      "default_reps_v3": 10,
+      "default_duration_seconds_v3": null,
+      "default_hold_seconds_v3": null,
+      "max_total_exposure_seconds_v3": null,
+      "load_level_v3": 5,
+      "progression_stage_v3": 4,
+      "repeat_limit_per_week_v3": 2,
+      "repeat_limit_program_v3": 5,
+      "experience_requirement_v3": "intermediate",
+      "engagement_tags_v3": [
+        "integration",
+        "loaded"
+      ]
     },
     {
       "exercise_id": "DMFI012",
@@ -2501,7 +3257,25 @@
       "instructions_en": "Keep the full body movement integration aligned, move through a comfortable range, and control the return phase.",
       "instructions_fr": "Gardez intégration fonctionnelle globale aligné(e), utilisez une amplitude confortable et contrôlez le retour.",
       "tips_en": "Prioritize smooth execution and consistent alignment throughout Single arm bent over DB row.",
-      "tips_fr": "Privilégiez une exécution fluide et un alignement constant pendant Single arm bent over DB row."
+      "tips_fr": "Privilégiez une exécution fluide et un alignement constant pendant Single arm bent over DB row.",
+      "dosage_type": "strength_reps",
+      "intervention_role": "integration",
+      "default_sets_v3": 2,
+      "min_sets_v3": 2,
+      "max_sets_v3": 3,
+      "default_reps_v3": 10,
+      "default_duration_seconds_v3": null,
+      "default_hold_seconds_v3": null,
+      "max_total_exposure_seconds_v3": null,
+      "load_level_v3": 5,
+      "progression_stage_v3": 4,
+      "repeat_limit_per_week_v3": 2,
+      "repeat_limit_program_v3": 5,
+      "experience_requirement_v3": "intermediate",
+      "engagement_tags_v3": [
+        "integration",
+        "loaded"
+      ]
     },
     {
       "exercise_id": "DMFI013",
@@ -2559,7 +3333,25 @@
       "instructions_en": "Keep the full body movement integration aligned, move through a comfortable range, and control the return phase.",
       "instructions_fr": "Gardez intégration fonctionnelle globale aligné(e), utilisez une amplitude confortable et contrôlez le retour.",
       "tips_en": "Prioritize smooth execution and consistent alignment throughout Supperman V.",
-      "tips_fr": "Privilégiez une exécution fluide et un alignement constant pendant Supperman V."
+      "tips_fr": "Privilégiez une exécution fluide et un alignement constant pendant Supperman V.",
+      "dosage_type": "strength_reps",
+      "intervention_role": "integration",
+      "default_sets_v3": 2,
+      "min_sets_v3": 2,
+      "max_sets_v3": 3,
+      "default_reps_v3": 10,
+      "default_duration_seconds_v3": null,
+      "default_hold_seconds_v3": null,
+      "max_total_exposure_seconds_v3": null,
+      "load_level_v3": 5,
+      "progression_stage_v3": 4,
+      "repeat_limit_per_week_v3": 2,
+      "repeat_limit_program_v3": 5,
+      "experience_requirement_v3": "intermediate",
+      "engagement_tags_v3": [
+        "integration",
+        "loaded"
+      ]
     },
     {
       "exercise_id": "DMTM007",
@@ -2617,7 +3409,25 @@
       "instructions_en": "Move one spinal segment at a time between gentle flexion and extension while breathing continuously.",
       "instructions_fr": "Mobilisez la colonne segment par segment entre flexion et extension douces en respirant.",
       "tips_en": "Use a smooth wave rather than pushing into a strong stretch.",
-      "tips_fr": "Recherchez une vague fluide plutôt qu’un étirement forcé."
+      "tips_fr": "Recherchez une vague fluide plutôt qu’un étirement forcé.",
+      "dosage_type": "static_hold",
+      "intervention_role": "mobility",
+      "default_sets_v3": 1,
+      "min_sets_v3": 1,
+      "max_sets_v3": 2,
+      "default_reps_v3": null,
+      "default_duration_seconds_v3": 60,
+      "default_hold_seconds_v3": null,
+      "max_total_exposure_seconds_v3": 90,
+      "load_level_v3": 0,
+      "progression_stage_v3": 1,
+      "repeat_limit_per_week_v3": 2,
+      "repeat_limit_program_v3": 5,
+      "experience_requirement_v3": "all",
+      "engagement_tags_v3": [
+        "mobility",
+        "unloaded"
+      ]
     },
     {
       "exercise_id": "DMTM008",
@@ -2675,7 +3485,25 @@
       "instructions_en": "Keep the knees and pelvis stacked, rotate through the upper back, and let the shoulder blade glide around the rib cage.",
       "instructions_fr": "Gardez les genoux et le bassin superposés, tournez depuis le haut du dos et laissez l’omoplate glisser sur la cage thoracique.",
       "tips_en": "Exhale into the rotation and stop before the pelvis begins to move.",
-      "tips_fr": "Expirez pendant la rotation et arrêtez avant que le bassin ne bouge."
+      "tips_fr": "Expirez pendant la rotation et arrêtez avant que le bassin ne bouge.",
+      "dosage_type": "static_hold",
+      "intervention_role": "mobility",
+      "default_sets_v3": 1,
+      "min_sets_v3": 1,
+      "max_sets_v3": 2,
+      "default_reps_v3": null,
+      "default_duration_seconds_v3": 45,
+      "default_hold_seconds_v3": null,
+      "max_total_exposure_seconds_v3": 90,
+      "load_level_v3": 0,
+      "progression_stage_v3": 1,
+      "repeat_limit_per_week_v3": 2,
+      "repeat_limit_program_v3": 5,
+      "experience_requirement_v3": "all",
+      "engagement_tags_v3": [
+        "mobility",
+        "unloaded"
+      ]
     },
     {
       "exercise_id": "DMHS001",
@@ -2733,7 +3561,25 @@
       "instructions_en": "Keep the knee straight but not locked, hinge from the hip, and maintain a long spine.",
       "instructions_fr": "Gardez le genou tendu sans le verrouiller, inclinez-vous depuis la hanche et allongez la colonne.",
       "tips_en": "Stop at a moderate hamstring stretch without nerve-like pulling.",
-      "tips_fr": "Arrêtez-vous sur un étirement modéré sans sensation nerveuse ou irradiante."
+      "tips_fr": "Arrêtez-vous sur un étirement modéré sans sensation nerveuse ou irradiante.",
+      "dosage_type": "static_hold",
+      "intervention_role": "mobility",
+      "default_sets_v3": 1,
+      "min_sets_v3": 1,
+      "max_sets_v3": 2,
+      "default_reps_v3": null,
+      "default_duration_seconds_v3": 60,
+      "default_hold_seconds_v3": null,
+      "max_total_exposure_seconds_v3": 90,
+      "load_level_v3": 0,
+      "progression_stage_v3": 1,
+      "repeat_limit_per_week_v3": 2,
+      "repeat_limit_program_v3": 5,
+      "experience_requirement_v3": "all",
+      "engagement_tags_v3": [
+        "mobility",
+        "unloaded"
+      ]
     },
     {
       "exercise_id": "DMHM006",
@@ -2791,7 +3637,25 @@
       "instructions_en": "Keep the pelvis level and gently move into the stretch without arching or twisting the lower back.",
       "instructions_fr": "Gardez le bassin horizontal et entrez doucement dans l’étirement sans cambrer ni tourner le bas du dos.",
       "tips_en": "Use a smaller range and steady breathing to keep the sensation muscular.",
-      "tips_fr": "Réduisez l’amplitude et respirez régulièrement pour garder une sensation musculaire."
+      "tips_fr": "Réduisez l’amplitude et respirez régulièrement pour garder une sensation musculaire.",
+      "dosage_type": "static_hold",
+      "intervention_role": "mobility",
+      "default_sets_v3": 1,
+      "min_sets_v3": 1,
+      "max_sets_v3": 2,
+      "default_reps_v3": null,
+      "default_duration_seconds_v3": 45,
+      "default_hold_seconds_v3": null,
+      "max_total_exposure_seconds_v3": 90,
+      "load_level_v3": 0,
+      "progression_stage_v3": 1,
+      "repeat_limit_per_week_v3": 2,
+      "repeat_limit_program_v3": 5,
+      "experience_requirement_v3": "all",
+      "engagement_tags_v3": [
+        "mobility",
+        "unloaded"
+      ]
     },
     {
       "exercise_id": "DMHM007",
@@ -2849,7 +3713,25 @@
       "instructions_en": "Keep the pelvis level and gently move into the stretch without arching or twisting the lower back.",
       "instructions_fr": "Gardez le bassin horizontal et entrez doucement dans l’étirement sans cambrer ni tourner le bas du dos.",
       "tips_en": "Use a smaller range and steady breathing to keep the sensation muscular.",
-      "tips_fr": "Réduisez l’amplitude et respirez régulièrement pour garder une sensation musculaire."
+      "tips_fr": "Réduisez l’amplitude et respirez régulièrement pour garder une sensation musculaire.",
+      "dosage_type": "static_hold",
+      "intervention_role": "mobility",
+      "default_sets_v3": 1,
+      "min_sets_v3": 1,
+      "max_sets_v3": 2,
+      "default_reps_v3": null,
+      "default_duration_seconds_v3": 45,
+      "default_hold_seconds_v3": null,
+      "max_total_exposure_seconds_v3": 90,
+      "load_level_v3": 0,
+      "progression_stage_v3": 1,
+      "repeat_limit_per_week_v3": 2,
+      "repeat_limit_program_v3": 5,
+      "experience_requirement_v3": "all",
+      "engagement_tags_v3": [
+        "mobility",
+        "unloaded"
+      ]
     },
     {
       "exercise_id": "DMFI014",
@@ -2907,7 +3789,25 @@
       "instructions_en": "Settle into a comfortable stretch, keep the breath slow, and avoid forcing the neck, shoulder, or lower back.",
       "instructions_fr": "Installez-vous dans un étirement confortable, respirez lentement et évitez de forcer la nuque, l’épaule ou le bas du dos.",
       "tips_en": "Use a supported position and remain below the threshold of pain or tingling.",
-      "tips_fr": "Utilisez une position soutenue et restez sous le seuil de douleur ou de fourmillement."
+      "tips_fr": "Utilisez une position soutenue et restez sous le seuil de douleur ou de fourmillement.",
+      "dosage_type": "recovery_hold",
+      "intervention_role": "recovery",
+      "default_sets_v3": 1,
+      "min_sets_v3": 1,
+      "max_sets_v3": 1,
+      "default_reps_v3": null,
+      "default_duration_seconds_v3": 60,
+      "default_hold_seconds_v3": null,
+      "max_total_exposure_seconds_v3": 75,
+      "load_level_v3": 0,
+      "progression_stage_v3": 1,
+      "repeat_limit_per_week_v3": 1,
+      "repeat_limit_program_v3": 3,
+      "experience_requirement_v3": "all",
+      "engagement_tags_v3": [
+        "recovery",
+        "unloaded"
+      ]
     },
     {
       "exercise_id": "DMSH011",
@@ -2965,7 +3865,25 @@
       "instructions_en": "Set the shoulder slightly below ear level, keep it relaxed, and rotate the chest away without twisting the pelvis.",
       "instructions_fr": "Placez l’épaule légèrement sous le niveau de l’oreille, relâchez-la et tournez le thorax sans entraîner le bassin.",
       "tips_en": "Create a gentle stretch across the chest, not pressure at the front of the shoulder.",
-      "tips_fr": "Recherchez un étirement doux du pectoral, sans pression à l’avant de l’épaule."
+      "tips_fr": "Recherchez un étirement doux du pectoral, sans pression à l’avant de l’épaule.",
+      "dosage_type": "static_hold",
+      "intervention_role": "mobility",
+      "default_sets_v3": 1,
+      "min_sets_v3": 1,
+      "max_sets_v3": 2,
+      "default_reps_v3": null,
+      "default_duration_seconds_v3": 45,
+      "default_hold_seconds_v3": null,
+      "max_total_exposure_seconds_v3": 90,
+      "load_level_v3": 0,
+      "progression_stage_v3": 1,
+      "repeat_limit_per_week_v3": 2,
+      "repeat_limit_program_v3": 5,
+      "experience_requirement_v3": "all",
+      "engagement_tags_v3": [
+        "mobility",
+        "unloaded"
+      ]
     },
     {
       "exercise_id": "DMTM009",
@@ -3023,7 +3941,25 @@
       "instructions_en": "Settle into a comfortable stretch, keep the breath slow, and avoid forcing the neck, shoulder, or lower back.",
       "instructions_fr": "Installez-vous dans un étirement confortable, respirez lentement et évitez de forcer la nuque, l’épaule ou le bas du dos.",
       "tips_en": "Use a supported position and remain below the threshold of pain or tingling.",
-      "tips_fr": "Utilisez une position soutenue et restez sous le seuil de douleur ou de fourmillement."
+      "tips_fr": "Utilisez une position soutenue et restez sous le seuil de douleur ou de fourmillement.",
+      "dosage_type": "static_hold",
+      "intervention_role": "mobility",
+      "default_sets_v3": 1,
+      "min_sets_v3": 1,
+      "max_sets_v3": 2,
+      "default_reps_v3": null,
+      "default_duration_seconds_v3": 45,
+      "default_hold_seconds_v3": null,
+      "max_total_exposure_seconds_v3": 90,
+      "load_level_v3": 0,
+      "progression_stage_v3": 1,
+      "repeat_limit_per_week_v3": 2,
+      "repeat_limit_program_v3": 5,
+      "experience_requirement_v3": "all",
+      "engagement_tags_v3": [
+        "mobility",
+        "unloaded"
+      ]
     },
     {
       "exercise_id": "DMHM008",
@@ -3081,7 +4017,25 @@
       "instructions_en": "Keep the pelvis level and gently move into the stretch without arching or twisting the lower back.",
       "instructions_fr": "Gardez le bassin horizontal et entrez doucement dans l’étirement sans cambrer ni tourner le bas du dos.",
       "tips_en": "Use a smaller range and steady breathing to keep the sensation muscular.",
-      "tips_fr": "Réduisez l’amplitude et respirez régulièrement pour garder une sensation musculaire."
+      "tips_fr": "Réduisez l’amplitude et respirez régulièrement pour garder une sensation musculaire.",
+      "dosage_type": "dynamic_mobility_reps",
+      "intervention_role": "mobility",
+      "default_sets_v3": 2,
+      "min_sets_v3": 1,
+      "max_sets_v3": 2,
+      "default_reps_v3": 15,
+      "default_duration_seconds_v3": null,
+      "default_hold_seconds_v3": null,
+      "max_total_exposure_seconds_v3": null,
+      "load_level_v3": 0,
+      "progression_stage_v3": 1,
+      "repeat_limit_per_week_v3": 2,
+      "repeat_limit_program_v3": 5,
+      "experience_requirement_v3": "all",
+      "engagement_tags_v3": [
+        "mobility",
+        "unloaded"
+      ]
     },
     {
       "exercise_id": "DMHS002",
@@ -3139,7 +4093,25 @@
       "instructions_en": "Keep the knee straight but not locked, hinge from the hip, and maintain a long spine.",
       "instructions_fr": "Gardez le genou tendu sans le verrouiller, inclinez-vous depuis la hanche et allongez la colonne.",
       "tips_en": "Stop at a moderate hamstring stretch without nerve-like pulling.",
-      "tips_fr": "Arrêtez-vous sur un étirement modéré sans sensation nerveuse ou irradiante."
+      "tips_fr": "Arrêtez-vous sur un étirement modéré sans sensation nerveuse ou irradiante.",
+      "dosage_type": "dynamic_mobility_reps",
+      "intervention_role": "mobility",
+      "default_sets_v3": 2,
+      "min_sets_v3": 1,
+      "max_sets_v3": 2,
+      "default_reps_v3": 15,
+      "default_duration_seconds_v3": null,
+      "default_hold_seconds_v3": null,
+      "max_total_exposure_seconds_v3": null,
+      "load_level_v3": 0,
+      "progression_stage_v3": 1,
+      "repeat_limit_per_week_v3": 2,
+      "repeat_limit_program_v3": 5,
+      "experience_requirement_v3": "all",
+      "engagement_tags_v3": [
+        "mobility",
+        "unloaded"
+      ]
     },
     {
       "exercise_id": "DMHS003",
@@ -3197,7 +4169,25 @@
       "instructions_en": "Keep the knee straight but not locked, hinge from the hip, and maintain a long spine.",
       "instructions_fr": "Gardez le genou tendu sans le verrouiller, inclinez-vous depuis la hanche et allongez la colonne.",
       "tips_en": "Stop at a moderate hamstring stretch without nerve-like pulling.",
-      "tips_fr": "Arrêtez-vous sur un étirement modéré sans sensation nerveuse ou irradiante."
+      "tips_fr": "Arrêtez-vous sur un étirement modéré sans sensation nerveuse ou irradiante.",
+      "dosage_type": "dynamic_mobility_reps",
+      "intervention_role": "mobility",
+      "default_sets_v3": 2,
+      "min_sets_v3": 1,
+      "max_sets_v3": 2,
+      "default_reps_v3": 15,
+      "default_duration_seconds_v3": null,
+      "default_hold_seconds_v3": null,
+      "max_total_exposure_seconds_v3": null,
+      "load_level_v3": 3,
+      "progression_stage_v3": 2,
+      "repeat_limit_per_week_v3": 2,
+      "repeat_limit_program_v3": 5,
+      "experience_requirement_v3": "all",
+      "engagement_tags_v3": [
+        "mobility",
+        "loaded"
+      ]
     },
     {
       "exercise_id": "DMHM009",
@@ -3255,7 +4245,25 @@
       "instructions_en": "Keep the pelvis level and gently move into the stretch without arching or twisting the lower back.",
       "instructions_fr": "Gardez le bassin horizontal et entrez doucement dans l’étirement sans cambrer ni tourner le bas du dos.",
       "tips_en": "Use a smaller range and steady breathing to keep the sensation muscular.",
-      "tips_fr": "Réduisez l’amplitude et respirez régulièrement pour garder une sensation musculaire."
+      "tips_fr": "Réduisez l’amplitude et respirez régulièrement pour garder une sensation musculaire.",
+      "dosage_type": "dynamic_mobility_reps",
+      "intervention_role": "mobility",
+      "default_sets_v3": 2,
+      "min_sets_v3": 1,
+      "max_sets_v3": 2,
+      "default_reps_v3": 15,
+      "default_duration_seconds_v3": null,
+      "default_hold_seconds_v3": null,
+      "max_total_exposure_seconds_v3": null,
+      "load_level_v3": 0,
+      "progression_stage_v3": 1,
+      "repeat_limit_per_week_v3": 2,
+      "repeat_limit_program_v3": 5,
+      "experience_requirement_v3": "all",
+      "engagement_tags_v3": [
+        "mobility",
+        "unloaded"
+      ]
     },
     {
       "exercise_id": "DMHM010",
@@ -3313,7 +4321,25 @@
       "instructions_en": "Keep the pelvis level and gently move into the stretch without arching or twisting the lower back.",
       "instructions_fr": "Gardez le bassin horizontal et entrez doucement dans l’étirement sans cambrer ni tourner le bas du dos.",
       "tips_en": "Use a smaller range and steady breathing to keep the sensation muscular.",
-      "tips_fr": "Réduisez l’amplitude et respirez régulièrement pour garder une sensation musculaire."
+      "tips_fr": "Réduisez l’amplitude et respirez régulièrement pour garder une sensation musculaire.",
+      "dosage_type": "dynamic_mobility_reps",
+      "intervention_role": "mobility",
+      "default_sets_v3": 2,
+      "min_sets_v3": 1,
+      "max_sets_v3": 2,
+      "default_reps_v3": 15,
+      "default_duration_seconds_v3": null,
+      "default_hold_seconds_v3": null,
+      "max_total_exposure_seconds_v3": null,
+      "load_level_v3": 0,
+      "progression_stage_v3": 1,
+      "repeat_limit_per_week_v3": 2,
+      "repeat_limit_program_v3": 5,
+      "experience_requirement_v3": "all",
+      "engagement_tags_v3": [
+        "mobility",
+        "unloaded"
+      ]
     },
     {
       "exercise_id": "DMHM011",
@@ -3371,7 +4397,25 @@
       "instructions_en": "Press through the feet, keep the ribs down, and lift the pelvis by squeezing the glutes rather than arching the back.",
       "instructions_fr": "Poussez dans les pieds, gardez les côtes basses et soulevez le bassin avec les fessiers sans cambrer.",
       "tips_en": "Finish with the hips level and a straight line from shoulders to knees.",
-      "tips_fr": "Terminez avec le bassin horizontal et une ligne droite des épaules aux genoux."
+      "tips_fr": "Terminez avec le bassin horizontal et une ligne droite des épaules aux genoux.",
+      "dosage_type": "dynamic_mobility_reps",
+      "intervention_role": "mobility",
+      "default_sets_v3": 2,
+      "min_sets_v3": 1,
+      "max_sets_v3": 2,
+      "default_reps_v3": 15,
+      "default_duration_seconds_v3": null,
+      "default_hold_seconds_v3": null,
+      "max_total_exposure_seconds_v3": null,
+      "load_level_v3": 0,
+      "progression_stage_v3": 3,
+      "repeat_limit_per_week_v3": 2,
+      "repeat_limit_program_v3": 5,
+      "experience_requirement_v3": "all",
+      "engagement_tags_v3": [
+        "mobility",
+        "unloaded"
+      ]
     },
     {
       "exercise_id": "DMAM001",
@@ -3429,7 +4473,25 @@
       "instructions_en": "Keep the heel down and foot facing forward, then guide the knee over the toes without the arch collapsing.",
       "instructions_fr": "Gardez le talon au sol et le pied face à l’avant, puis avancez le genou au-dessus des orteils sans affaisser la voûte.",
       "tips_en": "Move the knee forward only as far as the heel and arch remain stable.",
-      "tips_fr": "Avancez le genou seulement tant que le talon et la voûte restent stables."
+      "tips_fr": "Avancez le genou seulement tant que le talon et la voûte restent stables.",
+      "dosage_type": "dynamic_mobility_reps",
+      "intervention_role": "mobility",
+      "default_sets_v3": 2,
+      "min_sets_v3": 1,
+      "max_sets_v3": 2,
+      "default_reps_v3": 15,
+      "default_duration_seconds_v3": null,
+      "default_hold_seconds_v3": null,
+      "max_total_exposure_seconds_v3": null,
+      "load_level_v3": 0,
+      "progression_stage_v3": 1,
+      "repeat_limit_per_week_v3": 2,
+      "repeat_limit_program_v3": 5,
+      "experience_requirement_v3": "all",
+      "engagement_tags_v3": [
+        "mobility",
+        "unloaded"
+      ]
     },
     {
       "exercise_id": "DMAM002",
@@ -3487,7 +4549,25 @@
       "instructions_en": "Keep the heel down and foot facing forward, then guide the knee over the toes without the arch collapsing.",
       "instructions_fr": "Gardez le talon au sol et le pied face à l’avant, puis avancez le genou au-dessus des orteils sans affaisser la voûte.",
       "tips_en": "Move the knee forward only as far as the heel and arch remain stable.",
-      "tips_fr": "Avancez le genou seulement tant que le talon et la voûte restent stables."
+      "tips_fr": "Avancez le genou seulement tant que le talon et la voûte restent stables.",
+      "dosage_type": "dynamic_mobility_reps",
+      "intervention_role": "mobility",
+      "default_sets_v3": 2,
+      "min_sets_v3": 1,
+      "max_sets_v3": 2,
+      "default_reps_v3": 10,
+      "default_duration_seconds_v3": null,
+      "default_hold_seconds_v3": null,
+      "max_total_exposure_seconds_v3": null,
+      "load_level_v3": 0,
+      "progression_stage_v3": 1,
+      "repeat_limit_per_week_v3": 2,
+      "repeat_limit_program_v3": 5,
+      "experience_requirement_v3": "all",
+      "engagement_tags_v3": [
+        "mobility",
+        "unloaded"
+      ]
     },
     {
       "exercise_id": "DMRB001",
@@ -3545,7 +4625,25 @@
       "instructions_en": "Move the pelvis gently while keeping the shoulders relaxed and the motion small and controlled.",
       "instructions_fr": "Mobilisez doucement le bassin en gardant les épaules relâchées et une amplitude petite et contrôlée.",
       "tips_en": "Coordinate the movement with a slow exhale and return to neutral.",
-      "tips_fr": "Coordonnez le mouvement avec une expiration lente puis revenez au neutre."
+      "tips_fr": "Coordonnez le mouvement avec une expiration lente puis revenez au neutre.",
+      "dosage_type": "recovery_hold",
+      "intervention_role": "recovery",
+      "default_sets_v3": 1,
+      "min_sets_v3": 1,
+      "max_sets_v3": 1,
+      "default_reps_v3": 15,
+      "default_duration_seconds_v3": 45,
+      "default_hold_seconds_v3": null,
+      "max_total_exposure_seconds_v3": 75,
+      "load_level_v3": 0,
+      "progression_stage_v3": 1,
+      "repeat_limit_per_week_v3": 1,
+      "repeat_limit_program_v3": 3,
+      "experience_requirement_v3": "all",
+      "engagement_tags_v3": [
+        "recovery",
+        "unloaded"
+      ]
     },
     {
       "exercise_id": "DMRB002",
@@ -3603,7 +4701,25 @@
       "instructions_en": "Position the tool on the target muscle, apply tolerable pressure, and roll slowly while keeping the surrounding joints relaxed.",
       "instructions_fr": "Placez l’outil sur le muscle ciblé, appliquez une pression tolérable et roulez lentement en relâchant les articulations voisines.",
       "tips_en": "Pause on a sensitive muscular point and breathe; avoid sharp, radiating, or neurological symptoms.",
-      "tips_fr": "Faites une pause sur un point musculaire sensible en respirant; évitez toute douleur vive ou irradiante."
+      "tips_fr": "Faites une pause sur un point musculaire sensible en respirant; évitez toute douleur vive ou irradiante.",
+      "dosage_type": "soft_tissue_time",
+      "intervention_role": "recovery",
+      "default_sets_v3": 1,
+      "min_sets_v3": 1,
+      "max_sets_v3": 1,
+      "default_reps_v3": null,
+      "default_duration_seconds_v3": 30,
+      "default_hold_seconds_v3": null,
+      "max_total_exposure_seconds_v3": 60,
+      "load_level_v3": 0,
+      "progression_stage_v3": 1,
+      "repeat_limit_per_week_v3": 1,
+      "repeat_limit_program_v3": 3,
+      "experience_requirement_v3": "all",
+      "engagement_tags_v3": [
+        "recovery",
+        "unloaded"
+      ]
     },
     {
       "exercise_id": "DMRB003",
@@ -3661,7 +4777,25 @@
       "instructions_en": "Position the tool on the target muscle, apply tolerable pressure, and roll slowly while keeping the surrounding joints relaxed.",
       "instructions_fr": "Placez l’outil sur le muscle ciblé, appliquez une pression tolérable et roulez lentement en relâchant les articulations voisines.",
       "tips_en": "Pause on a sensitive muscular point and breathe; avoid sharp, radiating, or neurological symptoms.",
-      "tips_fr": "Faites une pause sur un point musculaire sensible en respirant; évitez toute douleur vive ou irradiante."
+      "tips_fr": "Faites une pause sur un point musculaire sensible en respirant; évitez toute douleur vive ou irradiante.",
+      "dosage_type": "soft_tissue_time",
+      "intervention_role": "recovery",
+      "default_sets_v3": 1,
+      "min_sets_v3": 1,
+      "max_sets_v3": 1,
+      "default_reps_v3": null,
+      "default_duration_seconds_v3": 30,
+      "default_hold_seconds_v3": null,
+      "max_total_exposure_seconds_v3": 60,
+      "load_level_v3": 0,
+      "progression_stage_v3": 1,
+      "repeat_limit_per_week_v3": 1,
+      "repeat_limit_program_v3": 3,
+      "experience_requirement_v3": "all",
+      "engagement_tags_v3": [
+        "recovery",
+        "unloaded"
+      ]
     },
     {
       "exercise_id": "DMRB004",
@@ -3719,7 +4853,25 @@
       "instructions_en": "Position the tool on the target muscle, apply tolerable pressure, and roll slowly while keeping the surrounding joints relaxed.",
       "instructions_fr": "Placez l’outil sur le muscle ciblé, appliquez une pression tolérable et roulez lentement en relâchant les articulations voisines.",
       "tips_en": "Pause on a sensitive muscular point and breathe; avoid sharp, radiating, or neurological symptoms.",
-      "tips_fr": "Faites une pause sur un point musculaire sensible en respirant; évitez toute douleur vive ou irradiante."
+      "tips_fr": "Faites une pause sur un point musculaire sensible en respirant; évitez toute douleur vive ou irradiante.",
+      "dosage_type": "soft_tissue_time",
+      "intervention_role": "recovery",
+      "default_sets_v3": 1,
+      "min_sets_v3": 1,
+      "max_sets_v3": 1,
+      "default_reps_v3": null,
+      "default_duration_seconds_v3": 30,
+      "default_hold_seconds_v3": null,
+      "max_total_exposure_seconds_v3": 60,
+      "load_level_v3": 0,
+      "progression_stage_v3": 1,
+      "repeat_limit_per_week_v3": 1,
+      "repeat_limit_program_v3": 3,
+      "experience_requirement_v3": "all",
+      "engagement_tags_v3": [
+        "recovery",
+        "unloaded"
+      ]
     },
     {
       "exercise_id": "DMRB005",
@@ -3777,7 +4929,25 @@
       "instructions_en": "Position the tool on the target muscle, apply tolerable pressure, and roll slowly while keeping the surrounding joints relaxed.",
       "instructions_fr": "Placez l’outil sur le muscle ciblé, appliquez une pression tolérable et roulez lentement en relâchant les articulations voisines.",
       "tips_en": "Pause on a sensitive muscular point and breathe; avoid sharp, radiating, or neurological symptoms.",
-      "tips_fr": "Faites une pause sur un point musculaire sensible en respirant; évitez toute douleur vive ou irradiante."
+      "tips_fr": "Faites une pause sur un point musculaire sensible en respirant; évitez toute douleur vive ou irradiante.",
+      "dosage_type": "soft_tissue_time",
+      "intervention_role": "recovery",
+      "default_sets_v3": 1,
+      "min_sets_v3": 1,
+      "max_sets_v3": 1,
+      "default_reps_v3": null,
+      "default_duration_seconds_v3": 30,
+      "default_hold_seconds_v3": null,
+      "max_total_exposure_seconds_v3": 60,
+      "load_level_v3": 0,
+      "progression_stage_v3": 1,
+      "repeat_limit_per_week_v3": 1,
+      "repeat_limit_program_v3": 3,
+      "experience_requirement_v3": "all",
+      "engagement_tags_v3": [
+        "recovery",
+        "unloaded"
+      ]
     },
     {
       "exercise_id": "DMRB006",
@@ -3835,7 +5005,25 @@
       "instructions_en": "Position the tool on the target muscle, apply tolerable pressure, and roll slowly while keeping the surrounding joints relaxed.",
       "instructions_fr": "Placez l’outil sur le muscle ciblé, appliquez une pression tolérable et roulez lentement en relâchant les articulations voisines.",
       "tips_en": "Pause on a sensitive muscular point and breathe; avoid sharp, radiating, or neurological symptoms.",
-      "tips_fr": "Faites une pause sur un point musculaire sensible en respirant; évitez toute douleur vive ou irradiante."
+      "tips_fr": "Faites une pause sur un point musculaire sensible en respirant; évitez toute douleur vive ou irradiante.",
+      "dosage_type": "soft_tissue_time",
+      "intervention_role": "recovery",
+      "default_sets_v3": 1,
+      "min_sets_v3": 1,
+      "max_sets_v3": 1,
+      "default_reps_v3": null,
+      "default_duration_seconds_v3": 30,
+      "default_hold_seconds_v3": null,
+      "max_total_exposure_seconds_v3": 60,
+      "load_level_v3": 0,
+      "progression_stage_v3": 1,
+      "repeat_limit_per_week_v3": 1,
+      "repeat_limit_program_v3": 3,
+      "experience_requirement_v3": "all",
+      "engagement_tags_v3": [
+        "recovery",
+        "unloaded"
+      ]
     },
     {
       "exercise_id": "DMRB007",
@@ -3893,7 +5081,25 @@
       "instructions_en": "Position the tool on the target muscle, apply tolerable pressure, and roll slowly while keeping the surrounding joints relaxed.",
       "instructions_fr": "Placez l’outil sur le muscle ciblé, appliquez une pression tolérable et roulez lentement en relâchant les articulations voisines.",
       "tips_en": "Pause on a sensitive muscular point and breathe; avoid sharp, radiating, or neurological symptoms.",
-      "tips_fr": "Faites une pause sur un point musculaire sensible en respirant; évitez toute douleur vive ou irradiante."
+      "tips_fr": "Faites une pause sur un point musculaire sensible en respirant; évitez toute douleur vive ou irradiante.",
+      "dosage_type": "soft_tissue_time",
+      "intervention_role": "recovery",
+      "default_sets_v3": 1,
+      "min_sets_v3": 1,
+      "max_sets_v3": 1,
+      "default_reps_v3": null,
+      "default_duration_seconds_v3": 30,
+      "default_hold_seconds_v3": null,
+      "max_total_exposure_seconds_v3": 60,
+      "load_level_v3": 0,
+      "progression_stage_v3": 1,
+      "repeat_limit_per_week_v3": 1,
+      "repeat_limit_program_v3": 3,
+      "experience_requirement_v3": "all",
+      "engagement_tags_v3": [
+        "recovery",
+        "unloaded"
+      ]
     },
     {
       "exercise_id": "DMCS009",
@@ -3951,7 +5157,25 @@
       "instructions_en": "Move the pelvis gently while keeping the shoulders relaxed and the motion small and controlled.",
       "instructions_fr": "Mobilisez doucement le bassin en gardant les épaules relâchées et une amplitude petite et contrôlée.",
       "tips_en": "Coordinate the movement with a slow exhale and return to neutral.",
-      "tips_fr": "Coordonnez le mouvement avec une expiration lente puis revenez au neutre."
+      "tips_fr": "Coordonnez le mouvement avec une expiration lente puis revenez au neutre.",
+      "dosage_type": "strength_reps",
+      "intervention_role": "stability",
+      "default_sets_v3": 2,
+      "min_sets_v3": 2,
+      "max_sets_v3": 3,
+      "default_reps_v3": 15,
+      "default_duration_seconds_v3": null,
+      "default_hold_seconds_v3": null,
+      "max_total_exposure_seconds_v3": null,
+      "load_level_v3": 0,
+      "progression_stage_v3": 1,
+      "repeat_limit_per_week_v3": 2,
+      "repeat_limit_program_v3": 5,
+      "experience_requirement_v3": "all",
+      "engagement_tags_v3": [
+        "stability",
+        "unloaded"
+      ]
     },
     {
       "exercise_id": "DMTM010",
@@ -4009,7 +5233,25 @@
       "instructions_en": "Keep the knees and pelvis stacked, rotate through the upper back, and let the shoulder blade glide around the rib cage.",
       "instructions_fr": "Gardez les genoux et le bassin superposés, tournez depuis le haut du dos et laissez l’omoplate glisser sur la cage thoracique.",
       "tips_en": "Exhale into the rotation and stop before the pelvis begins to move.",
-      "tips_fr": "Expirez pendant la rotation et arrêtez avant que le bassin ne bouge."
+      "tips_fr": "Expirez pendant la rotation et arrêtez avant que le bassin ne bouge.",
+      "dosage_type": "dynamic_mobility_reps",
+      "intervention_role": "mobility",
+      "default_sets_v3": 2,
+      "min_sets_v3": 1,
+      "max_sets_v3": 2,
+      "default_reps_v3": 10,
+      "default_duration_seconds_v3": null,
+      "default_hold_seconds_v3": null,
+      "max_total_exposure_seconds_v3": null,
+      "load_level_v3": 0,
+      "progression_stage_v3": 1,
+      "repeat_limit_per_week_v3": 2,
+      "repeat_limit_program_v3": 5,
+      "experience_requirement_v3": "all",
+      "engagement_tags_v3": [
+        "mobility",
+        "unloaded"
+      ]
     },
     {
       "exercise_id": "DMSH012",
@@ -4067,7 +5309,25 @@
       "instructions_en": "Settle into a comfortable stretch, keep the breath slow, and avoid forcing the neck, shoulder, or lower back.",
       "instructions_fr": "Installez-vous dans un étirement confortable, respirez lentement et évitez de forcer la nuque, l’épaule ou le bas du dos.",
       "tips_en": "Use a supported position and remain below the threshold of pain or tingling.",
-      "tips_fr": "Utilisez une position soutenue et restez sous le seuil de douleur ou de fourmillement."
+      "tips_fr": "Utilisez une position soutenue et restez sous le seuil de douleur ou de fourmillement.",
+      "dosage_type": "static_hold",
+      "intervention_role": "mobility",
+      "default_sets_v3": 1,
+      "min_sets_v3": 1,
+      "max_sets_v3": 2,
+      "default_reps_v3": null,
+      "default_duration_seconds_v3": 30,
+      "default_hold_seconds_v3": null,
+      "max_total_exposure_seconds_v3": 90,
+      "load_level_v3": 0,
+      "progression_stage_v3": 1,
+      "repeat_limit_per_week_v3": 2,
+      "repeat_limit_program_v3": 5,
+      "experience_requirement_v3": "all",
+      "engagement_tags_v3": [
+        "mobility",
+        "unloaded"
+      ]
     },
     {
       "exercise_id": "DMSH013",
@@ -4125,7 +5385,25 @@
       "instructions_en": "Keep the elbows straight and ribs controlled, then reach the shoulder blades forward around the rib cage.",
       "instructions_fr": "Gardez les coudes tendus et les côtes contrôlées, puis poussez les omoplates vers l’avant autour de la cage thoracique.",
       "tips_en": "Move through the shoulder blades without rounding the lower back.",
-      "tips_fr": "Bougez depuis les omoplates sans arrondir le bas du dos."
+      "tips_fr": "Bougez depuis les omoplates sans arrondir le bas du dos.",
+      "dosage_type": "dynamic_mobility_reps",
+      "intervention_role": "mobility",
+      "default_sets_v3": 2,
+      "min_sets_v3": 1,
+      "max_sets_v3": 2,
+      "default_reps_v3": 12,
+      "default_duration_seconds_v3": null,
+      "default_hold_seconds_v3": null,
+      "max_total_exposure_seconds_v3": null,
+      "load_level_v3": 0,
+      "progression_stage_v3": 3,
+      "repeat_limit_per_week_v3": 2,
+      "repeat_limit_program_v3": 5,
+      "experience_requirement_v3": "all",
+      "engagement_tags_v3": [
+        "mobility",
+        "unloaded"
+      ]
     },
     {
       "exercise_id": "DMAM003",
@@ -4183,7 +5461,25 @@
       "instructions_en": "Keep the heel down and foot facing forward, then guide the knee over the toes without the arch collapsing.",
       "instructions_fr": "Gardez le talon au sol et le pied face à l’avant, puis avancez le genou au-dessus des orteils sans affaisser la voûte.",
       "tips_en": "Move the knee forward only as far as the heel and arch remain stable.",
-      "tips_fr": "Avancez le genou seulement tant que le talon et la voûte restent stables."
+      "tips_fr": "Avancez le genou seulement tant que le talon et la voûte restent stables.",
+      "dosage_type": "dynamic_mobility_reps",
+      "intervention_role": "mobility",
+      "default_sets_v3": 2,
+      "min_sets_v3": 1,
+      "max_sets_v3": 2,
+      "default_reps_v3": 10,
+      "default_duration_seconds_v3": null,
+      "default_hold_seconds_v3": null,
+      "max_total_exposure_seconds_v3": null,
+      "load_level_v3": 0,
+      "progression_stage_v3": 1,
+      "repeat_limit_per_week_v3": 2,
+      "repeat_limit_program_v3": 5,
+      "experience_requirement_v3": "all",
+      "engagement_tags_v3": [
+        "mobility",
+        "unloaded"
+      ]
     },
     {
       "exercise_id": "DMHM012",
@@ -4241,7 +5537,25 @@
       "instructions_en": "Keep the pelvis level and gently move into the stretch without arching or twisting the lower back.",
       "instructions_fr": "Gardez le bassin horizontal et entrez doucement dans l’étirement sans cambrer ni tourner le bas du dos.",
       "tips_en": "Use a smaller range and steady breathing to keep the sensation muscular.",
-      "tips_fr": "Réduisez l’amplitude et respirez régulièrement pour garder une sensation musculaire."
+      "tips_fr": "Réduisez l’amplitude et respirez régulièrement pour garder une sensation musculaire.",
+      "dosage_type": "dynamic_mobility_reps",
+      "intervention_role": "mobility",
+      "default_sets_v3": 2,
+      "min_sets_v3": 1,
+      "max_sets_v3": 2,
+      "default_reps_v3": 10,
+      "default_duration_seconds_v3": null,
+      "default_hold_seconds_v3": null,
+      "max_total_exposure_seconds_v3": null,
+      "load_level_v3": 0,
+      "progression_stage_v3": 2,
+      "repeat_limit_per_week_v3": 2,
+      "repeat_limit_program_v3": 5,
+      "experience_requirement_v3": "all",
+      "engagement_tags_v3": [
+        "mobility",
+        "unloaded"
+      ]
     },
     {
       "exercise_id": "DMFI015",
@@ -4299,7 +5613,25 @@
       "instructions_en": "Keep the whole foot grounded, track the knees over the toes, and maintain the trunk position throughout the repetition.",
       "instructions_fr": "Gardez tout le pied au sol, dirigez les genoux dans l’axe des orteils et contrôlez le tronc pendant tout le mouvement.",
       "tips_en": "Use a depth that allows stable feet, knees, and spine.",
-      "tips_fr": "Choisissez une profondeur permettant de stabiliser les pieds, les genoux et la colonne."
+      "tips_fr": "Choisissez une profondeur permettant de stabiliser les pieds, les genoux et la colonne.",
+      "dosage_type": "strength_reps",
+      "intervention_role": "integration",
+      "default_sets_v3": 2,
+      "min_sets_v3": 2,
+      "max_sets_v3": 3,
+      "default_reps_v3": 10,
+      "default_duration_seconds_v3": null,
+      "default_hold_seconds_v3": null,
+      "max_total_exposure_seconds_v3": null,
+      "load_level_v3": 0,
+      "progression_stage_v3": 4,
+      "repeat_limit_per_week_v3": 2,
+      "repeat_limit_program_v3": 5,
+      "experience_requirement_v3": "all",
+      "engagement_tags_v3": [
+        "integration",
+        "unloaded"
+      ]
     },
     {
       "exercise_id": "DMAM004",
@@ -4357,7 +5689,25 @@
       "instructions_en": "Keep the heel down and foot facing forward, then guide the knee over the toes without the arch collapsing.",
       "instructions_fr": "Gardez le talon au sol et le pied face à l’avant, puis avancez le genou au-dessus des orteils sans affaisser la voûte.",
       "tips_en": "Move the knee forward only as far as the heel and arch remain stable.",
-      "tips_fr": "Avancez le genou seulement tant que le talon et la voûte restent stables."
+      "tips_fr": "Avancez le genou seulement tant que le talon et la voûte restent stables.",
+      "dosage_type": "static_hold",
+      "intervention_role": "mobility",
+      "default_sets_v3": 1,
+      "min_sets_v3": 1,
+      "max_sets_v3": 2,
+      "default_reps_v3": null,
+      "default_duration_seconds_v3": 30,
+      "default_hold_seconds_v3": null,
+      "max_total_exposure_seconds_v3": 90,
+      "load_level_v3": 0,
+      "progression_stage_v3": 1,
+      "repeat_limit_per_week_v3": 2,
+      "repeat_limit_program_v3": 5,
+      "experience_requirement_v3": "all",
+      "engagement_tags_v3": [
+        "mobility",
+        "unloaded"
+      ]
     },
     {
       "exercise_id": "DMCC003",
@@ -4415,7 +5765,25 @@
       "instructions_en": "Lengthen the back of the neck and glide the chin straight backward without looking down.",
       "instructions_fr": "Allongez l’arrière de la nuque et reculez le menton horizontalement sans regarder vers le bas.",
       "tips_en": "Use a gentle effort and keep breathing normally.",
-      "tips_fr": "Utilisez un effort léger et respirez normalement."
+      "tips_fr": "Utilisez un effort léger et respirez normalement.",
+      "dosage_type": "recovery_hold",
+      "intervention_role": "recovery",
+      "default_sets_v3": 1,
+      "min_sets_v3": 1,
+      "max_sets_v3": 1,
+      "default_reps_v3": null,
+      "default_duration_seconds_v3": 10,
+      "default_hold_seconds_v3": null,
+      "max_total_exposure_seconds_v3": 75,
+      "load_level_v3": 0,
+      "progression_stage_v3": 1,
+      "repeat_limit_per_week_v3": 1,
+      "repeat_limit_program_v3": 3,
+      "experience_requirement_v3": "all",
+      "engagement_tags_v3": [
+        "recovery",
+        "unloaded"
+      ]
     },
     {
       "exercise_id": "DMCC004",
@@ -4473,7 +5841,25 @@
       "instructions_en": "Settle into a comfortable stretch, keep the breath slow, and avoid forcing the neck, shoulder, or lower back.",
       "instructions_fr": "Installez-vous dans un étirement confortable, respirez lentement et évitez de forcer la nuque, l’épaule ou le bas du dos.",
       "tips_en": "Use a supported position and remain below the threshold of pain or tingling.",
-      "tips_fr": "Utilisez une position soutenue et restez sous le seuil de douleur ou de fourmillement."
+      "tips_fr": "Utilisez une position soutenue et restez sous le seuil de douleur ou de fourmillement.",
+      "dosage_type": "recovery_hold",
+      "intervention_role": "recovery",
+      "default_sets_v3": 1,
+      "min_sets_v3": 1,
+      "max_sets_v3": 1,
+      "default_reps_v3": null,
+      "default_duration_seconds_v3": 30,
+      "default_hold_seconds_v3": null,
+      "max_total_exposure_seconds_v3": 75,
+      "load_level_v3": 0,
+      "progression_stage_v3": 1,
+      "repeat_limit_per_week_v3": 1,
+      "repeat_limit_program_v3": 3,
+      "experience_requirement_v3": "all",
+      "engagement_tags_v3": [
+        "recovery",
+        "unloaded"
+      ]
     },
     {
       "exercise_id": "DMCC005",
@@ -4531,7 +5917,31 @@
       "instructions_en": "Settle into a comfortable stretch, keep the breath slow, and avoid forcing the neck, shoulder, or lower back.",
       "instructions_fr": "Installez-vous dans un étirement confortable, respirez lentement et évitez de forcer la nuque, l’épaule ou le bas du dos.",
       "tips_en": "Use a supported position and remain below the threshold of pain or tingling.",
-      "tips_fr": "Utilisez une position soutenue et restez sous le seuil de douleur ou de fourmillement."
+      "tips_fr": "Utilisez une position soutenue et restez sous le seuil de douleur ou de fourmillement.",
+      "dosage_type": "recovery_hold",
+      "intervention_role": "recovery",
+      "default_sets_v3": 1,
+      "min_sets_v3": 1,
+      "max_sets_v3": 1,
+      "default_reps_v3": null,
+      "default_duration_seconds_v3": 30,
+      "default_hold_seconds_v3": null,
+      "max_total_exposure_seconds_v3": 75,
+      "load_level_v3": 0,
+      "progression_stage_v3": 1,
+      "repeat_limit_per_week_v3": 1,
+      "repeat_limit_program_v3": 3,
+      "experience_requirement_v3": "all",
+      "engagement_tags_v3": [
+        "recovery",
+        "unloaded"
+      ]
     }
-  ]
+  ],
+  "v3_metadata_policy": {
+    "exercise_specific_dosage_is_authoritative": true,
+    "generic_set_override_forbidden": true,
+    "timed_recovery_default_one_set": true,
+    "loaded_progression_allowed_when_readiness_allows": true
+  }
 }
