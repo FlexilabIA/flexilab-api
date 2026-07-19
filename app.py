@@ -1501,12 +1501,27 @@ def start_session(
         if not link_response.data:
             raise HTTPException(status_code=404, detail="Trainer client not found.")
         link = link_response.data[0]
-        if link.get("status") != "active" or not link.get("client_user_id"):
+        link_status = str(link.get("status") or "").strip().lower()
+        client_user_id = str(link.get("client_user_id") or "").strip()
+
+        # A Trainer may screen a newly invited client before that client signs in.
+        # Supabase creates/reserves the client's Auth UUID when the invitation is
+        # issued, so the result can already belong to that future client account.
+        # Archived/revoked links remain blocked.
+        if link_status not in {"pending", "active"}:
             raise HTTPException(
                 status_code=409,
-                detail="The client must activate their FlexiLab account before screening.",
+                detail="This Trainer-client link is not available for screening.",
             )
-        session_owner_user_id = str(link["client_user_id"])
+        if not client_user_id:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "The client invitation did not create an account identifier. "
+                    "Resend or recreate the invitation before screening."
+                ),
+            )
+        session_owner_user_id = client_user_id
         session_owner_email = str(link.get("invited_email") or "").strip().lower()
         trainer_id = user["id"]
         trainer_link_id = str(link["id"])
