@@ -160,7 +160,7 @@ def create_trainer_router(supabase_client) -> APIRouter:
                 detail="Unable to create the Trainer profile.",
             )
 
-        # One free screening token, granted once per Trainer account.
+        # Two free screening tokens, granted once per Trainer account.
         existing_trial = (
             supabase_client.table("screening_credit_cycles")
             .select("id")
@@ -177,7 +177,7 @@ def create_trainer_router(supabase_client) -> APIRouter:
                 "cycle_start": now.isoformat(),
                 "cycle_end": trial_end.isoformat(),
                 "grace_expires_at": trial_end.isoformat(),
-                "credits_granted": 1,
+                "credits_granted": 2,
                 "credits_used": 0,
             }).execute()
 
@@ -194,7 +194,7 @@ def create_trainer_router(supabase_client) -> APIRouter:
             "trainer": profile_response.data[0],
             "tokens_remaining": tokens,
             "tokens_expires_at": expires_at,
-            "free_token_granted": not bool(existing_trial.data),
+            "free_tokens_granted": 2 if not existing_trial.data else 0,
         }
 
     @router.get("/me/account-mode")
