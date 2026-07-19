@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+from datetime import datetime, timezone
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException
@@ -10,6 +13,18 @@ class ProfileUpdate(BaseModel):
     program_notifications: Optional[bool] = None
     reassessment_notifications: Optional[bool] = None
     update_notifications: Optional[bool] = None
+
+
+def _parse_datetime(value: Any) -> Optional[datetime]:
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed
+    except Exception:
+        return None
 
 
 def create_account_router(supabase_client) -> APIRouter:
@@ -96,6 +111,81 @@ def create_account_router(supabase_client) -> APIRouter:
                 detail="Unable to create the user profile.",
             )
         return created.data[0]
+
+    def latest_subscription(user_id: str) -> Optional[dict[str, Any]]:
+        response = (
+            supabase_client.table("subscriptions")
+            .select("*")
+            .eq("user_id", user_id)
+            .order("updated_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+        return response.data[0] if response.data else None
+
+    def subscription_summary(row: Optional[dict[str, Any]]) -> dict[str, Any]:
+        if not row:
+            return {
+                "billing_model": "free",
+                "provider": None,
+                "provider_customer_id": None,
+                "provider_subscription_id": None,
+                "current_period_start": None,
+                "current_period_end": None,
+                "next_billing_date": None,
+                "cancel_at_period_end": False,
+                "cancellation_requested": False,
+                "cancellation_effective_at": None,
+                "auto_renew": False,
+                "can_manage_billing": False,
+                "can_cancel": False,
+                "can_reactivate": False,
+            }
+
+        plan_code = str(row.get("plan_code") or "free")
+        status = str(row.get("status") or "active")
+        is_monthly = plan_code == "pro_monthly"
+        is_prepaid = plan_code in {"pro_three_month", "pro_annual"}
+        cancel_at_period_end = bool(row.get("cancel_at_period_end", False))
+        period_end = row.get("current_period_end")
+
+        if is_monthly:
+            billing_model = "monthly"
+        elif is_prepaid:
+            billing_model = "prepaid"
+        else:
+            billing_model = "free"
+
+        return {
+            "billing_model": billing_model,
+            "provider": row.get("provider"),
+            "provider_customer_id": row.get("provider_customer_id"),
+            "provider_subscription_id": row.get("provider_subscription_id"),
+            "current_period_start": row.get("current_period_start"),
+            "current_period_end": period_end,
+            "next_billing_date": (
+                period_end
+                if is_monthly
+                and status in {"active", "trialing"}
+                and not cancel_at_period_end
+                else None
+            ),
+            "cancel_at_period_end": cancel_at_period_end,
+            "cancellation_requested": cancel_at_period_end,
+            "cancellation_effective_at": period_end if cancel_at_period_end else None,
+            "auto_renew": is_monthly and not cancel_at_period_end,
+            "can_manage_billing": bool(row.get("provider_customer_id")),
+            "can_cancel": (
+                is_monthly
+                and status in {"active", "trialing"}
+                and not cancel_at_period_end
+            ),
+            "can_reactivate": (
+                is_monthly
+                and status in {"active", "trialing"}
+                and cancel_at_period_end
+            ),
+        }
 
     @router.get("/me/profile")
     def get_my_profile(
@@ -215,36 +305,16 @@ def create_account_router(supabase_client) -> APIRouter:
             .execute()
         )
 
-        from datetime import datetime, timezone
-
         now = datetime.now(timezone.utc)
         remaining = 0
         active_cycle = None
+        next_future_cycle = None
 
         for cycle in cycles_response.data or []:
-            cycle_start_raw = cycle.get("cycle_start")
-            expiry_raw = (
-                cycle.get("grace_expires_at")
-                or cycle.get("cycle_end")
+            cycle_start = _parse_datetime(cycle.get("cycle_start"))
+            expiry = _parse_datetime(
+                cycle.get("grace_expires_at") or cycle.get("cycle_end")
             )
-
-            try:
-                cycle_start = datetime.fromisoformat(
-                    str(cycle_start_raw).replace("Z", "+00:00")
-                )
-                started = cycle_start <= now
-            except Exception:
-                started = False
-
-            valid = True
-            if expiry_raw:
-                try:
-                    expiry = datetime.fromisoformat(
-                        str(expiry_raw).replace("Z", "+00:00")
-                    )
-                    valid = expiry >= now
-                except Exception:
-                    valid = False
 
             available = max(
                 0,
@@ -252,10 +322,24 @@ def create_account_router(supabase_client) -> APIRouter:
                 - int(cycle.get("credits_used") or 0),
             )
 
-            if started and valid and available > 0:
+            if not cycle_start or available <= 0:
+                continue
+
+            if cycle_start <= now and (expiry is None or expiry >= now):
                 remaining += available
                 if active_cycle is None:
                     active_cycle = cycle
+            elif cycle_start > now:
+                if next_future_cycle is None:
+                    next_future_cycle = cycle
+                else:
+                    current_next = _parse_datetime(
+                        next_future_cycle.get("cycle_start")
+                    )
+                    if current_next is None or cycle_start < current_next:
+                        next_future_cycle = cycle
+
+        subscription = subscription_summary(latest_subscription(user["id"]))
 
         return {
             "plan_code": entitlement.get("plan_code") or "free",
@@ -284,6 +368,12 @@ def create_account_router(supabase_client) -> APIRouter:
                 if active_cycle
                 else None
             ),
+            "next_credit_cycle_at": (
+                next_future_cycle.get("cycle_start")
+                if next_future_cycle
+                else None
+            ),
+            **subscription,
         }
 
     return router
