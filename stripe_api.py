@@ -16,6 +16,7 @@ STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "").strip()
 STRIPE_PRICE_MONTHLY = os.environ.get("STRIPE_PRICE_MONTHLY", "").strip()
 STRIPE_PRICE_THREE_MONTH = os.environ.get("STRIPE_PRICE_THREE_MONTH", "").strip()
 STRIPE_PRICE_ANNUAL = os.environ.get("STRIPE_PRICE_ANNUAL", "").strip()
+STRIPE_PRICE_TRAINER_PACK = os.environ.get("STRIPE_PRICE_TRAINER_PACK", "").strip()
 FRONTEND_URL = os.environ.get(
     "FRONTEND_URL",
     "https://flexi-move-lab.lovable.app",
@@ -43,6 +44,12 @@ PLAN_CONFIG = {
         "price_id": STRIPE_PRICE_ANNUAL,
         "mode": "payment",
         "months": 12,
+    },
+    "trainer_pack_30": {
+        "price_id": STRIPE_PRICE_TRAINER_PACK,
+        "mode": "payment",
+        "months": 12,
+        "trainer_tokens": 30,
     },
 }
 
@@ -379,6 +386,94 @@ def create_stripe_router(supabase_client) -> APIRouter:
                 cycle_end=cycle_end,
             )
 
+    def activate_trainer_pack(
+        *,
+        user_id: str,
+        subscription_id: str,
+        plan_code: str,
+        start: datetime,
+        end: datetime,
+    ) -> None:
+        supabase_client.table("trainer_profiles").upsert({
+            "user_id": user_id,
+            "status": "active",
+            "updated_at": _iso(_utc_now()),
+        }).execute()
+
+        existing = (
+            supabase_client.table("screening_credit_cycles")
+            .select("id")
+            .eq("subscription_id", subscription_id)
+            .eq("source", plan_code)
+            .limit(1)
+            .execute()
+        )
+        if not existing.data:
+            supabase_client.table("screening_credit_cycles").insert({
+                "user_id": user_id,
+                "subscription_id": subscription_id,
+                "source": plan_code,
+                "cycle_start": _iso(start),
+                "cycle_end": _iso(end),
+                "grace_expires_at": _iso(end),
+                "credits_granted": 30,
+                "credits_used": 0,
+            }).execute()
+
+    def grant_referral_reward(*, client_user_id: str, source_payment_id: str) -> None:
+        links = (
+            supabase_client.table("trainer_clients")
+            .select("trainer_id")
+            .eq("client_user_id", client_user_id)
+            .eq("status", "active")
+            .execute()
+        )
+        for link in links.data or []:
+            trainer_id = str(link.get("trainer_id") or "")
+            if not trainer_id:
+                continue
+            existing = (
+                supabase_client.table("trainer_referral_rewards")
+                .select("id")
+                .eq("trainer_id", trainer_id)
+                .eq("client_user_id", client_user_id)
+                .eq("source_payment_id", source_payment_id)
+                .limit(1)
+                .execute()
+            )
+            if existing.data:
+                continue
+            reward = supabase_client.table("trainer_referral_rewards").insert({
+                "trainer_id": trainer_id,
+                "client_user_id": client_user_id,
+                "source_payment_id": source_payment_id,
+                "tokens_granted": 1,
+            }).execute()
+            if not reward.data:
+                continue
+            trainer_subscription = (
+                supabase_client.table("subscriptions")
+                .select("id")
+                .eq("user_id", trainer_id)
+                .eq("plan_code", "trainer_pack_30")
+                .order("current_period_end", desc=True)
+                .limit(1)
+                .execute()
+            )
+            if not trainer_subscription.data:
+                continue
+            now = _utc_now()
+            supabase_client.table("screening_credit_cycles").insert({
+                "user_id": trainer_id,
+                "subscription_id": trainer_subscription.data[0]["id"],
+                "source": f"referral:{source_payment_id}",
+                "cycle_start": _iso(now),
+                "cycle_end": _iso(_add_months(now, 12)),
+                "grace_expires_at": _iso(_add_months(now, 12)),
+                "credits_granted": 1,
+                "credits_used": 0,
+            }).execute()
+
     def process_checkout_completed(session: Any) -> None:
         payment_status = str(
             _object_value(session, "payment_status", "")
@@ -439,6 +534,10 @@ def create_stripe_router(supabase_client) -> APIRouter:
                 cycle_start=period_start,
                 cycle_end=period_end,
             )
+            grant_referral_reward(
+                client_user_id=user_id,
+                source_payment_id=stripe_subscription_id,
+            )
             return
 
         months = int(PLAN_CONFIG[plan_code]["months"])
@@ -455,20 +554,33 @@ def create_stripe_router(supabase_client) -> APIRouter:
             period_end=plan_end,
             metadata=meta,
         )
-        activate_entitlement(
-            user_id=user_id,
-            plan_code=plan_code,
-            source_id=checkout_id,
-            valid_from=now,
-            valid_until=plan_end,
-        )
-        create_prepaid_cycles(
-            user_id=user_id,
-            subscription_id=saved["id"],
-            plan_code=plan_code,
-            start=now,
-            months=months,
-        )
+        if plan_code == "trainer_pack_30":
+            activate_trainer_pack(
+                user_id=user_id,
+                subscription_id=saved["id"],
+                plan_code=plan_code,
+                start=now,
+                end=plan_end,
+            )
+        else:
+            activate_entitlement(
+                user_id=user_id,
+                plan_code=plan_code,
+                source_id=checkout_id,
+                valid_from=now,
+                valid_until=plan_end,
+            )
+            create_prepaid_cycles(
+                user_id=user_id,
+                subscription_id=saved["id"],
+                plan_code=plan_code,
+                start=now,
+                months=months,
+            )
+            grant_referral_reward(
+                client_user_id=user_id,
+                source_payment_id=checkout_id,
+            )
 
     def process_invoice_paid(invoice: Any) -> None:
         stripe_subscription_id = _invoice_subscription_id(invoice)
@@ -669,6 +781,7 @@ def create_stripe_router(supabase_client) -> APIRouter:
             "monthly_price_configured": bool(STRIPE_PRICE_MONTHLY),
             "three_month_price_configured": bool(STRIPE_PRICE_THREE_MONTH),
             "annual_price_configured": bool(STRIPE_PRICE_ANNUAL),
+            "trainer_pack_price_configured": bool(STRIPE_PRICE_TRAINER_PACK),
         }
 
     @router.post("/create-checkout-session")
@@ -690,8 +803,8 @@ def create_stripe_router(supabase_client) -> APIRouter:
             raise HTTPException(
                 status_code=422,
                 detail=(
-                    "Invalid plan_code. Use pro_monthly, "
-                    "pro_three_month, or pro_annual."
+                    "Invalid plan_code. Use pro_monthly, pro_three_month, "
+                    "pro_annual, or trainer_pack_30."
                 ),
             )
 
@@ -715,11 +828,16 @@ def create_stripe_router(supabase_client) -> APIRouter:
             "client_reference_id": user["id"],
             "metadata": metadata,
             "success_url": (
-                f"{FRONTEND_URL}/home"
-                "?payment=success"
-                "&session_id={CHECKOUT_SESSION_ID}"
+                f"{FRONTEND_URL}"
+                + ("/trainer" if plan_code == "trainer_pack_30" else "/home")
+                + "?payment=success"
+                + "&session_id={CHECKOUT_SESSION_ID}"
             ),
-            "cancel_url": f"{FRONTEND_URL}/paywall?payment=cancelled",
+            "cancel_url": (
+                f"{FRONTEND_URL}"
+                + ("/trainer" if plan_code == "trainer_pack_30" else "/paywall")
+                + "?payment=cancelled"
+            ),
             "allow_promotion_codes": False,
         }
 
