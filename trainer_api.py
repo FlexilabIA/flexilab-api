@@ -200,15 +200,35 @@ def create_trainer_router(supabase_client) -> APIRouter:
     @router.get("/me/account-mode")
     def account_mode(user: dict[str, str] = Depends(require_user)):
         # An invited client becomes active the first time they authenticate.
+        # Screenings created before activation may have user_id=NULL; attach them
+        # to the newly authenticated client account using the secure link ID.
         try:
+            pending_links = (
+                supabase_client.table("trainer_clients")
+                .select("id")
+                .ilike("invited_email", user["email"])
+                .eq("status", "pending")
+                .execute()
+            )
+
             supabase_client.table("trainer_clients").update({
                 "client_user_id": user["id"],
                 "status": "active",
                 "accepted_at": _iso_now(),
                 "updated_at": _iso_now(),
             }).ilike("invited_email", user["email"]).eq("status", "pending").execute()
+
+            for link in pending_links.data or []:
+                link_id = str(link.get("id") or "").strip()
+                if not link_id:
+                    continue
+                supabase_client.table("sessions").update({
+                    "user_id": user["id"],
+                    "user_email": user["email"],
+                }).eq("trainer_client_link_id", link_id).is_("user_id", "null").execute()
         except Exception:
             pass
+
         profile = trainer_profile(user["id"])
         return {
             "mode": "trainer" if profile and profile.get("status") == "active" else "client",
