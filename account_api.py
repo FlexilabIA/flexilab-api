@@ -6,6 +6,8 @@ from typing import Any, Optional
 from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, Field
 
+from screening_access import effective_entitlement
+
 
 class ProfileUpdate(BaseModel):
     full_name: Optional[str] = Field(default=None, max_length=120)
@@ -270,29 +272,7 @@ def create_account_router(supabase_client) -> APIRouter:
     def get_my_entitlements(
         user: dict[str, Any] = Depends(require_user),
     ):
-        entitlement_response = (
-            supabase_client.table("entitlements")
-            .select("*")
-            .eq("user_id", user["id"])
-            .limit(1)
-            .execute()
-        )
-
-        entitlement = (
-            entitlement_response.data[0]
-            if entitlement_response.data
-            else {
-                "plan_code": "free",
-                "source": "free_signup",
-                "status": "active",
-                "program_access": False,
-                "workout_access": False,
-                "history_access": True,
-                "report_access": True,
-                "can_generate_program": False,
-                "valid_until": None,
-            }
-        )
+        entitlement = effective_entitlement(supabase_client, user["id"])
 
         cycles_response = (
             supabase_client.table("screening_credit_cycles")
@@ -361,6 +341,7 @@ def create_account_router(supabase_client) -> APIRouter:
                 entitlement.get("can_generate_program", False)
             ),
             "valid_until": entitlement.get("valid_until"),
+            "organization_sources": entitlement.get("organization_sources", []),
             "screening_credits_remaining": remaining,
             "screening_credit_expires_at": (
                 active_cycle.get("grace_expires_at")

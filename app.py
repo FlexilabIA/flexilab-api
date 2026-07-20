@@ -12,11 +12,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from account_api import create_account_router
 from stripe_api import create_stripe_router
 from trainer_api import create_trainer_router
+from operator_api import create_operator_router
 from screening_access import (
     authenticated_user,
     ensure_email_matches,
     reserve_credit,
     consume_credit,
+    effective_entitlement,
 )
 
 import numpy as np
@@ -25,7 +27,7 @@ import math
 import os
 import json
 import base64
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 # FlexiLab V2 backend architecture imports.
 # Old engines remain in the repository for rollback, but /program now uses:
 # score_engine_v2 -> Movement DNA / CKB -> Clinical Prescription Engine v2.1.
@@ -62,7 +64,7 @@ from ultralytics import YOLO
 from supabase import create_client
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
-SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY")
+SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY") or os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
 
 supabase = None
 if SUPABASE_URL and SUPABASE_SERVICE_KEY:
@@ -71,6 +73,8 @@ if SUPABASE_URL and SUPABASE_SERVICE_KEY:
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(BASE_DIR, "data")
+ANALYSIS_STORAGE_BUCKET = os.environ.get("FLEXILAB_ANALYSIS_BUCKET", "screening-private").strip() or "screening-private"
+ANALYSIS_INLINE_ENABLED = os.environ.get("FLEXILAB_INLINE_ANALYSIS", "true").strip().lower() in {"1", "true", "yes", "on"}
 
 MOVEMENT_PATTERNS_PATH = os.path.join(DATA_DIR, "movement_patterns_v1.json")
 PRESCRIPTION_RULES_PATH = os.path.join(DATA_DIR, "prescription_rules_v1.json")
@@ -144,37 +148,76 @@ def load_clinical_resources():
 
 load_clinical_resources()
 
-app = FastAPI()
+ALLOWED_ORIGINS = [
+    origin.strip()
+    for origin in os.environ.get(
+        "FLEXILAB_ALLOWED_ORIGINS",
+        "https://flexilab.fr,https://www.flexilab.fr,https://flexi-move-lab.lovable.app,http://localhost:3000,http://localhost:5173",
+    ).split(",")
+    if origin.strip()
+]
+
+POSE_MODEL_NAME = os.environ.get("FLEXILAB_POSE_MODEL", "yolov8n-pose.pt")
+POSE_MODEL_LOAD_ERROR = None
+try:
+    model = YOLO(POSE_MODEL_NAME)
+except Exception as exc:
+    model = None
+    POSE_MODEL_LOAD_ERROR = str(exc)
+
+app = FastAPI(
+    title="FlexiLab Movement Intelligence API",
+    version="100.0",
+)
 app.include_router(create_account_router(supabase))
 app.include_router(create_stripe_router(supabase))
 app.include_router(create_trainer_router(supabase))
+app.include_router(
+    create_operator_router(
+        supabase,
+        health_provider=lambda: {
+            "clinical_resources": {
+                "exercise_library_mode": EXERCISE_LIBRARY_MODE,
+                "exercise_library_count": len(EXERCISE_LIBRARY or []),
+                "resource_load_errors": RESOURCE_LOAD_ERRORS,
+            },
+            "pose_model": {
+                "configured_model": POSE_MODEL_NAME,
+                "loaded": model is not None,
+                "load_error": POSE_MODEL_LOAD_ERROR,
+            },
+        },
+    )
+)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=ALLOWED_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "Accept", "Origin", "X-Requested-With"],
 )
 
-model = YOLO("yolov8n-pose.pt")
 
 
 @app.get("/health")
 def health():
     return {
         "ok": True,
-        "patch_version": "V93-v3-history-rebuild",
+        "patch_version": "V100-operator-client-trainer-isolation",
         "exercise_library_mode": EXERCISE_LIBRARY_MODE,
         "exercise_library_path": EXERCISE_LIBRARY_PATH,
         "exercise_library_count": len(EXERCISE_LIBRARY or []),
         "resource_load_errors": RESOURCE_LOAD_ERRORS,
+        "pose_model_loaded": model is not None,
+        "pose_model_error": POSE_MODEL_LOAD_ERROR,
     }
 
 
 @app.get("/library_status")
 def library_status():
     return {
-        "patch_version": "V93-v3-history-rebuild",
+        "patch_version": "V100-operator-client-trainer-isolation",
         "exercise_library_mode": EXERCISE_LIBRARY_MODE,
         "exercise_library_path": EXERCISE_LIBRARY_PATH,
         "exercise_library_count": len(EXERCISE_LIBRARY or []),
@@ -278,18 +321,21 @@ def require_owned_session(user, session_id: str):
 
 
 def require_owned_program(user, program_id: str):
-    """Resolve a program using only identity verified from the bearer token."""
-    program_row = resolve_corrective_program(program_id, user["email"])
+    """Resolve a program using the authenticated Supabase user UUID."""
+    program_row = resolve_corrective_program(
+        program_id,
+        user_id=user["id"],
+        user_email=user["email"],
+    )
     if not program_row:
         raise HTTPException(status_code=404, detail="Program not found.")
 
-    owner_email = str(program_row.get("user_email") or "").strip().lower()
-    if owner_email != user["email"]:
-        raise HTTPException(
-            status_code=403,
-            detail="This corrective program belongs to another account.",
-        )
-
+    row_user_id = str(program_row.get("user_id") or "")
+    row_email = str(program_row.get("user_email") or "").strip().lower()
+    if row_user_id and row_user_id != user["id"]:
+        raise HTTPException(status_code=403, detail="This corrective program belongs to another account.")
+    if not row_user_id and row_email != user["email"]:
+        raise HTTPException(status_code=403, detail="This corrective program belongs to another account.")
     return program_row
 
 
@@ -1696,6 +1742,11 @@ def detect_pose_with_fallback(img, test_type):
     fallbacks. This reduces false 'No person detected' failures while keeping
     the strict result whenever it succeeds.
     """
+    if model is None:
+        raise ValueError(
+            "Pose model is unavailable. Check FLEXILAB_POSE_MODEL and the model file on the worker."
+        )
+
     is_aslr = str(test_type).startswith("aslr")
     thresholds = [0.20, 0.14, 0.10] if is_aslr else [0.50, 0.35, 0.25]
 
@@ -1726,11 +1777,15 @@ async def analyze(
     test_type: str = Form(...),
     session_id: str = Form(...),
     intake_json: str = Form(None),
-    questionnaire_json: str = Form(None)
+    questionnaire_json: str = Form(None),
+    authorization: str = Header(None),
 ):
     if supabase is None:
-        return {"error": "Supabase is not configured on server."}
+        raise HTTPException(status_code=503, detail="Supabase is not configured on server.")
 
+    user = authenticated_user(supabase, authorization)
+    session = require_owned_session(user, session_id)
+    authoritative_email = str(session.get("user_email") or user["email"]).strip().lower()
     intake_data = parse_intake_payload(intake_json=intake_json, questionnaire_json=questionnaire_json)
     try_save_session_intake(session_id, intake_data)
 
@@ -1738,7 +1793,7 @@ async def analyze(
     nparr = np.frombuffer(img_bytes, np.uint8)
     img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
     if img is None:
-        return {"error": "Invalid image"}
+        raise HTTPException(status_code=422, detail="Invalid image")
 
     h, w = img.shape[:2]
     max_side = 960
@@ -1753,7 +1808,7 @@ async def analyze(
     try:
         res, detection_threshold = detect_pose_with_fallback(img, test_type)
     except ValueError as exc:
-        return {"error": str(exc)}
+        raise HTTPException(status_code=422, detail=str(exc))
 
     boxes = res[0].boxes.xyxy.cpu().numpy()
     areas = [(b[2] - b[0]) * (b[3] - b[1]) for b in boxes]
@@ -1781,11 +1836,13 @@ async def analyze(
         result = analyze_aslr(xy, conf, "LEFT", img)
         session_update = {"aslr_left_score": result["score"]}
     else:
-        return {"error": "Invalid test_type"}
+        raise HTTPException(status_code=422, detail="Invalid test_type")
 
     row = {
-        "user_email": user_email,
+        "user_email": authoritative_email,
+        "user_id": session.get("user_id"),
         "session_id": session_id,
+        "idempotency_key": f"{session_id}:{test_type}",
         "test_type": test_type,
         "score": float(result["score"]),
         "confidence": float(result["confidence"]),
@@ -1816,7 +1873,7 @@ async def analyze(
     supabase.table("sessions").update(session_update).eq("id", session_id).execute()
 
     return {
-        "user_email": user_email,
+        "user_email": authoritative_email,
         "session_id": session_id,
         "test_type": test_type,
         "score": result["score"],
@@ -1833,10 +1890,12 @@ def utc_now_iso():
     return datetime.now(timezone.utc).isoformat()
 
 
-def build_screening_row(user_email, session_id, test_type, result, intake_data):
+def build_screening_row(user_email, user_id, session_id, test_type, result, intake_data):
     row = {
         "user_email": user_email,
+        "user_id": user_id,
         "session_id": session_id,
+        "idempotency_key": f"{session_id}:{test_type}",
         "test_type": test_type,
         "score": float(result["score"]),
         "confidence": float(result["confidence"]),
@@ -1958,17 +2017,34 @@ def process_analysis_job(job_id: str):
             ):
                 return
 
-        supabase.table("analysis_jobs").update({
-            "status": "processing",
-            "started_at": utc_now_iso(),
-            "error_message": None
-        }).eq("id", job_id).execute()
+        claim = (
+            supabase.table("analysis_jobs")
+            .update({
+                "status": "processing",
+                "started_at": utc_now_iso(),
+                "error_message": None,
+            })
+            .eq("id", job_id)
+            .eq("status", "queued")
+            .execute()
+        )
+        if not claim.data:
+            # Another web process or worker claimed this job first.
+            return
 
+        image_path = str(job.get("image_path") or "").strip()
         img_b64 = job.get("image_base64")
-        if not img_b64:
-            raise ValueError("Missing image_base64")
-
-        img_bytes = base64.b64decode(img_b64)
+        if image_path:
+            try:
+                img_bytes = supabase.storage.from_(ANALYSIS_STORAGE_BUCKET).download(image_path)
+            except Exception as exc:
+                if not img_b64:
+                    raise ValueError(f"Unable to load queued image: {exc}")
+                img_bytes = base64.b64decode(img_b64)
+        elif img_b64:
+            img_bytes = base64.b64decode(img_b64)
+        else:
+            raise ValueError("Missing queued image")
 
         test_type = job.get("test_type")
         user_email = job.get("user_email")
@@ -1979,6 +2055,7 @@ def process_analysis_job(job_id: str):
 
         screening_row = build_screening_row(
             user_email=user_email,
+            user_id=job.get("user_id"),
             session_id=session_id,
             test_type=test_type,
             result=result,
@@ -2002,8 +2079,17 @@ def process_analysis_job(job_id: str):
                 "intake_json": intake_data,
                 "annotated_image_url": None
             },
-            "error_message": None
+            "error_message": None,
+            "image_base64": None,
+            "image_expires_at": None
         }).eq("id", job_id).execute()
+
+        if image_path:
+            try:
+                supabase.storage.from_(ANALYSIS_STORAGE_BUCKET).remove([image_path])
+                supabase.table("analysis_jobs").update({"image_path": None}).eq("id", job_id).execute()
+            except Exception:
+                pass
 
     except Exception as e:
         supabase.table("analysis_jobs").update({
@@ -2061,12 +2147,33 @@ async def submit_analysis(
     if len(img_bytes) > 12 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="The uploaded image is too large. Maximum size is 12 MB.")
 
+    image_path = f"{session_id}/{test_type}/{utc_now_iso().replace(':', '-')}.jpg"
+    image_base64_fallback = None
+    try:
+        supabase.storage.from_(ANALYSIS_STORAGE_BUCKET).upload(
+            image_path,
+            img_bytes,
+            {
+                "content-type": image.content_type or "image/jpeg",
+                "upsert": "false",
+            },
+        )
+    except Exception:
+        # Compatibility fallback while the private Storage bucket is being deployed.
+        image_path = None
+        image_base64_fallback = base64.b64encode(img_bytes).decode("utf-8")
+
     job = {
         "session_id": session_id,
+        "session_uuid": session_id,
+        "user_id": session.get("user_id"),
+        "idempotency_key": f"{session_id}:{test_type}",
         "user_email": authoritative_email,
         "test_type": test_type,
         "status": "queued",
-        "image_base64": base64.b64encode(img_bytes).decode("utf-8"),
+        "image_path": image_path,
+        "image_base64": image_base64_fallback,
+        "image_expires_at": (datetime.now(timezone.utc) + timedelta(hours=6)).isoformat(),
         "intake_json": intake_data,
     }
 
@@ -2075,7 +2182,8 @@ async def submit_analysis(
         raise HTTPException(status_code=500, detail="Unable to queue the photo analysis.")
 
     job_id = resp.data[0]["id"]
-    background_tasks.add_task(process_analysis_job, job_id)
+    if ANALYSIS_INLINE_ENABLED:
+        background_tasks.add_task(process_analysis_job, job_id)
     return {"job_id": job_id, "status": "queued", "reused": False}
 
 
@@ -2119,7 +2227,8 @@ def job_status(
             "started_at": None,
             "error_message": None,
         }).eq("id", job_id).execute()
-        background_tasks.add_task(process_analysis_job, job_id)
+        if ANALYSIS_INLINE_ENABLED:
+            background_tasks.add_task(process_analysis_job, job_id)
         current_status = "queued"
 
     return {
@@ -2832,19 +2941,25 @@ def normalize_clinical_program_for_frontend(program_data: dict, report_data: dic
 
 
 
-def persist_corrective_program(user_email: str, screening_session_id: str, language: str, program_data: dict):
+def persist_corrective_program(
+    user_email: str,
+    screening_session_id: str,
+    language: str,
+    program_data: dict,
+    user_id: str | None = None,
+):
     """Create or update the durable program generated from one screening."""
     if not supabase:
         return {"saved": False, "program_id": str(screening_session_id), "reason": "supabase_not_configured"}
 
-    email = str(user_email or "anonymous").strip() or "anonymous"
+    email = str(user_email or "anonymous").strip().lower() or "anonymous"
     session_uuid = str(screening_session_id)
     lang = "en" if str(language).lower().startswith("en") else "fr"
 
     try:
         existing = (
             supabase.table("corrective_programs")
-            .select("id, program_version, status")
+            .select("id,program_version,status")
             .eq("screening_session_id", session_uuid)
             .limit(1)
             .execute()
@@ -2852,6 +2967,7 @@ def persist_corrective_program(user_email: str, screening_session_id: str, langu
         rows = getattr(existing, "data", None) or []
 
         payload = {
+            "user_id": user_id,
             "user_email": email,
             "screening_session_id": session_uuid,
             "language": lang,
@@ -2864,60 +2980,58 @@ def persist_corrective_program(user_email: str, screening_session_id: str, langu
             program_id = str(rows[0]["id"])
             supabase.table("corrective_programs").update(payload).eq("id", program_id).execute()
         else:
-            # Number programs per user in creation order.
-            versions = (
-                supabase.table("corrective_programs")
-                .select("program_version")
-                .eq("user_email", email)
-                .order("program_version", desc=True)
-                .limit(1)
-                .execute()
-            )
-            version_rows = getattr(versions, "data", None) or []
-            next_version = int(version_rows[0].get("program_version") or 0) + 1 if version_rows else 1
-            payload["program_version"] = next_version
-
+            versions = supabase.table("corrective_programs").select("program_version")
+            versions = versions.eq("user_id", user_id) if user_id else versions.eq("user_email", email)
+            version_response = versions.order("program_version", desc=True).limit(1).execute()
+            version_rows = getattr(version_response, "data", None) or []
+            payload["program_version"] = int(version_rows[0].get("program_version") or 0) + 1 if version_rows else 1
             inserted = supabase.table("corrective_programs").insert(payload).execute()
             inserted_rows = getattr(inserted, "data", None) or []
             if not inserted_rows:
                 raise RuntimeError("corrective_program_insert_returned_no_row")
             program_id = str(inserted_rows[0]["id"])
 
-        # A newly generated screening program becomes the active one.
         try:
-            supabase.table("corrective_programs").update({"status": "superseded"}) \
-                .eq("user_email", email).eq("status", "active").neq("id", program_id).execute()
+            supersede = supabase.table("corrective_programs").update({"status": "superseded"})
+            supersede = supersede.eq("user_id", user_id) if user_id else supersede.eq("user_email", email)
+            supersede.eq("status", "active").neq("id", program_id).execute()
         except Exception:
             pass
 
         return {"saved": True, "program_id": program_id}
-    except Exception as e:
-        return {"saved": False, "program_id": str(screening_session_id), "reason": str(e)}
+    except Exception as exc:
+        return {"saved": False, "program_id": str(screening_session_id), "reason": str(exc)}
 
 
-def resolve_corrective_program(program_id: str, user_email: str | None = None):
-    """Resolve either the durable program UUID or its source screening UUID."""
+def resolve_corrective_program(
+    program_id: str,
+    user_id: str | None = None,
+    user_email: str | None = None,
+):
+    """Resolve a durable program UUID or source screening UUID by owner UUID."""
     if not supabase or not program_id:
         return None
 
     pid = str(program_id)
-    query = supabase.table("corrective_programs").select("*")
-    if user_email:
-        query = query.eq("user_email", str(user_email).strip())
+
+    def owned_query():
+        query = supabase.table("corrective_programs").select("*")
+        if user_id:
+            query = query.eq("user_id", user_id)
+        elif user_email:
+            query = query.eq("user_email", str(user_email).strip().lower())
+        return query
 
     try:
-        by_id = query.eq("id", pid).limit(1).execute()
+        by_id = owned_query().eq("id", pid).limit(1).execute()
         rows = getattr(by_id, "data", None) or []
         if rows:
             return rows[0]
     except Exception:
         pass
 
-    query = supabase.table("corrective_programs").select("*")
-    if user_email:
-        query = query.eq("user_email", str(user_email).strip())
     try:
-        by_screening = query.eq("screening_session_id", pid).limit(1).execute()
+        by_screening = owned_query().eq("screening_session_id", pid).limit(1).execute()
         rows = getattr(by_screening, "data", None) or []
         return rows[0] if rows else None
     except Exception:
@@ -2925,21 +3039,23 @@ def resolve_corrective_program(program_id: str, user_email: str | None = None):
 
 
 @app.get("/programs/{user_email}")
-def programs_for_user(user_email: str, limit: int = 20):
+def programs_for_user(user_email: str, limit: int = 20, authorization: str = Header(None)):
     """Return durable program history, newest first, without the large JSON payload."""
     try:
         if not supabase:
-            return {"user_email": user_email, "items": [], "error": "supabase_not_configured"}
+            raise HTTPException(status_code=503, detail="Supabase is not configured on server.")
+        user = authenticated_user(supabase, authorization)
+        normalized_email = ensure_email_matches(user["email"], user_email)
         res = (
             supabase.table("corrective_programs")
             .select("id, user_email, screening_session_id, program_version, language, status, generated_at, completed_at, created_at")
-            .eq("user_email", user_email)
+            .eq("user_id", user["id"])
             .order("generated_at", desc=True)
             .limit(max(1, min(int(limit), 100)))
             .execute()
         )
         rows = getattr(res, "data", None) or []
-        return {"user_email": user_email, "count": len(rows), "items": rows}
+        return {"user_email": normalized_email, "count": len(rows), "items": rows}
     except Exception as e:
         return {"user_email": user_email, "items": [], "error": str(e)}
 
@@ -3015,6 +3131,7 @@ def save_program_progress(
 
     payload = {
         "program_id": durable_id,
+        "user_id": user["id"],
         "user_email": user["email"],
         "week_number": int(week_number),
         "day_number": int(day_number),
@@ -3101,6 +3218,22 @@ def program(
     5) Return legacy-compatible keys: report, program, prescription.
     """
     lang = "en" if str(lang).lower().startswith("en") else "fr"
+    program_user = authenticated_user(supabase, authorization)
+    program_session = require_owned_session(program_user, session_id)
+    if str(program_session.get("user_id") or "") != program_user["id"]:
+        raise HTTPException(
+            status_code=403,
+            detail="Only the client who owns this screening can access its corrective program.",
+        )
+    entitlement = effective_entitlement(supabase, program_user["id"])
+    if not (entitlement.get("program_access") and entitlement.get("can_generate_program")):
+        raise HTTPException(
+            status_code=402,
+            detail={
+                "code": "PROGRAM_ACCESS_REQUIRED",
+                "message": "An active FlexiLab plan with corrective-program access is required.",
+            },
+        )
 
     try:
         report_data = report(
@@ -3198,6 +3331,7 @@ def program(
     user_email = get_session_user_email(session_id, report_data)
     durable_program = persist_corrective_program(
         user_email=user_email,
+        user_id=program_user["id"],
         screening_session_id=session_id,
         language=lang,
         program_data=clinical_program if isinstance(clinical_program, dict) else {},
@@ -3239,7 +3373,7 @@ def program(
 
 
 @app.get("/history/{user_email}")
-def history(user_email: str, limit: int = 20):
+def history(user_email: str, limit: int = 20, authorization: str = Header(None)):
     """
     Return one real history item per screening session.
 
@@ -3249,12 +3383,14 @@ def history(user_email: str, limit: int = 20):
     """
     try:
         if not supabase:
-            return {"user_email": user_email, "items": [], "error": "supabase_not_configured"}
+            raise HTTPException(status_code=503, detail="Supabase is not configured on server.")
+        user = authenticated_user(supabase, authorization)
+        normalized_email = ensure_email_matches(user["email"], user_email)
 
         s_resp = (
             supabase.table("sessions")
             .select("id, user_email, created_at, composite_score, status")
-            .eq("user_email", user_email)
+            .eq("user_id", user["id"] )
             .order("created_at", desc=True)
             .limit(max(limit * 4, 50))
             .execute()
@@ -3265,7 +3401,7 @@ def history(user_email: str, limit: int = 20):
         h_resp = (
             supabase.table("screening_history")
             .select("id, user_email, session_id, created_at, flexilab_score, risk_level")
-            .eq("user_email", user_email)
+            .eq("user_email", normalized_email)
             .order("created_at", desc=False)
             .limit(max(limit * 10, 200))
             .execute()
@@ -3295,7 +3431,7 @@ def history(user_email: str, limit: int = 20):
 
             rows.append({
                 "id": sid,
-                "user_email": session.get("user_email") or snap.get("user_email") or user_email,
+                "user_email": session.get("user_email") or snap.get("user_email") or normalized_email,
                 "session_id": sid,
                 "created_at": created_at,
                 "flexilab_score": score,
@@ -3306,19 +3442,19 @@ def history(user_email: str, limit: int = 20):
         rows.sort(key=lambda x: str(x.get("created_at") or ""), reverse=True)
         rows = rows[:limit]
         return {
-            "user_email": user_email,
+            "user_email": normalized_email,
             "count": len(rows),
             "items": rows,
             "source": "sessions_with_legacy_snapshot_fallback",
         }
     except Exception as e:
-        return {"user_email": user_email, "items": [], "error": str(e)}
+        return {"user_email": normalized_email, "items": [], "error": str(e)}
 
 
 @app.get("/history/{user_email}/latest")
-def latest_history(user_email: str):
+def latest_history(user_email: str, authorization: str = Header(None)):
     """Return the latest two items using the same compatibility source."""
-    payload = history(user_email=user_email, limit=2)
+    payload = history(user_email=user_email, limit=2, authorization=authorization)
     rows = payload.get("items") or []
     latest = rows[0] if len(rows) >= 1 else None
     previous = rows[1] if len(rows) >= 2 else None

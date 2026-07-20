@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from typing import Any, Optional
 
 from fastapi import HTTPException
@@ -154,3 +155,107 @@ def release_credit(
         return bool(response.data)
     except Exception:
         return False
+
+
+def _parse_utc(value: Any) -> Optional[datetime]:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except Exception:
+        return None
+
+
+def effective_entitlement(supabase_client, user_id: str) -> dict[str, Any]:
+    """Return the effective personal + organization entitlement for one Auth UUID.
+
+    Personal Stripe/admin access is never overwritten by a corporate membership.
+    Access flags are combined only while their source is active and unexpired.
+    """
+    now = datetime.now(timezone.utc)
+    base: dict[str, Any] = {
+        "plan_code": "free",
+        "source": "free_signup",
+        "status": "active",
+        "program_access": False,
+        "workout_access": False,
+        "history_access": True,
+        "report_access": True,
+        "can_generate_program": False,
+        "valid_until": None,
+        "organization_sources": [],
+    }
+
+    personal_response = (
+        supabase_client.table("entitlements")
+        .select("*")
+        .eq("user_id", user_id)
+        .limit(1)
+        .execute()
+    )
+    personal = personal_response.data[0] if personal_response.data else None
+    if personal:
+        personal_expiry = _parse_utc(personal.get("valid_until"))
+        personal_active = (
+            str(personal.get("status") or "active") in {"active", "grace"}
+            and (personal_expiry is None or personal_expiry >= now)
+        )
+        base.update(personal)
+        if not personal_active:
+            base.update({
+                "program_access": False,
+                "workout_access": False,
+                "can_generate_program": False,
+            })
+
+    try:
+        organization_response = (
+            supabase_client.table("organization_entitlements")
+            .select("organization_id,plan_code,status,program_access,workout_access,history_access,report_access,valid_from,valid_until")
+            .eq("user_id", user_id)
+            .in_("status", ["active", "grace"])
+            .execute()
+        )
+    except Exception:
+        organization_response = None
+
+    organization_sources: list[dict[str, Any]] = []
+    valid_until_values: list[Optional[datetime]] = []
+    base_expiry = _parse_utc(base.get("valid_until"))
+    if base.get("program_access") or base.get("workout_access"):
+        valid_until_values.append(base_expiry)
+
+    for row in (organization_response.data if organization_response else []) or []:
+        starts = _parse_utc(row.get("valid_from"))
+        expiry = _parse_utc(row.get("valid_until"))
+        if starts and starts > now:
+            continue
+        if expiry and expiry < now:
+            continue
+        organization_sources.append({
+            "organization_id": row.get("organization_id"),
+            "plan_code": row.get("plan_code"),
+            "valid_until": row.get("valid_until"),
+        })
+        base["program_access"] = bool(base.get("program_access")) or bool(row.get("program_access"))
+        base["workout_access"] = bool(base.get("workout_access")) or bool(row.get("workout_access"))
+        base["history_access"] = bool(base.get("history_access", True)) or bool(row.get("history_access", True))
+        base["report_access"] = bool(base.get("report_access", True)) or bool(row.get("report_access", True))
+        base["can_generate_program"] = bool(base.get("can_generate_program")) or bool(row.get("program_access"))
+        valid_until_values.append(expiry)
+
+    if organization_sources:
+        if not personal or str(base.get("plan_code") or "free") == "free":
+            base["plan_code"] = organization_sources[0].get("plan_code") or "organization"
+            base["source"] = "organization"
+        base["status"] = "active"
+
+    # Any active source without an expiry means effective access has no fixed end.
+    if valid_until_values:
+        if any(value is None for value in valid_until_values):
+            base["valid_until"] = None
+        else:
+            base["valid_until"] = max(value for value in valid_until_values if value).isoformat()
+
+    base["organization_sources"] = organization_sources
+    return base

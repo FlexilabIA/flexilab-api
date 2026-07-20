@@ -1,127 +1,85 @@
-import time
-from datetime import datetime
-import base64
-import numpy as np
-import cv2
+"""FlexiLab analysis worker.
 
-from app import (
-    supabase,
-    analyze_posture,
-    analyze_shoulder,
-    analyze_squat,
-    model
+Run as a separate Render Background Worker:
+    python worker.py
+
+For production, set FLEXILAB_INLINE_ANALYSIS=false on the web service and run one
+or more workers. Database claims are atomic, so multiple workers can safely poll
+the same queue without processing one job twice.
+"""
+from __future__ import annotations
+
+import os
+import time
+from datetime import datetime, timezone
+
+from app import ANALYSIS_STORAGE_BUCKET, process_analysis_job, supabase
+
+POLL_SECONDS = max(1, int(os.environ.get("ANALYSIS_WORKER_POLL_SECONDS", "2")))
+CLEANUP_INTERVAL_SECONDS = max(
+    60,
+    int(os.environ.get("ANALYSIS_WORKER_CLEANUP_SECONDS", "300")),
 )
 
-print("FlexiLab worker started...")
+if supabase is None:
+    raise RuntimeError("Supabase is not configured")
 
+
+def cleanup_expired_images() -> None:
+    now = datetime.now(timezone.utc).isoformat()
+    expired = (
+        supabase.table("analysis_jobs")
+        .select("id,status,image_path")
+        .lt("image_expires_at", now)
+        .limit(100)
+        .execute()
+    )
+    for row in expired.data or []:
+        path = str(row.get("image_path") or "").strip()
+        storage_removed = not path
+        if path:
+            try:
+                supabase.storage.from_(ANALYSIS_STORAGE_BUCKET).remove([path])
+                storage_removed = True
+            except Exception:
+                # Leave the path and expiry in place so a later cleanup pass can retry.
+                storage_removed = False
+        status = str(row.get("status") or "").lower()
+        changes: dict[str, object] = {
+            "image_base64": None,
+        }
+        if storage_removed:
+            changes.update({"image_path": None, "image_expires_at": None})
+        if status in {"queued", "processing"}:
+            changes.update({
+                "status": "failed",
+                "completed_at": now,
+                "error_message": "Queued image expired before analysis completed.",
+            })
+        supabase.table("analysis_jobs").update(changes).eq("id", row["id"]).execute()
+
+
+print("FlexiLab analysis worker started", flush=True)
+last_cleanup = 0.0
 while True:
-
     try:
+        current = time.monotonic()
+        if current - last_cleanup >= CLEANUP_INTERVAL_SECONDS:
+            cleanup_expired_images()
+            last_cleanup = current
 
         jobs = (
             supabase.table("analysis_jobs")
-            .select("*")
+            .select("id")
             .eq("status", "queued")
             .order("created_at")
             .limit(1)
             .execute()
         )
-
-        if not jobs.data:
-            time.sleep(2)
-            continue
-
-        job = jobs.data[0]
-        job_id = job["id"]
-
-        print(f"Processing job {job_id}")
-
-        supabase.table("analysis_jobs").update(
-            {
-                "status": "processing",
-                "started_at": datetime.utcnow().isoformat()
-            }
-        ).eq("id", job_id).execute()
-
-        img_bytes = base64.b64decode(job["image_base64"])
-
-        nparr = np.frombuffer(img_bytes, np.uint8)
-        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-
-        if img is None:
-            supabase.table("analysis_jobs").update(
-                {
-                    "status": "failed",
-                    "error_message": "Invalid image"
-                }
-            ).eq("id", job_id).execute()
-            continue
-
-        # Resize large images to avoid memory crashes
-        h, w = img.shape[:2]
-        max_side = 480
-        scale = max_side / max(h, w)
-
-        if scale < 1.0:
-            img = cv2.resize(
-                img,
-                (int(w * scale), int(h * scale)),
-                interpolation=cv2.INTER_AREA
-            )
-
-        res = model(img, conf=0.5, classes=[0])
-
-        if res[0].keypoints is None or len(res[0].keypoints.xy) == 0:
-            supabase.table("analysis_jobs").update(
-                {
-                    "status": "failed",
-                    "error_message": "No person detected"
-                }
-            ).eq("id", job_id).execute()
-            continue
-
-        boxes = res[0].boxes.xyxy.cpu().numpy()
-        areas = [(b[2] - b[0]) * (b[3] - b[1]) for b in boxes]
-        main_idx = int(np.argmax(areas))
-
-        xy = res[0].keypoints.xy[main_idx].cpu().numpy()
-        conf = res[0].keypoints.conf[main_idx].cpu().numpy()
-
-        test_type = job["test_type"]
-
-        if test_type == "posture_side":
-            result = analyze_posture(xy, conf)
-
-        elif test_type == "shoulder_right":
-            result = analyze_shoulder(xy, conf, "RIGHT")
-
-        elif test_type == "shoulder_left":
-            result = analyze_shoulder(xy, conf, "LEFT")
-
-        elif test_type == "squat":
-            result = analyze_squat(xy, conf)
-
+        if jobs.data:
+            process_analysis_job(str(jobs.data[0]["id"]))
         else:
-            supabase.table("analysis_jobs").update(
-                {
-                    "status": "failed",
-                    "error_message": "Invalid test_type"
-                }
-            ).eq("id", job_id).execute()
-            continue
-
-        supabase.table("analysis_jobs").update(
-            {
-                "status": "completed",
-                "completed_at": datetime.utcnow().isoformat(),
-                "result_json": result
-            }
-        ).eq("id", job_id).execute()
-
-        print(f"Completed job {job_id}")
-
-    except Exception as e:
-
-        print("Worker error:", str(e))
-
-    time.sleep(1)
+            time.sleep(POLL_SECONDS)
+    except Exception as exc:
+        print(f"Analysis worker error: {exc}", flush=True)
+        time.sleep(POLL_SECONDS)

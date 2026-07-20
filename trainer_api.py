@@ -4,7 +4,7 @@ import os
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel, Field
 
 
@@ -27,6 +27,15 @@ class TrainerClientCreate(BaseModel):
 class TrainerClientUpdate(BaseModel):
     full_name: Optional[str] = Field(default=None, min_length=2, max_length=120)
     status: Optional[str] = None
+
+
+class TrainerNoteCreate(BaseModel):
+    note: str = Field(min_length=1, max_length=5000)
+    session_id: Optional[str] = None
+
+
+class TrainerInviteResend(BaseModel):
+    language: str = Field(default="en", max_length=2)
 
 
 def _iso_now() -> str:
@@ -119,20 +128,36 @@ def create_trainer_router(supabase_client) -> APIRouter:
             raise HTTPException(status_code=404, detail="Client not found.")
         return response.data[0]
 
-    def latest_client_session(client_user_id: Optional[str], trainer_id: str) -> Optional[dict[str, Any]]:
-        if not client_user_id:
-            return None
+    def latest_client_session(
+        link_id: str,
+        client_user_id: Optional[str],
+        trainer_id: str,
+    ) -> Optional[dict[str, Any]]:
         query = (
             supabase_client.table("sessions")
             .select("id,created_at,status,composite_score")
             .eq("trainer_id", trainer_id)
+            .eq("trainer_client_link_id", link_id)
             .order("created_at", desc=True)
             .limit(1)
         )
-        if client_user_id:
-            query = query.eq("user_id", client_user_id)
         response = query.execute()
-        return response.data[0] if response.data else None
+        if response.data:
+            return response.data[0]
+
+        # Compatibility for old active-client sessions created before link IDs were stored.
+        if client_user_id:
+            fallback = (
+                supabase_client.table("sessions")
+                .select("id,created_at,status,composite_score")
+                .eq("trainer_id", trainer_id)
+                .eq("user_id", client_user_id)
+                .order("created_at", desc=True)
+                .limit(1)
+                .execute()
+            )
+            return fallback.data[0] if fallback.data else None
+        return None
 
     @router.post("/trainer/register")
     def register_trainer(
@@ -203,11 +228,11 @@ def create_trainer_router(supabase_client) -> APIRouter:
         # Screenings created before activation may have user_id=NULL; attach them
         # to the newly authenticated client account using the secure link ID.
         try:
-            pending_links = (
+            matching_links = (
                 supabase_client.table("trainer_clients")
-                .select("id")
+                .select("id,status,client_user_id")
                 .ilike("invited_email", user["email"])
-                .eq("status", "pending")
+                .in_("status", ["pending", "active"])
                 .execute()
             )
 
@@ -216,17 +241,43 @@ def create_trainer_router(supabase_client) -> APIRouter:
                 "status": "active",
                 "accepted_at": _iso_now(),
                 "updated_at": _iso_now(),
-            }).ilike("invited_email", user["email"]).eq("status", "pending").execute()
+            }).ilike("invited_email", user["email"]).in_("status", ["pending", "active"]).execute()
 
-            for link in pending_links.data or []:
+            for link in matching_links.data or []:
                 link_id = str(link.get("id") or "").strip()
                 if not link_id:
                     continue
+                linked_sessions = (
+                    supabase_client.table("sessions")
+                    .select("id")
+                    .eq("trainer_client_link_id", link_id)
+                    .execute()
+                )
+                session_ids = [str(row.get("id")) for row in (linked_sessions.data or []) if row.get("id")]
                 supabase_client.table("sessions").update({
                     "user_id": user["id"],
                     "user_email": user["email"],
-                }).eq("trainer_client_link_id", link_id).is_("user_id", "null").execute()
+                }).eq("trainer_client_link_id", link_id).execute()
+
+                if session_ids:
+                    supabase_client.table("screenings").update({
+                        "user_id": user["id"],
+                        "user_email": user["email"],
+                    }).in_("session_id", session_ids).execute()
+                    supabase_client.table("analysis_jobs").update({
+                        "user_id": user["id"],
+                        "user_email": user["email"],
+                    }).in_("session_id", session_ids).execute()
+                    supabase_client.table("screening_history").update({
+                        "user_id": user["id"],
+                        "user_email": user["email"],
+                    }).in_("session_id", session_ids).execute()
+                    supabase_client.table("corrective_programs").update({
+                        "user_id": user["id"],
+                        "user_email": user["email"],
+                    }).in_("screening_session_id", session_ids).execute()
         except Exception:
+            # Activation should still succeed if one legacy compatibility table is absent.
             pass
 
         profile = trainer_profile(user["id"])
@@ -273,21 +324,46 @@ def create_trainer_router(supabase_client) -> APIRouter:
         }
 
     @router.get("/trainer/clients")
-    def list_clients(user: dict[str, str] = Depends(require_user)):
+    def list_clients(
+        page: int = Query(default=1, ge=1),
+        page_size: int = Query(default=50, ge=1, le=100),
+        q: Optional[str] = None,
+        user: dict[str, str] = Depends(require_user),
+    ):
         require_trainer(user)
-        response = (
+        safe_page = max(1, int(page))
+        safe_size = max(1, min(int(page_size), 100))
+        start = (safe_page - 1) * safe_size
+        query = (
             supabase_client.table("trainer_clients")
-            .select("*")
+            .select("*", count="exact")
             .eq("trainer_id", user["id"])
             .neq("status", "archived")
-            .order("created_at", desc=True)
+        )
+        search = str(q or "").strip().replace(",", " ")[:120]
+        if search:
+            query = query.or_(
+                f"client_name.ilike.%{search}%,invited_email.ilike.%{search}%"
+            )
+        response = (
+            query.order("created_at", desc=True)
+            .range(start, start + safe_size - 1)
             .execute()
         )
         result = []
         for row in response.data or []:
-            latest = latest_client_session(row.get("client_user_id"), user["id"])
+            latest = latest_client_session(
+                str(row.get("id") or ""),
+                row.get("client_user_id"),
+                user["id"],
+            )
             result.append({**row, "latest_screening": latest})
-        return {"clients": result}
+        return {
+            "clients": result,
+            "page": safe_page,
+            "page_size": safe_size,
+            "total": int(getattr(response, "count", len(result)) or len(result)),
+        }
 
     @router.post("/trainer/clients")
     def create_client(payload: TrainerClientCreate, user: dict[str, str] = Depends(require_user)):
@@ -366,7 +442,20 @@ def create_trainer_router(supabase_client) -> APIRouter:
             .order("created_at", desc=True)
             .execute()
         )
-        return {"client": link, "screenings": sessions.data or []}
+        notes = (
+            supabase_client.table("trainer_client_notes")
+            .select("id,session_id,note,created_at,updated_at")
+            .eq("trainer_id", user["id"])
+            .eq("trainer_client_link_id", link_id)
+            .order("created_at", desc=True)
+            .limit(100)
+            .execute()
+        )
+        return {
+            "client": link,
+            "screenings": sessions.data or [],
+            "notes": notes.data or [],
+        }
 
     @router.patch("/trainer/clients/{link_id}")
     def update_client(link_id: str, payload: TrainerClientUpdate, user: dict[str, str] = Depends(require_user)):
@@ -390,6 +479,93 @@ def create_trainer_router(supabase_client) -> APIRouter:
             .execute()
         )
         return {"client": response.data[0] if response.data else None}
+
+
+    @router.get("/trainer/clients/{link_id}/screenings/{session_id}")
+    def get_client_screening(
+        link_id: str,
+        session_id: str,
+        user: dict[str, str] = Depends(require_user),
+    ):
+        require_trainer(user)
+        link = client_link(user["id"], link_id)
+        response = (
+            supabase_client.table("sessions")
+            .select("id,created_at,status,composite_score,user_id,user_email,trainer_id,performed_by_user_id,trainer_client_link_id")
+            .eq("id", session_id)
+            .eq("trainer_id", user["id"])
+            .eq("trainer_client_link_id", link_id)
+            .limit(1)
+            .execute()
+        )
+        if not response.data:
+            raise HTTPException(
+                status_code=404,
+                detail="This screening is not attached to the selected Trainer-client profile.",
+            )
+        return {"client": link, "screening": response.data[0]}
+
+    @router.post("/trainer/clients/{link_id}/notes")
+    def add_client_note(
+        link_id: str,
+        payload: TrainerNoteCreate,
+        user: dict[str, str] = Depends(require_user),
+    ):
+        require_trainer(user)
+        client_link(user["id"], link_id)
+        if payload.session_id:
+            session = (
+                supabase_client.table("sessions")
+                .select("id")
+                .eq("id", payload.session_id)
+                .eq("trainer_id", user["id"])
+                .eq("trainer_client_link_id", link_id)
+                .limit(1)
+                .execute()
+            )
+            if not session.data:
+                raise HTTPException(status_code=404, detail="Screening not found for this client.")
+        result = supabase_client.table("trainer_client_notes").insert({
+            "trainer_id": user["id"],
+            "trainer_client_link_id": link_id,
+            "session_id": payload.session_id,
+            "note": payload.note.strip(),
+            "updated_at": _iso_now(),
+        }).execute()
+        return {"note": (result.data or [None])[0]}
+
+    @router.post("/trainer/clients/{link_id}/resend-invite")
+    def resend_client_invite(
+        link_id: str,
+        payload: TrainerInviteResend,
+        user: dict[str, str] = Depends(require_user),
+    ):
+        require_trainer(user)
+        link = client_link(user["id"], link_id)
+        if link.get("status") not in {"pending", "active"}:
+            raise HTTPException(status_code=409, detail="This invitation cannot be resent.")
+        email = str(link.get("invited_email") or "").strip().lower()
+        try:
+            invited = supabase_client.auth.admin.invite_user_by_email(
+                email,
+                options={
+                    "redirect_to": f"{FRONTEND_URL}/reset-password",
+                    "data": {
+                        "full_name": link.get("client_name"),
+                        "language": "fr" if payload.language == "fr" else "en",
+                    },
+                },
+            )
+            invited_user = getattr(invited, "user", None)
+            invited_user_id = str(getattr(invited_user, "id", "") or "") or None
+            if invited_user_id and not link.get("client_user_id"):
+                supabase_client.table("trainer_clients").update({
+                    "client_user_id": invited_user_id,
+                    "updated_at": _iso_now(),
+                }).eq("id", link_id).eq("trainer_id", user["id"]).execute()
+            return {"sent": True, "email": email}
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail=f"Unable to resend invitation: {exc}")
 
 
     @router.get("/trainer/self-screenings")
