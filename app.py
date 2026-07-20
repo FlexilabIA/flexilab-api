@@ -1685,6 +1685,36 @@ def finalize_session(
     }
 
 
+
+def detect_pose_with_fallback(img, test_type):
+    """
+    Run YOLO pose with a strict first pass and controlled lower-confidence
+    fallbacks. This reduces false 'No person detected' failures while keeping
+    the strict result whenever it succeeds.
+    """
+    is_aslr = str(test_type).startswith("aslr")
+    thresholds = [0.20, 0.14, 0.10] if is_aslr else [0.50, 0.35, 0.25]
+
+    for threshold in thresholds:
+        prediction = model(
+            img,
+            conf=threshold,
+            classes=[0],
+            verbose=False,
+        )
+        if (
+            prediction
+            and prediction[0].keypoints is not None
+            and len(prediction[0].keypoints.xy) > 0
+        ):
+            return prediction, threshold
+
+    raise ValueError(
+        "No person detected. Keep the full body visible, improve lighting, "
+        "and avoid cropping the head or feet."
+    )
+
+
 @app.post("/analyze")
 async def analyze(
     image: UploadFile = File(...),
@@ -1716,10 +1746,10 @@ async def analyze(
             interpolation=cv2.INTER_AREA
         )
 
-    yolo_conf = 0.20 if str(test_type).startswith("aslr") else 0.50
-    res = model(img, conf=yolo_conf, classes=[0])
-    if res[0].keypoints is None or len(res[0].keypoints.xy) == 0:
-        return {"error": "No person detected"}
+    try:
+        res, detection_threshold = detect_pose_with_fallback(img, test_type)
+    except ValueError as exc:
+        return {"error": str(exc)}
 
     boxes = res[0].boxes.xyxy.cpu().numpy()
     areas = [(b[2] - b[0]) * (b[3] - b[1]) for b in boxes]
@@ -1774,6 +1804,9 @@ async def analyze(
     elif test_type == "squat":
         row["squat_knee_angle_deg"] = result["metrics"].get("knee_angle")
         row["squat_trunk_lean_deg"] = result["metrics"].get("trunk_lean")
+
+    result.setdefault("metrics", {})["detection_confidence_threshold"] = detection_threshold
+    row["metrics"] = result["metrics"]
 
     supabase.table("screenings").insert(row).execute()
     supabase.table("sessions").update(session_update).eq("id", session_id).execute()
@@ -1844,11 +1877,7 @@ def run_yolo_analysis_from_bytes(img_bytes, test_type):
             interpolation=cv2.INTER_AREA
         )
 
-    yolo_conf = 0.20 if str(test_type).startswith("aslr") else 0.50
-    res = model(img, conf=yolo_conf, classes=[0])
-
-    if res[0].keypoints is None or len(res[0].keypoints.xy) == 0:
-        raise ValueError("No person detected")
+    res, detection_threshold = detect_pose_with_fallback(img, test_type)
 
     boxes = res[0].boxes.xyxy.cpu().numpy()
     areas = [(b[2] - b[0]) * (b[3] - b[1]) for b in boxes]
@@ -1884,6 +1913,7 @@ def run_yolo_analysis_from_bytes(img_bytes, test_type):
     else:
         raise ValueError("Invalid test_type")
 
+    result.setdefault("metrics", {})["detection_confidence_threshold"] = detection_threshold
     return result, session_update
 
 
@@ -1904,9 +1934,25 @@ def process_analysis_job(job_id: str):
             return
 
         job = resp.data[0]
+        job_status_value = str(job.get("status") or "").lower()
 
-        if job.get("status") == "completed":
+        if job_status_value == "completed":
             return
+
+        if job_status_value == "processing":
+            started_raw = job.get("started_at")
+            try:
+                started_at = datetime.fromisoformat(
+                    str(started_raw).replace("Z", "+00:00")
+                )
+            except Exception:
+                started_at = None
+
+            if (
+                started_at is not None
+                and (datetime.now(timezone.utc) - started_at).total_seconds() < 120
+            ):
+                return
 
         supabase.table("analysis_jobs").update({
             "status": "processing",
@@ -1971,41 +2017,74 @@ async def submit_analysis(
     test_type: str = Form(...),
     session_id: str = Form(...),
     intake_json: str = Form(None),
-    questionnaire_json: str = Form(None)
+    questionnaire_json: str = Form(None),
+    authorization: str = Header(None),
 ):
     if supabase is None:
-        return {"error": "Supabase is not configured on server."}
+        raise HTTPException(status_code=503, detail="Supabase is not configured on server.")
 
-    intake_data = parse_intake_payload(intake_json=intake_json, questionnaire_json=questionnaire_json)
+    user = authenticated_user(supabase, authorization)
+    session = require_owned_session(user, session_id)
+    authoritative_email = str(session.get("user_email") or user_email or "").strip().lower()
+
+    intake_data = parse_intake_payload(
+        intake_json=intake_json,
+        questionnaire_json=questionnaire_json,
+    )
     try_save_session_intake(session_id, intake_data)
 
+    existing_jobs = (
+        supabase.table("analysis_jobs")
+        .select("id,status,created_at")
+        .eq("session_id", session_id)
+        .eq("test_type", test_type)
+        .order("created_at", desc=True)
+        .limit(3)
+        .execute()
+    )
+    for existing in existing_jobs.data or []:
+        existing_status = str(existing.get("status") or "").lower()
+        if existing_status in {"queued", "processing", "completed"}:
+            return {
+                "job_id": existing.get("id"),
+                "status": existing_status,
+                "reused": True,
+            }
+
     img_bytes = await image.read()
+    if not img_bytes:
+        raise HTTPException(status_code=422, detail="The uploaded image is empty.")
+    if len(img_bytes) > 12 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="The uploaded image is too large. Maximum size is 12 MB.")
 
     job = {
         "session_id": session_id,
-        "user_email": user_email,
+        "user_email": authoritative_email,
         "test_type": test_type,
         "status": "queued",
         "image_base64": base64.b64encode(img_bytes).decode("utf-8"),
-        "intake_json": intake_data
+        "intake_json": intake_data,
     }
 
     resp = supabase.table("analysis_jobs").insert(job).execute()
+    if not resp.data:
+        raise HTTPException(status_code=500, detail="Unable to queue the photo analysis.")
+
     job_id = resp.data[0]["id"]
-
     background_tasks.add_task(process_analysis_job, job_id)
-
-    return {
-        "job_id": job_id,
-        "status": "queued"
-    }
+    return {"job_id": job_id, "status": "queued", "reused": False}
 
 
 @app.get("/job_status/{job_id}")
-def job_status(job_id: str, background_tasks: BackgroundTasks):
+def job_status(
+    job_id: str,
+    background_tasks: BackgroundTasks,
+    authorization: str = Header(None),
+):
     if supabase is None:
-        return {"error": "Supabase is not configured on server."}
+        raise HTTPException(status_code=503, detail="Supabase is not configured on server.")
 
+    user = authenticated_user(supabase, authorization)
     resp = (
         supabase.table("analysis_jobs")
         .select("*")
@@ -2013,26 +2092,43 @@ def job_status(job_id: str, background_tasks: BackgroundTasks):
         .limit(1)
         .execute()
     )
-
     if not resp.data:
-        return {"error": "Job not found"}
+        raise HTTPException(status_code=404, detail="Analysis job not found.")
 
     job = resp.data[0]
+    require_owned_session(user, str(job.get("session_id") or ""))
+    current_status = str(job.get("status") or "").lower()
+    should_restart = current_status == "queued"
 
-    if job.get("status") == "queued":
+    if current_status == "processing":
+        started_raw = job.get("started_at")
+        try:
+            started_at = datetime.fromisoformat(str(started_raw).replace("Z", "+00:00"))
+        except Exception:
+            started_at = None
+        if started_at is None or (datetime.now(timezone.utc) - started_at).total_seconds() >= 120:
+            should_restart = True
+
+    if should_restart:
+        supabase.table("analysis_jobs").update({
+            "status": "queued",
+            "started_at": None,
+            "error_message": None,
+        }).eq("id", job_id).execute()
         background_tasks.add_task(process_analysis_job, job_id)
+        current_status = "queued"
 
     return {
         "job_id": job.get("id"),
         "session_id": job.get("session_id"),
         "user_email": job.get("user_email"),
         "test_type": job.get("test_type"),
-        "status": job.get("status"),
+        "status": current_status,
         "result": job.get("result_json"),
         "error_message": job.get("error_message"),
         "created_at": job.get("created_at"),
         "started_at": job.get("started_at"),
-        "completed_at": job.get("completed_at")
+        "completed_at": job.get("completed_at"),
     }
 
 
