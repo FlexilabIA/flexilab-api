@@ -1476,7 +1476,6 @@ def start_session(
         )
 
     user = authenticated_user(supabase, authorization)
-    submitted_email = str(user_email or "").strip().lower()
 
     intake_data = parse_intake_payload(
         intake_json=intake_json,
@@ -1485,7 +1484,12 @@ def start_session(
 
     credit_owner_user_id = user["id"]
     session_owner_user_id = user["id"]
-    session_owner_email = ensure_email_matches(user["email"], submitted_email)
+
+    # The bearer token is the authoritative identity for self-assessments.
+    # Never trust a browser/localStorage email over the authenticated account.
+    # For Trainer-client assessments, the validated client link below replaces
+    # both the owner email and owner user ID.
+    session_owner_email = str(user["email"] or "").strip().lower()
     trainer_id = None
     trainer_link_id = None
 
