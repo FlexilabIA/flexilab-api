@@ -27,6 +27,9 @@ import math
 import os
 import json
 import base64
+import logging
+import time
+import uuid
 from datetime import datetime, timedelta, timezone
 # FlexiLab V2 backend architecture imports.
 # Old engines remain in the repository for rollback, but /program now uses:
@@ -167,7 +170,7 @@ except Exception as exc:
 
 app = FastAPI(
     title="FlexiLab Movement Intelligence API",
-    version="100.0",
+    version="101.0",
 )
 app.include_router(create_account_router(supabase))
 app.include_router(create_stripe_router(supabase))
@@ -198,13 +201,30 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type", "Accept", "Origin", "X-Requested-With"],
 )
 
+logger = logging.getLogger("flexilab.performance")
+
+@app.middleware("http")
+async def request_timing_middleware(request, call_next):
+    request_id = request.headers.get("x-request-id") or str(uuid.uuid4())
+    started = time.perf_counter()
+    try:
+        response = await call_next(request)
+    except Exception:
+        logger.exception("request_failed method=%s path=%s request_id=%s", request.method, request.url.path, request_id)
+        raise
+    duration_ms = round((time.perf_counter() - started) * 1000, 1)
+    response.headers["X-Request-ID"] = request_id
+    response.headers["Server-Timing"] = f"total;dur={duration_ms}"
+    logger.info("request method=%s path=%s status=%s duration_ms=%s request_id=%s", request.method, request.url.path, response.status_code, duration_ms, request_id)
+    return response
+
 
 
 @app.get("/health")
 def health():
     return {
         "ok": True,
-        "patch_version": "V100-operator-client-trainer-isolation",
+        "patch_version": "V101-production-performance",
         "exercise_library_mode": EXERCISE_LIBRARY_MODE,
         "exercise_library_path": EXERCISE_LIBRARY_PATH,
         "exercise_library_count": len(EXERCISE_LIBRARY or []),
@@ -217,7 +237,7 @@ def health():
 @app.get("/library_status")
 def library_status():
     return {
-        "patch_version": "V100-operator-client-trainer-isolation",
+        "patch_version": "V101-production-performance",
         "exercise_library_mode": EXERCISE_LIBRARY_MODE,
         "exercise_library_path": EXERCISE_LIBRARY_PATH,
         "exercise_library_count": len(EXERCISE_LIBRARY or []),
@@ -3036,6 +3056,129 @@ def resolve_corrective_program(
         return rows[0] if rows else None
     except Exception:
         return None
+
+
+
+def _latest_owned_session_for_user(user):
+    completed = (
+        supabase.table("sessions")
+        .select("id,status,created_at,composite_score")
+        .eq("user_id", user["id"])
+        .eq("status", "completed")
+        .order("created_at", desc=True)
+        .limit(1)
+        .execute()
+    )
+    return completed.data[0] if completed.data else None
+
+
+def _compact_program_summary(program_data, progress_rows):
+    program = (program_data or {}).get("program") if isinstance(program_data, dict) else None
+    if not isinstance(program, dict):
+        program = program_data if isinstance(program_data, dict) else {}
+    weeks = program.get("weeks") or []
+    completed = {
+        f"w{row.get('week_number')}-d{row.get('day_number')}"
+        for row in (progress_rows or []) if row.get("status") == "completed"
+    }
+    total = 0
+    next_session = None
+    for week in weeks:
+        for session in week.get("sessions") or []:
+            total += 1
+            rid = f"w{week.get('week')}-d{session.get('day')}"
+            if next_session is None and rid not in completed:
+                next_session = {
+                    "route_id": rid,
+                    "week": week.get("week"),
+                    "day": session.get("day"),
+                    "focus": session.get("focus"),
+                    "estimated_duration_minutes": session.get("estimated_duration_minutes") or 20,
+                }
+    return {
+        "total_sessions": total,
+        "completed_sessions": len(completed),
+        "progress_percent": round((len(completed) / total) * 100) if total else 0,
+        "next_session": next_session,
+        "program_summary": program.get("program_summary") or {},
+    }
+
+
+@app.get("/me/bootstrap")
+def me_bootstrap(lang: str = "en", authorization: str = Header(None)):
+    started = time.perf_counter()
+    user = authenticated_user(supabase, authorization)
+    entitlement = effective_entitlement(supabase, user["id"])
+    session = _latest_owned_session_for_user(user)
+    program_summary = None
+    if session:
+        program_res = (
+            supabase.table("corrective_programs")
+            .select("id,screening_session_id,program_data,generated_at,status")
+            .eq("user_id", user["id"])
+            .eq("screening_session_id", session["id"])
+            .order("generated_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+        row = program_res.data[0] if program_res.data else None
+        if row:
+            progress_res = (
+                supabase.table("program_session_progress")
+                .select("week_number,day_number,status")
+                .eq("program_id", row["id"])
+                .execute()
+            )
+            program_summary = _compact_program_summary(row.get("program_data"), progress_res.data or [])
+            program_summary["program_id"] = row.get("id")
+    return {
+        "account": {"id": user["id"], "email": user["email"]},
+        "account_mode": {"is_trainer": False, "mode": "client"},
+        "entitlements": entitlement,
+        "latest_session": session,
+        "dashboard": {
+            "score": session.get("composite_score") if session else None,
+            "created_at": session.get("created_at") if session else None,
+            "program": program_summary,
+        },
+        "server_ms": round((time.perf_counter() - started) * 1000, 1),
+    }
+
+
+@app.get("/me/program-overview")
+def me_program_overview(lang: str = "en", authorization: str = Header(None)):
+    total_started = time.perf_counter()
+    phases = {}
+    phase = time.perf_counter()
+    user = authenticated_user(supabase, authorization)
+    phases["auth"] = round((time.perf_counter() - phase) * 1000, 1)
+    phase = time.perf_counter()
+    entitlement = effective_entitlement(supabase, user["id"])
+    phases["entitlements"] = round((time.perf_counter() - phase) * 1000, 1)
+    if not entitlement.get("program_access"):
+        raise HTTPException(status_code=402, detail={"code": "PROGRAM_ACCESS_REQUIRED"})
+    phase = time.perf_counter()
+    session = _latest_owned_session_for_user(user)
+    phases["latest_session"] = round((time.perf_counter() - phase) * 1000, 1)
+    if not session:
+        raise HTTPException(status_code=404, detail={"code": "NO_COMPLETED_SCREENING"})
+    phase = time.perf_counter()
+    program_payload = program(session_id=session["id"], lang=lang, authorization=authorization)
+    phases["program"] = round((time.perf_counter() - phase) * 1000, 1)
+    program_id = program_payload.get("program_id") or session["id"]
+    phase = time.perf_counter()
+    progress_payload = get_program_progress(program_id=program_id, authorization=authorization)
+    phases["progress"] = round((time.perf_counter() - phase) * 1000, 1)
+    result = {
+        "access": {"program_access": True},
+        "latest_session": session,
+        "program": program_payload,
+        "progress": progress_payload,
+    }
+    phases["total"] = round((time.perf_counter() - total_started) * 1000, 1)
+    logger.info("program_overview user_id=%s phases=%s", user["id"], phases)
+    result["timings_ms"] = phases
+    return result
 
 
 @app.get("/programs/{user_email}")
