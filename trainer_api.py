@@ -248,7 +248,7 @@ def create_trainer_router(supabase_client) -> APIRouter:
         sessions_response = (
             supabase_client.table("sessions")
             .select("id,status,created_at")
-            .eq("trainer_id", user["id"])
+            .eq("performed_by_user_id", user["id"])
             .eq("status", "completed")
             .execute()
         )
@@ -390,6 +390,28 @@ def create_trainer_router(supabase_client) -> APIRouter:
             .execute()
         )
         return {"client": response.data[0] if response.data else None}
+
+
+    @router.get("/trainer/self-screenings")
+    def self_screenings(user: dict[str, str] = Depends(require_user)):
+        """
+        Return only assessments performed by the Trainer on their own account.
+
+        Client assessments remain available exclusively inside the corresponding
+        Trainer-client profile through /trainer/clients/{link_id}.
+        """
+        require_trainer(user)
+        response = (
+            supabase_client.table("sessions")
+            .select("id,created_at,status,composite_score,user_id,user_email")
+            .eq("user_id", user["id"])
+            .eq("performed_by_user_id", user["id"])
+            .is_("trainer_client_link_id", "null")
+            .order("created_at", desc=True)
+            .limit(10)
+            .execute()
+        )
+        return {"screenings": response.data or []}
 
     @router.get("/trainer/token-history")
     def token_history(user: dict[str, str] = Depends(require_user)):
