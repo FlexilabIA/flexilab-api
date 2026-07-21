@@ -3290,7 +3290,7 @@ def save_program_progress(
 
     existing = (
         supabase.table("program_session_progress")
-        .select("id, started_at")
+        .select("id, status, started_at, completed_at, completion_data")
         .eq("program_id", durable_id)
         .eq("week_number", int(week_number))
         .eq("day_number", int(day_number))
@@ -3299,14 +3299,23 @@ def save_program_progress(
     )
     rows = getattr(existing, "data", None) or []
     if rows:
-        if rows[0].get("started_at") and state == "completed":
-            payload.pop("started_at", None)
-        saved = (
-            supabase.table("program_session_progress")
-            .update(payload)
-            .eq("id", rows[0]["id"])
-            .execute()
-        )
+        existing_row = rows[0]
+
+        # A completed day is immutable within the same program. Users may open
+        # it again for review, but an automatic "in_progress" call must never
+        # downgrade completion. A new assessment receives a new program_id and
+        # therefore starts with a clean progress set.
+        if existing_row.get("status") == "completed" and state != "completed":
+            saved = existing
+        else:
+            if existing_row.get("started_at") and state == "completed":
+                payload.pop("started_at", None)
+            saved = (
+                supabase.table("program_session_progress")
+                .update(payload)
+                .eq("id", existing_row["id"])
+                .execute()
+            )
     else:
         saved = (
             supabase.table("program_session_progress")
