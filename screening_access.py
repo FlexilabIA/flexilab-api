@@ -1,7 +1,12 @@
 from datetime import datetime, timezone
 from typing import Any, Optional
 
+import httpx
+import logging
+
 from fastapi import HTTPException
+
+logger = logging.getLogger("flexilab.screening_access")
 
 
 def authenticated_user(
@@ -50,10 +55,34 @@ def authenticated_user(
         }
     except HTTPException:
         raise
-    except Exception:
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code in {401, 403}:
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid or expired authentication token.",
+            )
+        logger.exception("supabase_auth_http_error status=%s", exc.response.status_code)
         raise HTTPException(
-            status_code=401,
-            detail="Invalid or expired authentication token.",
+            status_code=503,
+            detail="Authentication service is temporarily unavailable.",
+        )
+    except (
+        httpx.ReadError,
+        httpx.ConnectError,
+        httpx.ConnectTimeout,
+        httpx.ReadTimeout,
+        httpx.PoolTimeout,
+    ):
+        logger.exception("supabase_auth_transport_error")
+        raise HTTPException(
+            status_code=503,
+            detail="Authentication service is temporarily unavailable.",
+        )
+    except Exception:
+        logger.exception("supabase_auth_unexpected_error")
+        raise HTTPException(
+            status_code=503,
+            detail="Authentication verification failed temporarily.",
         )
 
 
@@ -189,7 +218,34 @@ def release_credit(
                     or first.get("allowed")
                 )
         return bool(data)
+    except (
+        httpx.ReadError,
+        httpx.ConnectError,
+        httpx.ConnectTimeout,
+        httpx.ReadTimeout,
+        httpx.PoolTimeout,
+    ):
+        logger.exception(
+            "release_screening_credit_transport_error user_id=%s session_id=%s",
+            user_id,
+            session_id,
+        )
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "code": "SCREENING_CREDIT_SERVICE_UNAVAILABLE",
+                "message": (
+                    "The screening credit service is temporarily unavailable. "
+                    "No credit has been consumed."
+                ),
+            },
+        )
     except Exception:
+        logger.exception(
+            "release_screening_credit_failed user_id=%s session_id=%s",
+            user_id,
+            session_id,
+        )
         return False
 
 
