@@ -1532,20 +1532,21 @@ def screening_history(
 def _release_previous_unfinished_credit_reservations(
     credit_owner_user_id: str,
 ) -> dict:
-    """Release older unfinished screening reservations for one paying account.
+    """Release only genuine active reservations from screening_usage.
 
-    A user starting a new assessment is an explicit abandonment of older
-    unfinished attempts. Completed sessions are never touched.
+    Historical sessions with status=in_progress are not evidence of a reserved
+    credit and must never reduce availability. The screening_usage ledger is
+    the authoritative source.
     """
     released_session_ids = []
     failed_session_ids = []
 
     try:
         response = (
-            supabase.table("sessions")
-            .select("id,status,created_at")
-            .eq("credit_owner_user_id", credit_owner_user_id)
-            .eq("status", "in_progress")
+            supabase.table("screening_usage")
+            .select("id,session_id,usage_status,created_at")
+            .eq("user_id", credit_owner_user_id)
+            .eq("usage_status", "reserved")
             .order("created_at", desc=False)
             .execute()
         )
@@ -1553,7 +1554,7 @@ def _release_previous_unfinished_credit_reservations(
         response = None
 
     for row in (response.data if response else []) or []:
-        session_id = str(row.get("id") or "").strip()
+        session_id = str(row.get("session_id") or "").strip()
         if not session_id:
             continue
 
@@ -1569,10 +1570,8 @@ def _release_previous_unfinished_credit_reservations(
             try:
                 supabase.table("sessions").update({
                     "status": "abandoned",
-                }).eq("id", session_id).eq("status", "in_progress").execute()
+                }).eq("id", session_id).neq("status", "completed").execute()
             except Exception:
-                # The reservation is already released; status cleanup can be
-                # retried later without risking an extra credit deduction.
                 pass
         else:
             failed_session_ids.append(session_id)
@@ -1646,6 +1645,21 @@ def start_session(
     reservation_cleanup = _release_previous_unfinished_credit_reservations(
         credit_owner_user_id,
     )
+
+    if reservation_cleanup.get("failed_session_ids"):
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "SCREENING_RESERVATION_RELEASE_FAILED",
+                "message": (
+                    "Your previous unfinished screening is still reserving a "
+                    "credit. Please retry once; no credit has been consumed."
+                ),
+                "reserved_session_count": len(
+                    reservation_cleanup.get("failed_session_ids") or []
+                ),
+            },
+        )
 
     session_row = {
         "user_email": session_owner_email,
@@ -3222,21 +3236,19 @@ def _screening_credit_summary(user_id: str) -> dict:
                 if current_next is None or cycle_start < current_next:
                     next_future_cycle = cycle
 
-    # Credits can be reserved by unfinished sessions without being consumed.
-    # Home must show spendable credits, not only granted-minus-used.
+    # Only screening_usage rows with usage_status=reserved hold a credit.
+    # Historical sessions marked in_progress are not reservations.
     active_reservations = 0
     try:
-        reservation_sessions = (
-            supabase.table("sessions")
+        reservation_usage = (
+            supabase.table("screening_usage")
             .select("id")
-            .eq("credit_owner_user_id", user_id)
-            .eq("status", "in_progress")
+            .eq("user_id", user_id)
+            .eq("usage_status", "reserved")
             .execute()
         )
-        active_reservations = len(reservation_sessions.data or [])
+        active_reservations = len(reservation_usage.data or [])
     except Exception:
-        # Preserve availability rather than breaking Home if an older schema
-        # does not expose credit_owner_user_id.
         active_reservations = 0
 
     available_remaining = max(0, remaining - active_reservations)
