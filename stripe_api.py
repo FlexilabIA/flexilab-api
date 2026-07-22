@@ -394,31 +394,47 @@ def create_stripe_router(supabase_client) -> APIRouter:
         start: datetime,
         end: datetime,
     ) -> None:
-        supabase_client.table("trainer_profiles").upsert({
-            "user_id": user_id,
-            "status": "active",
-            "updated_at": _iso(_utc_now()),
-        }).execute()
+        # Trainer profiles are unique by user_id. Explicitly target that key so
+        # an existing Trainer profile does not abort Stripe fulfillment.
+        supabase_client.table("trainer_profiles").upsert(
+            {
+                "user_id": user_id,
+                "status": "active",
+                "updated_at": _iso(_utc_now()),
+            },
+            on_conflict="user_id",
+        ).execute()
 
+        # Idempotency: one token cycle per saved Stripe purchase.
         existing = (
             supabase_client.table("screening_credit_cycles")
-            .select("id")
+            .select("id,credits_granted,credits_used")
             .eq("subscription_id", subscription_id)
             .eq("source", plan_code)
             .limit(1)
             .execute()
         )
-        if not existing.data:
-            supabase_client.table("screening_credit_cycles").insert({
+        if existing.data:
+            return
+
+        cycle_response = (
+            supabase_client.table("screening_credit_cycles")
+            .insert({
                 "user_id": user_id,
                 "subscription_id": subscription_id,
                 "source": plan_code,
                 "cycle_start": _iso(start),
                 "cycle_end": _iso(end),
                 "grace_expires_at": _iso(end),
-                "credits_granted": 30,
+                "credits_granted": int(
+                    PLAN_CONFIG[plan_code].get("trainer_tokens", 30)
+                ),
                 "credits_used": 0,
-            }).execute()
+            })
+            .execute()
+        )
+        if not cycle_response.data:
+            raise RuntimeError("Unable to grant purchased Trainer tokens.")
 
     def grant_referral_reward(*, client_user_id: str, source_payment_id: str) -> None:
         """
@@ -806,6 +822,7 @@ def create_stripe_router(supabase_client) -> APIRouter:
                 and STRIPE_PRICE_MONTHLY
                 and STRIPE_PRICE_THREE_MONTH
                 and STRIPE_PRICE_ANNUAL
+                and STRIPE_PRICE_TRAINER_PACK
             ),
             "webhook_configured": bool(STRIPE_WEBHOOK_SECRET),
             "monthly_price_configured": bool(STRIPE_PRICE_MONTHLY),
@@ -909,6 +926,61 @@ def create_stripe_router(supabase_client) -> APIRouter:
             "checkout_url": checkout_session.url,
             "session_id": checkout_session.id,
             "plan_code": plan_code,
+        }
+
+
+    @router.post("/checkout/reconcile/{checkout_session_id}")
+    def reconcile_checkout_session(
+        checkout_session_id: str,
+        authorization: Optional[str] = Header(default=None),
+    ):
+        """Reconcile a paid Checkout session if webhook delivery was delayed."""
+        if not STRIPE_SECRET_KEY:
+            raise HTTPException(
+                status_code=503,
+                detail="Stripe is not configured on the server.",
+            )
+
+        user = require_user(authorization)
+
+        try:
+            checkout_session = stripe.checkout.Session.retrieve(
+                checkout_session_id
+            )
+        except stripe.StripeError as exc:
+            message = getattr(exc, "user_message", None) or str(exc)
+            raise HTTPException(
+                status_code=502,
+                detail=f"Unable to verify Stripe Checkout: {message}",
+            )
+
+        meta = _metadata(checkout_session)
+        checkout_user_id = meta.get("user_id") or str(
+            _object_value(checkout_session, "client_reference_id", "")
+        )
+        if checkout_user_id != user["id"]:
+            raise HTTPException(
+                status_code=403,
+                detail="This Stripe Checkout session belongs to another account.",
+            )
+
+        payment_status = str(
+            _object_value(checkout_session, "payment_status", "")
+        ).lower()
+        if payment_status not in {"paid", "no_payment_required"}:
+            raise HTTPException(
+                status_code=409,
+                detail="Stripe payment is not confirmed yet.",
+            )
+
+        process_checkout_completed(checkout_session)
+
+        return {
+            "ok": True,
+            "session_id": checkout_session_id,
+            "plan_code": meta.get("plan_code"),
+            "payment_status": payment_status,
+            "fulfilled": True,
         }
 
 
@@ -1099,6 +1171,7 @@ def create_stripe_router(supabase_client) -> APIRouter:
 
         handlers = {
             "checkout.session.completed": process_checkout_completed,
+            "checkout.session.async_payment_succeeded": process_checkout_completed,
             "invoice.paid": process_invoice_paid,
             "invoice.payment_failed": process_invoice_failed,
             "customer.subscription.updated": process_subscription_updated,
