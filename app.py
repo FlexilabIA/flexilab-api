@@ -3104,11 +3104,85 @@ def _compact_program_summary(program_data, progress_rows):
     }
 
 
+
+def _screening_credit_summary(user_id: str) -> dict:
+    """Return the live, non-expired screening-credit balance for one client.
+
+    This mirrors /me/entitlements so /me/bootstrap remains the single source
+    used by Home. It is read-only and does not reserve or consume a credit.
+    """
+    cycles_response = (
+        supabase.table("screening_credit_cycles")
+        .select(
+            "id,source,cycle_start,cycle_end,grace_expires_at,"
+            "credits_granted,credits_used"
+        )
+        .eq("user_id", user_id)
+        .order("created_at", desc=True)
+        .execute()
+    )
+
+    now = datetime.now(timezone.utc)
+    remaining = 0
+    active_cycle = None
+    next_future_cycle = None
+
+    def parse_utc(value):
+        if not value:
+            return None
+        try:
+            return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        except Exception:
+            return None
+
+    for cycle in cycles_response.data or []:
+        cycle_start = parse_utc(cycle.get("cycle_start"))
+        expiry = parse_utc(cycle.get("grace_expires_at") or cycle.get("cycle_end"))
+        available = max(
+            0,
+            int(cycle.get("credits_granted") or 0)
+            - int(cycle.get("credits_used") or 0),
+        )
+
+        if not cycle_start or available <= 0:
+            continue
+
+        if cycle_start <= now and (expiry is None or expiry >= now):
+            remaining += available
+            if active_cycle is None:
+                active_cycle = cycle
+        elif cycle_start > now:
+            if next_future_cycle is None:
+                next_future_cycle = cycle
+            else:
+                current_next = parse_utc(next_future_cycle.get("cycle_start"))
+                if current_next is None or cycle_start < current_next:
+                    next_future_cycle = cycle
+
+    return {
+        "screening_credits_remaining": remaining,
+        "screening_credit_expires_at": (
+            active_cycle.get("grace_expires_at") or active_cycle.get("cycle_end")
+            if active_cycle
+            else None
+        ),
+        "next_credit_cycle_at": (
+            next_future_cycle.get("cycle_start") if next_future_cycle else None
+        ),
+    }
+
+
 @app.get("/me/bootstrap")
 def me_bootstrap(lang: str = "en", authorization: str = Header(None)):
     started = time.perf_counter()
     user = authenticated_user(supabase, authorization)
     entitlement = effective_entitlement(supabase, user["id"])
+    # Home must receive the same live credit balance as /me/entitlements.
+    # Reading this value never reserves or consumes a screening credit.
+    entitlement = {
+        **entitlement,
+        **_screening_credit_summary(user["id"]),
+    }
     session = _latest_owned_session_for_user(user)
     program_summary = None
     if session:
