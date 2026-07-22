@@ -8,6 +8,7 @@ from fastapi import (
     HTTPException,
 )
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from account_api import create_account_router
 from stripe_api import create_stripe_router
@@ -31,6 +32,7 @@ import base64
 import logging
 import time
 import uuid
+import httpx
 from datetime import datetime, timedelta, timezone
 # FlexiLab V2 backend architecture imports.
 # Old engines remain in the repository for rollback, but /program now uses:
@@ -171,7 +173,7 @@ except Exception as exc:
 
 app = FastAPI(
     title="FlexiLab Movement Intelligence API",
-    version="101.0",
+    version="101.16",
 )
 app.include_router(create_account_router(supabase))
 app.include_router(create_stripe_router(supabase))
@@ -198,25 +200,83 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type", "Accept", "Origin", "X-Requested-With"],
+    allow_methods=["*"],
+    # The frontend and browser may add request-id, tracing, or Supabase headers.
+    # Restricting this list caused legitimate OPTIONS requests to return 400.
+    allow_headers=["*"],
+    expose_headers=["X-Request-ID", "Server-Timing"],
+    max_age=600,
 )
 
 logger = logging.getLogger("flexilab.performance")
+
+def _attach_cors_headers_for_error(request, response):
+    """Preserve CORS visibility when an exception is converted to JSON here."""
+    origin = request.headers.get("origin")
+    if origin and origin in ALLOWED_ORIGINS:
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Access-Control-Allow-Credentials"] = "true"
+        response.headers["Vary"] = "Origin"
+    return response
+
 
 @app.middleware("http")
 async def request_timing_middleware(request, call_next):
     request_id = request.headers.get("x-request-id") or str(uuid.uuid4())
     started = time.perf_counter()
+
     try:
         response = await call_next(request)
+    except (
+        httpx.ReadError,
+        httpx.ConnectError,
+        httpx.ConnectTimeout,
+        httpx.ReadTimeout,
+        httpx.PoolTimeout,
+    ):
+        logger.exception(
+            "upstream_temporarily_unavailable method=%s path=%s request_id=%s",
+            request.method,
+            request.url.path,
+            request_id,
+        )
+        response = JSONResponse(
+            status_code=503,
+            content={
+                "detail": "A required service is temporarily unavailable. Please retry.",
+                "code": "UPSTREAM_TEMPORARILY_UNAVAILABLE",
+                "request_id": request_id,
+            },
+        )
+        _attach_cors_headers_for_error(request, response)
     except Exception:
-        logger.exception("request_failed method=%s path=%s request_id=%s", request.method, request.url.path, request_id)
-        raise
+        logger.exception(
+            "request_failed method=%s path=%s request_id=%s",
+            request.method,
+            request.url.path,
+            request_id,
+        )
+        response = JSONResponse(
+            status_code=500,
+            content={
+                "detail": "An unexpected server error occurred.",
+                "code": "INTERNAL_SERVER_ERROR",
+                "request_id": request_id,
+            },
+        )
+        _attach_cors_headers_for_error(request, response)
+
     duration_ms = round((time.perf_counter() - started) * 1000, 1)
     response.headers["X-Request-ID"] = request_id
     response.headers["Server-Timing"] = f"total;dur={duration_ms}"
-    logger.info("request method=%s path=%s status=%s duration_ms=%s request_id=%s", request.method, request.url.path, response.status_code, duration_ms, request_id)
+    logger.info(
+        "request method=%s path=%s status=%s duration_ms=%s request_id=%s",
+        request.method,
+        request.url.path,
+        response.status_code,
+        duration_ms,
+        request_id,
+    )
     return response
 
 
@@ -225,7 +285,7 @@ async def request_timing_middleware(request, call_next):
 def health():
     return {
         "ok": True,
-        "patch_version": "V101-production-performance",
+        "patch_version": "V101.16-backend-resilience",
         "exercise_library_mode": EXERCISE_LIBRARY_MODE,
         "exercise_library_path": EXERCISE_LIBRARY_PATH,
         "exercise_library_count": len(EXERCISE_LIBRARY or []),
@@ -238,7 +298,7 @@ def health():
 @app.get("/library_status")
 def library_status():
     return {
-        "patch_version": "V101-production-performance",
+        "patch_version": "V101.16-backend-resilience",
         "exercise_library_mode": EXERCISE_LIBRARY_MODE,
         "exercise_library_path": EXERCISE_LIBRARY_PATH,
         "exercise_library_count": len(EXERCISE_LIBRARY or []),
@@ -1780,11 +1840,6 @@ def abandon_session(
         "status": "abandoned",
     }).eq("id", session_id).neq("status", "completed").execute()
 
-    # Clear the brief bootstrap cache so Home immediately sees the released credit.
-    try:
-        _USER_STATE_CACHE.pop(f"bootstrap:{credit_owner_user_id}", None)
-    except Exception:
-        pass
 
     return {
         "session_id": session_id,
