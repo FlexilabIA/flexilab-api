@@ -1713,6 +1713,86 @@ def start_session(
     }
 
 
+
+@app.post("/abandon_session")
+def abandon_session(
+    session_id: str = Form(...),
+    authorization: str = Header(None),
+):
+    """Explicitly abandon an unfinished screening and release its reservation."""
+    if supabase is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Supabase is not configured on server.",
+        )
+
+    user = authenticated_user(supabase, authorization)
+
+    response = (
+        supabase.table("sessions")
+        .select(
+            "id,status,user_id,trainer_id,performed_by_user_id,"
+            "credit_owner_user_id"
+        )
+        .eq("id", session_id)
+        .limit(1)
+        .execute()
+    )
+    if not response.data:
+        raise HTTPException(status_code=404, detail="Session not found.")
+
+    row = response.data[0]
+    allowed_user_ids = {
+        str(row.get("user_id") or ""),
+        str(row.get("trainer_id") or ""),
+        str(row.get("performed_by_user_id") or ""),
+    }
+    if user["id"] not in allowed_user_ids:
+        raise HTTPException(
+            status_code=403,
+            detail="This screening session belongs to another account.",
+        )
+
+    if str(row.get("status") or "").lower() == "completed":
+        return {
+            "session_id": session_id,
+            "status": "completed",
+            "released": False,
+            "reason": "completed_session_is_immutable",
+        }
+
+    credit_owner_user_id = str(
+        row.get("credit_owner_user_id")
+        or row.get("trainer_id")
+        or row.get("user_id")
+        or user["id"]
+    )
+
+    released = release_credit(
+        supabase,
+        credit_owner_user_id,
+        session_id,
+        reason="user_quit_screening",
+    )
+
+    # Mark abandoned even when the reservation had already been released.
+    supabase.table("sessions").update({
+        "status": "abandoned",
+    }).eq("id", session_id).neq("status", "completed").execute()
+
+    # Clear the brief bootstrap cache so Home immediately sees the released credit.
+    try:
+        _USER_STATE_CACHE.pop(f"bootstrap:{credit_owner_user_id}", None)
+    except Exception:
+        pass
+
+    return {
+        "session_id": session_id,
+        "status": "abandoned",
+        "released": bool(released),
+    }
+
+
 @app.post("/finalize_session")
 def finalize_session(
     session_id: str = Form(...),
