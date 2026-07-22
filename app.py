@@ -18,6 +18,7 @@ from screening_access import (
     ensure_email_matches,
     reserve_credit,
     consume_credit,
+    release_credit,
     effective_entitlement,
 )
 
@@ -1527,6 +1528,61 @@ def screening_history(
     }
 
 
+
+def _release_previous_unfinished_credit_reservations(
+    credit_owner_user_id: str,
+) -> dict:
+    """Release older unfinished screening reservations for one paying account.
+
+    A user starting a new assessment is an explicit abandonment of older
+    unfinished attempts. Completed sessions are never touched.
+    """
+    released_session_ids = []
+    failed_session_ids = []
+
+    try:
+        response = (
+            supabase.table("sessions")
+            .select("id,status,created_at")
+            .eq("credit_owner_user_id", credit_owner_user_id)
+            .eq("status", "in_progress")
+            .order("created_at", desc=False)
+            .execute()
+        )
+    except Exception:
+        response = None
+
+    for row in (response.data if response else []) or []:
+        session_id = str(row.get("id") or "").strip()
+        if not session_id:
+            continue
+
+        released = release_credit(
+            supabase,
+            credit_owner_user_id,
+            session_id,
+            reason="superseded_by_new_screening",
+        )
+
+        if released:
+            released_session_ids.append(session_id)
+            try:
+                supabase.table("sessions").update({
+                    "status": "abandoned",
+                }).eq("id", session_id).eq("status", "in_progress").execute()
+            except Exception:
+                # The reservation is already released; status cleanup can be
+                # retried later without risking an extra credit deduction.
+                pass
+        else:
+            failed_session_ids.append(session_id)
+
+    return {
+        "released_session_ids": released_session_ids,
+        "failed_session_ids": failed_session_ids,
+    }
+
+
 @app.post("/start_session")
 def start_session(
     user_email: str = Form(...),
@@ -1587,6 +1643,10 @@ def start_session(
         trainer_id = user["id"]
         trainer_link_id = str(link["id"])
 
+    reservation_cleanup = _release_previous_unfinished_credit_reservations(
+        credit_owner_user_id,
+    )
+
     session_row = {
         "user_email": session_owner_email,
         "user_id": session_owner_user_id,
@@ -1632,6 +1692,9 @@ def start_session(
         "screening_credits_remaining": reservation.get(
             "credits_remaining",
             0,
+        ),
+        "released_previous_unfinished_sessions": len(
+            reservation_cleanup.get("released_session_ids") or []
         ),
     }
 
@@ -3159,8 +3222,29 @@ def _screening_credit_summary(user_id: str) -> dict:
                 if current_next is None or cycle_start < current_next:
                     next_future_cycle = cycle
 
+    # Credits can be reserved by unfinished sessions without being consumed.
+    # Home must show spendable credits, not only granted-minus-used.
+    active_reservations = 0
+    try:
+        reservation_sessions = (
+            supabase.table("sessions")
+            .select("id")
+            .eq("credit_owner_user_id", user_id)
+            .eq("status", "in_progress")
+            .execute()
+        )
+        active_reservations = len(reservation_sessions.data or [])
+    except Exception:
+        # Preserve availability rather than breaking Home if an older schema
+        # does not expose credit_owner_user_id.
+        active_reservations = 0
+
+    available_remaining = max(0, remaining - active_reservations)
+
     return {
-        "screening_credits_remaining": remaining,
+        "screening_credits_remaining": available_remaining,
+        "screening_credits_unused": remaining,
+        "screening_credits_reserved": active_reservations,
         "screening_credit_expires_at": (
             active_cycle.get("grace_expires_at") or active_cycle.get("cycle_end")
             if active_cycle

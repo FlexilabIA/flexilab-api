@@ -124,7 +124,17 @@ def consume_credit(
     rows = response.data or []
     result = rows[0] if rows else {}
 
-    if not result.get("consumed"):
+    reason = str(result.get("reason") or "").strip().lower()
+    already_consumed = bool(
+        result.get("already_consumed")
+        or reason in {
+            "already_consumed",
+            "session_already_consumed",
+            "credit_already_consumed",
+        }
+    )
+
+    if not result.get("consumed") and not already_consumed:
         raise HTTPException(
             status_code=409,
             detail={
@@ -133,6 +143,10 @@ def consume_credit(
                 "reason": result.get("reason") or "unknown",
             },
         )
+
+    if already_consumed:
+        result["consumed"] = True
+        result["idempotent_replay"] = True
 
     return result
 
@@ -152,7 +166,29 @@ def release_credit(
                 "p_reason": reason,
             },
         ).execute()
-        return bool(response.data)
+
+        data = response.data
+        if isinstance(data, bool):
+            return data
+        if isinstance(data, dict):
+            return bool(
+                data.get("released")
+                or data.get("success")
+                or data.get("allowed")
+            )
+        if isinstance(data, list):
+            if not data:
+                return False
+            first = data[0]
+            if isinstance(first, bool):
+                return first
+            if isinstance(first, dict):
+                return bool(
+                    first.get("released")
+                    or first.get("success")
+                    or first.get("allowed")
+                )
+        return bool(data)
     except Exception:
         return False
 
