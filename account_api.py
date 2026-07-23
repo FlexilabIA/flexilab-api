@@ -321,6 +321,21 @@ def create_account_router(supabase_client) -> APIRouter:
 
         subscription = subscription_summary(latest_subscription(user["id"]))
 
+        upgrade_response = (
+            supabase_client.table("assessment_upgrade_credits")
+            .select("amount_cents,status,expires_at")
+            .eq("user_id", user["id"])
+            .limit(1)
+            .execute()
+        )
+        upgrade_row = upgrade_response.data[0] if upgrade_response.data else None
+        upgrade_expires = _parse_datetime((upgrade_row or {}).get("expires_at"))
+        upgrade_available = bool(
+            upgrade_row
+            and upgrade_row.get("status") == "available"
+            and (upgrade_expires is None or upgrade_expires >= now)
+        )
+
         return {
             "plan_code": entitlement.get("plan_code") or "free",
             "source": entitlement.get("source") or "free",
@@ -353,6 +368,13 @@ def create_account_router(supabase_client) -> APIRouter:
                 next_future_cycle.get("cycle_start")
                 if next_future_cycle
                 else None
+            ),
+            "assessment_upgrade_credit_available": upgrade_available,
+            "assessment_upgrade_credit_amount_cents": (
+                int(upgrade_row.get("amount_cents") or 0) if upgrade_available else 0
+            ),
+            "assessment_upgrade_credit_expires_at": (
+                upgrade_row.get("expires_at") if upgrade_available else None
             ),
             **subscription,
         }
