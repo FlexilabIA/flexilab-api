@@ -5,10 +5,13 @@ import json
 import os
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
+import uuid
 
 import stripe
 from fastapi import APIRouter, Header, HTTPException, Request
 from pydantic import BaseModel
+
+from screening_access import effective_entitlement
 
 
 STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY", "").strip()
@@ -17,6 +20,8 @@ STRIPE_PRICE_MONTHLY = os.environ.get("STRIPE_PRICE_MONTHLY", "").strip()
 STRIPE_PRICE_THREE_MONTH = os.environ.get("STRIPE_PRICE_THREE_MONTH", "").strip()
 STRIPE_PRICE_ANNUAL = os.environ.get("STRIPE_PRICE_ANNUAL", "").strip()
 STRIPE_PRICE_TRAINER_PACK = os.environ.get("STRIPE_PRICE_TRAINER_PACK", "").strip()
+STRIPE_PRICE_SINGLE_ASSESSMENT = os.environ.get("STRIPE_PRICE_SINGLE_ASSESSMENT", "").strip()
+STRIPE_UPGRADE_COUPON_ID = os.environ.get("STRIPE_UPGRADE_COUPON_ID", "").strip()
 FRONTEND_URL = os.environ.get(
     "FRONTEND_URL",
     "https://flexi-move-lab.lovable.app",
@@ -44,6 +49,20 @@ PLAN_CONFIG = {
         "price_id": STRIPE_PRICE_ANNUAL,
         "mode": "payment",
         "months": 12,
+    },
+    "standalone_assessment_4": {
+        "price_id": STRIPE_PRICE_SINGLE_ASSESSMENT,
+        "mode": "payment",
+        "months": 0,
+        "screening_credits": 1,
+        "creates_upgrade_credit": True,
+    },
+    "extra_screening_4": {
+        "price_id": STRIPE_PRICE_SINGLE_ASSESSMENT,
+        "mode": "payment",
+        "months": 0,
+        "screening_credits": 1,
+        "creates_upgrade_credit": False,
     },
     "trainer_pack_30": {
         "price_id": STRIPE_PRICE_TRAINER_PACK,
@@ -520,6 +539,76 @@ def create_stripe_router(supabase_client) -> APIRouter:
         if not reward_response.data:
             raise RuntimeError("Unable to record the Trainer referral reward.")
 
+
+    def grant_single_assessment_credit(*, user_id: str, checkout_id: str, plan_code: str) -> None:
+        source = f"{plan_code}:{checkout_id}"
+        existing = (
+            supabase_client.table("screening_credit_cycles")
+            .select("id")
+            .eq("user_id", user_id)
+            .eq("source", source)
+            .limit(1)
+            .execute()
+        )
+        if existing.data:
+            return
+
+        now = _utc_now()
+        end = now + timedelta(days=365)
+        response = supabase_client.table("screening_credit_cycles").insert({
+            "user_id": user_id,
+            "subscription_id": None,
+            "source": source,
+            "cycle_start": _iso(now),
+            "cycle_end": _iso(end),
+            "grace_expires_at": _iso(end),
+            "credits_granted": 1,
+            "credits_used": 0,
+        }).execute()
+        if not response.data:
+            raise RuntimeError("Unable to grant the purchased screening credit.")
+
+        if plan_code == "standalone_assessment_4":
+            # One lifetime conversion credit per account. Replayed webhooks are harmless.
+            supabase_client.table("assessment_upgrade_credits").upsert({
+                "user_id": user_id,
+                "source_checkout_id": checkout_id,
+                "amount_cents": 400,
+                "currency": "eur",
+                "status": "available",
+                "expires_at": _iso(now + timedelta(days=30)),
+                "updated_at": _iso(now),
+            }, on_conflict="user_id", ignore_duplicates=True).execute()
+
+    def available_upgrade_credit(user_id: str) -> Optional[dict]:
+        now = _utc_now()
+        response = (
+            supabase_client.table("assessment_upgrade_credits")
+            .select("*")
+            .eq("user_id", user_id)
+            .eq("status", "available")
+            .limit(1)
+            .execute()
+        )
+        if not response.data:
+            return None
+        row = response.data[0]
+        expires = row.get("expires_at")
+        if expires and datetime.fromisoformat(str(expires).replace("Z", "+00:00")) < now:
+            supabase_client.table("assessment_upgrade_credits").update({
+                "status": "expired", "updated_at": _iso(now)
+            }).eq("id", row["id"]).execute()
+            return None
+        return row
+
+    def mark_upgrade_credit_used(user_id: str, credit_id: str, payment_id: str) -> None:
+        supabase_client.table("assessment_upgrade_credits").update({
+            "status": "used",
+            "used_at": _iso(_utc_now()),
+            "used_payment_id": payment_id,
+            "updated_at": _iso(_utc_now()),
+        }).eq("id", credit_id).eq("user_id", user_id).eq("status", "available").execute()
+
     def process_checkout_completed(session: Any) -> None:
         payment_status = str(
             _object_value(session, "payment_status", "")
@@ -538,6 +627,16 @@ def create_stripe_router(supabase_client) -> APIRouter:
         customer_id = _object_value(session, "customer")
         mode = str(_object_value(session, "mode", ""))
         now = _utc_now()
+
+        if plan_code in {"standalone_assessment_4", "extra_screening_4"}:
+            checkout_id = str(_object_value(session, "id"))
+            grant_single_assessment_credit(
+                user_id=user_id, checkout_id=checkout_id, plan_code=plan_code
+            )
+            grant_referral_reward(
+                client_user_id=user_id, source_payment_id=checkout_id
+            )
+            return
 
         if mode == "subscription":
             stripe_subscription_id = str(
@@ -584,6 +683,8 @@ def create_stripe_router(supabase_client) -> APIRouter:
                 client_user_id=user_id,
                 source_payment_id=stripe_subscription_id,
             )
+            if meta.get("upgrade_credit_id"):
+                mark_upgrade_credit_used(user_id, meta["upgrade_credit_id"], stripe_subscription_id)
             return
 
         months = int(PLAN_CONFIG[plan_code]["months"])
@@ -627,6 +728,8 @@ def create_stripe_router(supabase_client) -> APIRouter:
                 client_user_id=user_id,
                 source_payment_id=checkout_id,
             )
+            if meta.get("upgrade_credit_id"):
+                mark_upgrade_credit_used(user_id, meta["upgrade_credit_id"], checkout_id)
 
     def process_invoice_paid(invoice: Any) -> None:
         stripe_subscription_id = _invoice_subscription_id(invoice)
@@ -851,7 +954,8 @@ def create_stripe_router(supabase_client) -> APIRouter:
                 status_code=422,
                 detail=(
                     "Invalid plan_code. Use pro_monthly, pro_three_month, "
-                    "pro_annual, or trainer_pack_30."
+                    "pro_annual, standalone_assessment_4, extra_screening_4, "
+                    "or trainer_pack_30."
                 ),
             )
 
@@ -862,11 +966,26 @@ def create_stripe_router(supabase_client) -> APIRouter:
                 detail=f"Stripe price is not configured for {plan_code}.",
             )
 
+        entitlement = effective_entitlement(supabase_client, user["id"])
+        has_pro_access = bool(entitlement.get("program_access") or entitlement.get("workout_access"))
+        if plan_code == "standalone_assessment_4" and has_pro_access:
+            raise HTTPException(status_code=409, detail="Active Pro accounts must use extra_screening_4.")
+        if plan_code == "extra_screening_4" and not has_pro_access:
+            raise HTTPException(status_code=409, detail="Free accounts must use standalone_assessment_4.")
+
         metadata = {
             "user_id": user["id"],
             "user_email": user["email"],
             "plan_code": plan_code,
         }
+
+        upgrade_credit = None
+        if plan_code in {"pro_monthly", "pro_three_month", "pro_annual"}:
+            upgrade_credit = available_upgrade_credit(user["id"])
+            if upgrade_credit:
+                if not STRIPE_UPGRADE_COUPON_ID:
+                    raise HTTPException(status_code=503, detail="The assessment upgrade discount is not configured.")
+                metadata["upgrade_credit_id"] = str(upgrade_credit["id"])
 
         session_params: dict[str, Any] = {
             "mode": plan["mode"],
@@ -887,8 +1006,10 @@ def create_stripe_router(supabase_client) -> APIRouter:
             ),
             # Display Stripe's secure promotion-code field for every
             # client plan and the Trainer 30-token pack.
-            "allow_promotion_codes": True,
+            "allow_promotion_codes": not bool(upgrade_credit),
         }
+        if upgrade_credit:
+            session_params["discounts"] = [{"coupon": STRIPE_UPGRADE_COUPON_ID}]
 
         if plan["mode"] == "subscription":
             session_params["subscription_data"] = {
