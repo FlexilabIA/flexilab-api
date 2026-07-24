@@ -33,10 +33,12 @@ import logging
 import time
 import uuid
 import threading
+import copy
 import httpx
 from importlib.metadata import PackageNotFoundError, version as package_version
 from datetime import datetime, timedelta, timezone
 from aslr_engine import ASLRQualityError, ASLR_ENGINE_VERSION, analyze_aslr_v2
+from vision_qa import VISION_QA_VERSION, build_vision_qa_payload
 # FlexiLab V2 backend architecture imports.
 # Old engines remain in the repository for rollback, but /program now uses:
 # score_engine_v2 -> Movement DNA / CKB -> Clinical Prescription Engine v2.1.
@@ -333,7 +335,7 @@ async def request_timing_middleware(request, call_next):
 def health():
     return {
         "ok": True,
-        "patch_version": "V101.27-aslr-integrity",
+        "patch_version": "V101.28-native-camera-vision-qa",
         "exercise_library_mode": EXERCISE_LIBRARY_MODE,
         "exercise_library_path": EXERCISE_LIBRARY_PATH,
         "exercise_library_count": len(EXERCISE_LIBRARY or []),
@@ -352,6 +354,12 @@ def health():
             "resting_knee_extension_min": ASLR_RESTING_KNEE_EXTENSION_MIN,
             "resting_leg_max_angle": ASLR_RESTING_LEG_MAX_ANGLE,
             "visual_thresholds_preserved": True,
+            "source_orientation_requirement": "none",
+        },
+        "vision_qa": {
+            "version": VISION_QA_VERSION,
+            "delivery": "ephemeral_job_result_only",
+            "enabled_by_capture_metadata": True,
         },
         "runtime_versions": RUNTIME_PACKAGE_VERSIONS,
     }
@@ -1759,18 +1767,142 @@ def finalize_session(
 
 
 
-def detect_pose_with_fallback(img, test_type):
-    """
-    Run YOLO pose inference under one model lock.
+class AnalysisWithDiagnosticsError(ValueError):
+    """Controlled analysis rejection carrying an ephemeral Vision QA payload."""
 
-    Ultralytics model instances keep mutable predictor and fusion state. The
-    lock protects overlapping web/worker requests, and the known fused-Conv
-    state failure triggers one in-lock model reload and retry.
-    """
+    def __init__(self, message, diagnostic_result):
+        self.diagnostic_result = diagnostic_result
+        super().__init__(message)
+
+
+def _pose_arrays(prediction):
+    result = prediction[0]
+    boxes = result.boxes.xyxy.cpu().numpy()
+    if len(boxes) == 0:
+        raise ValueError("No person detected.")
+    areas = [(box[2] - box[0]) * (box[3] - box[1]) for box in boxes]
+    main_idx = int(np.argmax(areas))
+    box_confidences = (
+        result.boxes.conf.cpu().numpy()
+        if getattr(result.boxes, "conf", None) is not None
+        else np.zeros(len(boxes), dtype=float)
+    )
+    xy = result.keypoints.xy[main_idx].cpu().numpy()
+    conf = result.keypoints.conf[main_idx].cpu().numpy()
+    return boxes, areas, box_confidences, main_idx, xy, conf
+
+
+def _expanded_person_crop(img, box, *, aslr=False):
+    height, width = img.shape[:2]
+    x1, y1, x2, y2 = [float(value) for value in box[:4]]
+    box_width = max(1.0, x2 - x1)
+    box_height = max(1.0, y2 - y1)
+    pad_x = box_width * (0.20 if aslr else 0.12)
+    pad_y = box_height * (0.18 if aslr else 0.12)
+    left = max(0, int(math.floor(x1 - pad_x)))
+    top = max(0, int(math.floor(y1 - pad_y)))
+    right = min(width, int(math.ceil(x2 + pad_x)))
+    bottom = min(height, int(math.ceil(y2 + pad_y)))
+    if right - left < 160 or bottom - top < 160:
+        return None, None
+    return img[top:bottom, left:right].copy(), {
+        "left": left,
+        "top": top,
+        "right": right,
+        "bottom": bottom,
+        "width": right - left,
+        "height": bottom - top,
+    }
+
+
+def _map_crop_pose_to_full(xy, boxes, crop_bounds):
+    mapped_xy = np.array(xy, dtype=float, copy=True)
+    mapped_xy[:, 0] += float(crop_bounds["left"])
+    mapped_xy[:, 1] += float(crop_bounds["top"])
+    mapped_boxes = np.array(boxes, dtype=float, copy=True)
+    mapped_boxes[:, [0, 2]] += float(crop_bounds["left"])
+    mapped_boxes[:, [1, 3]] += float(crop_bounds["top"])
+    return mapped_xy, mapped_boxes
+
+
+def _relevant_pose_confidence(conf, test_type):
+    test_type = str(test_type or "")
+    if test_type.startswith("aslr"):
+        indices = [5, 6, 11, 12, 13, 14, 15, 16]
+    elif test_type.startswith("shoulder"):
+        indices = [5, 6, 7, 8, 9, 10, 11, 12]
+    elif test_type == "posture_side":
+        indices = [3, 4, 5, 6, 11, 12]
+    else:
+        indices = [5, 6, 11, 12, 13, 14, 15, 16]
+    values = [float(conf[index]) for index in indices if index < len(conf)]
+    return float(np.mean(values)) if values else 0.0
+
+
+def _attach_measurement_points(result, test_type, xy):
+    metrics = result.setdefault("metrics", {})
+    if test_type == "posture_side":
+        side = str(metrics.get("side_used") or "RIGHT").upper()
+        indices = (4, 6, 12) if side == "RIGHT" else (3, 5, 11)
+        ear_i, shoulder_i, hip_i = indices
+        metrics["measurement_points"] = {
+            "indices": {"ear": ear_i, "shoulder": shoulder_i, "hip": hip_i},
+            "points": {
+                "ear": {"x": round(float(xy[ear_i][0]), 2), "y": round(float(xy[ear_i][1]), 2)},
+                "shoulder": {"x": round(float(xy[shoulder_i][0]), 2), "y": round(float(xy[shoulder_i][1]), 2)},
+                "hip": {"x": round(float(xy[hip_i][0]), 2), "y": round(float(xy[hip_i][1]), 2)},
+            },
+        }
+    elif test_type in {"shoulder_right", "shoulder_left"}:
+        side = str(metrics.get("side") or "RIGHT").upper()
+        indices = (6, 8, 10, 12) if side == "RIGHT" else (5, 7, 9, 11)
+        shoulder_i, elbow_i, wrist_i, hip_i = indices
+        metrics["measurement_points"] = {
+            "indices": {
+                "shoulder": shoulder_i,
+                "elbow": elbow_i,
+                "wrist": wrist_i,
+                "hip": hip_i,
+            },
+            "points": {
+                "shoulder": {"x": round(float(xy[shoulder_i][0]), 2), "y": round(float(xy[shoulder_i][1]), 2)},
+                "elbow": {"x": round(float(xy[elbow_i][0]), 2), "y": round(float(xy[elbow_i][1]), 2)},
+                "wrist": {"x": round(float(xy[wrist_i][0]), 2), "y": round(float(xy[wrist_i][1]), 2)},
+                "hip": {"x": round(float(xy[hip_i][0]), 2), "y": round(float(xy[hip_i][1]), 2)},
+            },
+        }
+    elif test_type == "squat":
+        shoulder = (xy[5] + xy[6]) / 2
+        hip = (xy[11] + xy[12]) / 2
+        knee = (xy[13] + xy[14]) / 2
+        ankle = (xy[15] + xy[16]) / 2
+        metrics["measurement_points"] = {
+            "method": "bilateral_midpoints_current_engine",
+            "points": {
+                "shoulder": {"x": round(float(shoulder[0]), 2), "y": round(float(shoulder[1]), 2)},
+                "hip": {"x": round(float(hip[0]), 2), "y": round(float(hip[1]), 2)},
+                "knee": {"x": round(float(knee[0]), 2), "y": round(float(knee[1]), 2)},
+                "ankle": {"x": round(float(ankle[0]), 2), "y": round(float(ankle[1]), 2)},
+            },
+        }
+
+
+def _without_ephemeral_vision_qa(result):
+    persistent = copy.deepcopy(result)
+    metrics = persistent.get("metrics")
+    if isinstance(metrics, dict):
+        metrics.pop("vision_qa", None)
+    return persistent
+
+
+def detect_pose_with_fallback(img, test_type, inference_imgsz=None):
+    """Run YOLO pose inference under one model lock with one safe reload."""
     global model, POSE_MODEL_LOAD_ERROR, POSE_MODEL_RELOAD_COUNT
 
     is_aslr = str(test_type).startswith("aslr")
     thresholds = [0.20, 0.14, 0.10] if is_aslr else [0.50, 0.35, 0.25]
+    requested_imgsz = int(inference_imgsz or POSE_INFERENCE_IMGSZ)
+    requested_imgsz = max(320, min(1280, requested_imgsz))
 
     with POSE_MODEL_INFERENCE_LOCK:
         if model is None:
@@ -1786,7 +1918,7 @@ def detect_pose_with_fallback(img, test_type):
                         img,
                         conf=threshold,
                         classes=[0],
-                        imgsz=POSE_INFERENCE_IMGSZ,
+                        imgsz=requested_imgsz,
                         verbose=False,
                     )
                     break
@@ -1824,7 +1956,7 @@ def detect_pose_with_fallback(img, test_type):
                 and prediction[0].keypoints is not None
                 and len(prediction[0].keypoints.xy) > 0
             ):
-                return prediction, threshold
+                return prediction, threshold, requested_imgsz
 
     raise ValueError(
         "No person detected. Keep the required body area visible, improve lighting, "
@@ -1869,12 +2001,13 @@ async def analyze(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 
+    persistent_result = _without_ephemeral_vision_qa(result)
     row = build_screening_row(
         user_email=authoritative_email,
         user_id=session.get("user_id"),
         session_id=session_id,
         test_type=test_type,
-        result=result,
+        result=persistent_result,
         intake_data=intake_data,
     )
 
@@ -2071,27 +2204,26 @@ def decode_and_normalize_analysis_image(img_bytes):
 
 def run_yolo_analysis_from_bytes(img_bytes, test_type, capture_metadata=None):
     img, image_quality = decode_and_normalize_analysis_image(img_bytes)
-    res, detection_threshold = detect_pose_with_fallback(img, test_type)
+    is_aslr = str(test_type).startswith("aslr")
 
-    boxes = res[0].boxes.xyxy.cpu().numpy()
-    if len(boxes) == 0:
-        raise ValueError("No person detected.")
-    areas = [(b[2] - b[0]) * (b[3] - b[1]) for b in boxes]
-    main_idx = int(np.argmax(areas))
-    box_confidences = (
-        res[0].boxes.conf.cpu().numpy()
-        if getattr(res[0].boxes, "conf", None) is not None
-        else np.zeros(len(boxes), dtype=float)
-    )
+    first_prediction, first_threshold, first_imgsz = detect_pose_with_fallback(img, test_type)
+    (
+        first_boxes,
+        first_areas,
+        first_box_confidences,
+        first_main_idx,
+        first_xy,
+        first_conf,
+    ) = _pose_arrays(first_prediction)
 
-    if str(test_type).startswith("aslr") and len(boxes) > 1:
-        main_area = max(float(areas[main_idx]), 1.0)
+    if is_aslr and len(first_boxes) > 1:
+        main_area = max(float(first_areas[first_main_idx]), 1.0)
         significant_others = [
             index
-            for index, area in enumerate(areas)
-            if index != main_idx
+            for index, area in enumerate(first_areas)
+            if index != first_main_idx
             and float(area) >= main_area * 0.35
-            and float(box_confidences[index]) >= 0.25
+            and float(first_box_confidences[index]) >= 0.25
         ]
         if significant_others:
             raise ASLRQualityError(
@@ -2100,8 +2232,84 @@ def run_yolo_analysis_from_bytes(img_bytes, test_type, capture_metadata=None):
                 {"significant_other_person_count": len(significant_others)},
             )
 
-    xy = res[0].keypoints.xy[main_idx].cpu().numpy()
-    conf = res[0].keypoints.conf[main_idx].cpu().numpy()
+    image_area = max(1.0, float(img.shape[0] * img.shape[1]))
+    person_coverage = float(first_areas[first_main_idx]) / image_area
+    first_relevant_conf = _relevant_pose_confidence(first_conf, test_type)
+    crop_img, crop_bounds = _expanded_person_crop(
+        img,
+        first_boxes[first_main_idx],
+        aslr=is_aslr,
+    )
+
+    # A body-focused pass is used only when the subject is small or lower-body
+    # landmarks are weak. Portrait ASLR and desktop webcam frames are therefore
+    # supported without imposing any source orientation.
+    should_use_crop_pass = bool(
+        crop_img is not None
+        and crop_bounds is not None
+        and (
+            person_coverage < (0.48 if is_aslr else 0.24)
+            or (is_aslr and first_relevant_conf < 0.42)
+        )
+        and (crop_bounds["width"] * crop_bounds["height"]) < image_area * 0.94
+    )
+
+    final_boxes = first_boxes
+    final_box_confidences = first_box_confidences
+    final_main_idx = first_main_idx
+    final_xy = first_xy
+    final_conf = first_conf
+    detection_threshold = first_threshold
+    inference_imgsz = first_imgsz
+    analysis_pass = {
+        "mode": "full_image",
+        "adaptive_crop_used": False,
+        "source_orientation_required": False,
+        "person_coverage": round(person_coverage, 4),
+        "relevant_keypoint_mean_confidence_before_crop": round(first_relevant_conf, 4),
+    }
+
+    if should_use_crop_pass:
+        crop_imgsz = max(POSE_INFERENCE_IMGSZ, 768 if is_aslr else POSE_INFERENCE_IMGSZ)
+        crop_prediction, crop_threshold, crop_imgsz = detect_pose_with_fallback(
+            crop_img,
+            test_type,
+            inference_imgsz=crop_imgsz,
+        )
+        (
+            crop_boxes,
+            _crop_areas,
+            crop_box_confidences,
+            crop_main_idx,
+            crop_xy,
+            crop_conf,
+        ) = _pose_arrays(crop_prediction)
+        mapped_xy, mapped_boxes = _map_crop_pose_to_full(crop_xy, crop_boxes, crop_bounds)
+        crop_relevant_conf = _relevant_pose_confidence(crop_conf, test_type)
+
+        # Prefer the focused pass when it preserves or improves the relevant
+        # landmarks. A small tolerance avoids switching back because of harmless
+        # confidence noise.
+        if crop_relevant_conf >= first_relevant_conf - 0.03:
+            final_boxes = mapped_boxes
+            final_box_confidences = crop_box_confidences
+            final_main_idx = crop_main_idx
+            final_xy = mapped_xy
+            final_conf = crop_conf
+            detection_threshold = crop_threshold
+            inference_imgsz = crop_imgsz
+            analysis_pass = {
+                "mode": "adaptive_person_crop",
+                "adaptive_crop_used": True,
+                "source_orientation_required": False,
+                "person_coverage": round(person_coverage, 4),
+                "crop_bounds": crop_bounds,
+                "relevant_keypoint_mean_confidence_before_crop": round(first_relevant_conf, 4),
+                "relevant_keypoint_mean_confidence_after_crop": round(crop_relevant_conf, 4),
+            }
+
+    xy = final_xy
+    conf = final_conf
 
     if test_type == "posture_side":
         result = analyze_posture(xy, conf)
@@ -2115,29 +2323,84 @@ def run_yolo_analysis_from_bytes(img_bytes, test_type, capture_metadata=None):
     elif test_type == "squat":
         result = analyze_squat(xy, conf)
         session_update = {"squat_score": result["score"]}
-    elif test_type == "aslr_right":
-        result = analyze_aslr(xy, conf, "RIGHT", img)
-        session_update = {"aslr_right_score": result["score"]}
-    elif test_type == "aslr_left":
-        result = analyze_aslr(xy, conf, "LEFT", img)
-        session_update = {"aslr_left_score": result["score"]}
+    elif test_type in {"aslr_right", "aslr_left"}:
+        requested_side = "RIGHT" if test_type == "aslr_right" else "LEFT"
+        try:
+            result = analyze_aslr(xy, conf, requested_side, img)
+        except ASLRQualityError as exc:
+            rejection_metrics = {
+                "requested_side": requested_side,
+                "capture_rejection": {
+                    "code": exc.code,
+                    "message": str(exc),
+                    "details": exc.details,
+                },
+                "candidate_limbs": exc.details.get("candidates", [])
+                if isinstance(exc.details, dict)
+                else [],
+                "diagnostic_flags": ["capture_rejected_before_scoring"],
+                "analysis_pass": analysis_pass,
+                "image_quality_diagnostics": image_quality,
+                "capture_metadata": capture_metadata or {},
+                "model_runtime": {
+                    "model": POSE_MODEL_NAME,
+                    "inference_imgsz": inference_imgsz,
+                    "analysis_max_edge": ANALYSIS_MAX_EDGE,
+                    "reload_count": POSE_MODEL_RELOAD_COUNT,
+                },
+            }
+            rejected_result = {
+                "score": 0.0,
+                "confidence": 0.0,
+                "metrics": rejection_metrics,
+                "thresholds": {},
+            }
+            if bool((capture_metadata or {}).get("vision_qa_requested")):
+                rejected_result["metrics"]["vision_qa"] = build_vision_qa_payload(
+                    img,
+                    xy,
+                    conf,
+                    final_boxes[final_main_idx],
+                    rejected_result,
+                    test_type,
+                    analysis_pass=analysis_pass,
+                )
+            raise AnalysisWithDiagnosticsError(str(exc), rejected_result) from exc
+        session_update = {
+            "aslr_right_score" if requested_side == "RIGHT" else "aslr_left_score": result["score"]
+        }
     else:
         raise ValueError("Invalid test_type")
 
+    _attach_measurement_points(result, test_type, xy)
     result.setdefault("metrics", {})["detection_confidence_threshold"] = detection_threshold
     result["metrics"]["person_detection"] = {
-        "person_count": int(len(boxes)),
-        "selected_index": main_idx,
-        "selected_box_confidence": round(float(box_confidences[main_idx]), 4),
+        "person_count": int(len(first_boxes)),
+        "selected_index": int(final_main_idx),
+        "selected_box_confidence": round(float(final_box_confidences[final_main_idx]), 4),
     }
     result["metrics"]["image_quality_diagnostics"] = image_quality
     result["metrics"]["capture_metadata"] = capture_metadata or {}
+    result["metrics"]["analysis_pass"] = analysis_pass
     result["metrics"]["model_runtime"] = {
         "model": POSE_MODEL_NAME,
-        "inference_imgsz": POSE_INFERENCE_IMGSZ,
+        "inference_imgsz": inference_imgsz,
         "analysis_max_edge": ANALYSIS_MAX_EDGE,
         "reload_count": POSE_MODEL_RELOAD_COUNT,
     }
+
+    vision_qa_requested = bool((capture_metadata or {}).get("vision_qa_requested"))
+    if vision_qa_requested:
+        result["metrics"]["vision_qa"] = build_vision_qa_payload(
+            img,
+            xy,
+            conf,
+            final_boxes[final_main_idx],
+            result,
+            test_type,
+            analysis_pass=analysis_pass,
+        )
+
     return result, session_update
 
 
@@ -2242,12 +2505,13 @@ def process_analysis_job(job_id: str):
             capture_metadata=capture_metadata,
         )
 
+        persistent_result = _without_ephemeral_vision_qa(result)
         screening_row = build_screening_row(
             user_email=user_email,
             user_id=job.get("user_id"),
             session_id=session_id,
             test_type=test_type,
-            result=result,
+            result=persistent_result,
             intake_data=intake_data
         )
 
@@ -2299,11 +2563,14 @@ def process_analysis_job(job_id: str):
             (job or {}).get("test_type"),
         )
         try:
-            supabase.table("analysis_jobs").update({
+            failure_update = {
                 "status": "failed",
                 "completed_at": utc_now_iso(),
                 "error_message": _public_analysis_error(exc),
-            }).eq("id", job_id).execute()
+            }
+            if isinstance(exc, AnalysisWithDiagnosticsError):
+                failure_update["result_json"] = exc.diagnostic_result
+            supabase.table("analysis_jobs").update(failure_update).eq("id", job_id).execute()
         except Exception:
             logger.exception("analysis_job_failure_status_update_failed job_id=%s", job_id)
 
