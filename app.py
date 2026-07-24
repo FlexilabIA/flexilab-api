@@ -36,6 +36,7 @@ import threading
 import httpx
 from importlib.metadata import PackageNotFoundError, version as package_version
 from datetime import datetime, timedelta, timezone
+from aslr_engine import ASLRQualityError, ASLR_ENGINE_VERSION, analyze_aslr_v2
 # FlexiLab V2 backend architecture imports.
 # Old engines remain in the repository for rollback, but /program now uses:
 # score_engine_v2 -> Movement DNA / CKB -> Clinical Prescription Engine v2.1.
@@ -86,6 +87,11 @@ ANALYSIS_INLINE_ENABLED = os.environ.get("FLEXILAB_INLINE_ANALYSIS", "true").str
 ANALYSIS_MAX_EDGE = max(640, min(1920, int(os.environ.get("FLEXILAB_ANALYSIS_MAX_EDGE", "960"))))
 POSE_INFERENCE_IMGSZ = max(320, min(1280, int(os.environ.get("FLEXILAB_POSE_IMGSZ", "640"))))
 DIAGNOSTIC_RETENTION_HOURS = max(0, min(168, int(os.environ.get("FLEXILAB_DIAGNOSTIC_RETENTION_HOURS", "0"))))
+ASLR_KEYPOINT_MIN_CONF = max(0.05, min(0.80, float(os.environ.get("FLEXILAB_ASLR_KEYPOINT_MIN_CONF", "0.20"))))
+ASLR_REQUIRED_MEAN_CONF = max(ASLR_KEYPOINT_MIN_CONF, min(0.90, float(os.environ.get("FLEXILAB_ASLR_REQUIRED_MEAN_CONF", "0.35"))))
+ASLR_RAISED_KNEE_EXTENSION_MIN = max(135.0, min(175.0, float(os.environ.get("FLEXILAB_ASLR_RAISED_KNEE_EXTENSION_MIN", "155"))))
+ASLR_RESTING_KNEE_EXTENSION_MIN = max(135.0, min(175.0, float(os.environ.get("FLEXILAB_ASLR_RESTING_KNEE_EXTENSION_MIN", "150"))))
+ASLR_RESTING_LEG_MAX_ANGLE = max(8.0, min(30.0, float(os.environ.get("FLEXILAB_ASLR_RESTING_LEG_MAX_ANGLE", "20"))))
 
 MOVEMENT_PATTERNS_PATH = os.path.join(DATA_DIR, "movement_patterns_v1.json")
 PRESCRIPTION_RULES_PATH = os.path.join(DATA_DIR, "prescription_rules_v1.json")
@@ -211,7 +217,7 @@ model = _load_pose_model()
 
 app = FastAPI(
     title="FlexiLab Movement Intelligence API",
-    version="101.26.1",
+    version="101.27",
 )
 app.include_router(create_account_router(supabase))
 app.include_router(create_stripe_router(supabase))
@@ -327,7 +333,7 @@ async def request_timing_middleware(request, call_next):
 def health():
     return {
         "ok": True,
-        "patch_version": "V101.26.1-idempotency-recovery",
+        "patch_version": "V101.27-aslr-integrity",
         "exercise_library_mode": EXERCISE_LIBRARY_MODE,
         "exercise_library_path": EXERCISE_LIBRARY_PATH,
         "exercise_library_count": len(EXERCISE_LIBRARY or []),
@@ -338,6 +344,15 @@ def health():
         "pose_inference_imgsz": POSE_INFERENCE_IMGSZ,
         "analysis_max_edge": ANALYSIS_MAX_EDGE,
         "diagnostic_retention_hours": DIAGNOSTIC_RETENTION_HOURS,
+        "aslr_engine": {
+            "version": ASLR_ENGINE_VERSION,
+            "keypoint_min_conf": ASLR_KEYPOINT_MIN_CONF,
+            "required_mean_conf": ASLR_REQUIRED_MEAN_CONF,
+            "raised_knee_extension_min": ASLR_RAISED_KNEE_EXTENSION_MIN,
+            "resting_knee_extension_min": ASLR_RESTING_KNEE_EXTENSION_MIN,
+            "resting_leg_max_angle": ASLR_RESTING_LEG_MAX_ANGLE,
+            "visual_thresholds_preserved": True,
+        },
         "runtime_versions": RUNTIME_PACKAGE_VERSIONS,
     }
 
@@ -806,333 +821,22 @@ def analyze_squat(xy, conf):
 
 
 
-def estimate_aslr_from_image_skin(img, xy, conf):
-    """
-    Computer-vision fallback for ASLR when YOLO keypoints fail in lying position.
-
-    It estimates the raised leg angle by looking for the highest visible skin region
-    above the pelvis, close to the pelvis x-axis. This is designed specifically for
-    ASLR photos where the raised leg is visible and near-vertical.
-    """
-    try:
-        if img is None:
-            return None
-
-        h, w = img.shape[:2]
-        L_HIP, R_HIP = 11, 12
-
-        # Prefer YOLO pelvis if available.
-        if float(conf[L_HIP]) > 0.05 and float(conf[R_HIP]) > 0.05:
-            pelvis = (xy[L_HIP] + xy[R_HIP]) / 2.0
-            pelvis_x, pelvis_y = float(pelvis[0]), float(pelvis[1])
-        else:
-            pelvis_x, pelvis_y = w * 0.50, h * 0.63
-
-        # Skin segmentation in YCrCb + HSV for indoor lighting.
-        ycrcb = cv2.cvtColor(img, cv2.COLOR_BGR2YCrCb)
-        lower_y = np.array([0, 133, 77], dtype=np.uint8)
-        upper_y = np.array([255, 183, 135], dtype=np.uint8)
-        mask_y = cv2.inRange(ycrcb, lower_y, upper_y)
-
-        hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-        lower_h = np.array([0, 20, 45], dtype=np.uint8)
-        upper_h = np.array([35, 255, 255], dtype=np.uint8)
-        mask_h1 = cv2.inRange(hsv, lower_h, upper_h)
-        lower_h2 = np.array([160, 20, 45], dtype=np.uint8)
-        upper_h2 = np.array([180, 255, 255], dtype=np.uint8)
-        mask_h2 = cv2.inRange(hsv, lower_h2, upper_h2)
-
-        mask = cv2.bitwise_and(mask_y, cv2.bitwise_or(mask_h1, mask_h2))
-
-        # Focus on likely raised-leg zone:
-        # above pelvis and not too far horizontally from pelvis.
-        x_margin = int(w * 0.30)
-        x1 = max(0, int(pelvis_x - x_margin))
-        x2 = min(w, int(pelvis_x + x_margin))
-        y1 = max(0, int(h * 0.05))
-        y2 = max(0, int(pelvis_y + h * 0.03))
-
-        roi = np.zeros_like(mask)
-        roi[y1:y2, x1:x2] = mask[y1:y2, x1:x2]
-
-        kernel = np.ones((7, 7), np.uint8)
-        roi = cv2.morphologyEx(roi, cv2.MORPH_OPEN, kernel, iterations=1)
-        roi = cv2.morphologyEx(roi, cv2.MORPH_CLOSE, kernel, iterations=2)
-
-        num, labels, stats, cent = cv2.connectedComponentsWithStats(roi, 8)
-        best = None
-
-        for i in range(1, num):
-            x, y, bw, bh, area = stats[i]
-            if area < max(150, h * w * 0.00015):
-                continue
-
-            cx, cy = cent[i]
-            if cy >= pelvis_y:
-                continue
-
-            # Prefer tall components above the pelvis and near pelvis x.
-            vertical_gain = pelvis_y - y
-            dist_x = abs(cx - pelvis_x)
-            elongation = bh / max(1, bw)
-            score = vertical_gain * 1.4 + area * 0.003 + elongation * 15 - dist_x * 0.45
-
-            if best is None or score > best["score"]:
-                best = {
-                    "score": score,
-                    "x": x, "y": y, "w": bw, "h": bh, "area": area,
-                    "cx": float(cx), "cy": float(cy)
-                }
-
-        if best is None:
-            return None
-
-        # Use the top-most skin point in the selected component as endpoint.
-        component_mask = (labels == np.argmax([
-            0 if i == 0 else (
-                (pelvis_y - stats[i][1]) * 1.4 + stats[i][4] * 0.003 + (stats[i][3] / max(1, stats[i][2])) * 15 - abs(cent[i][0] - pelvis_x) * 0.45
-                if stats[i][4] >= max(150, h*w*0.00015) and cent[i][1] < pelvis_y else -1e9
-            )
-            for i in range(num)
-        ])).astype(np.uint8)
-
-        ys, xs = np.where(component_mask > 0)
-        if len(xs) == 0:
-            return None
-
-        top_idx = int(np.argmin(ys))
-        end_x = float(xs[top_idx])
-        end_y = float(ys[top_idx])
-
-        dx = abs(end_x - pelvis_x)
-        dy_up = max(0.0, pelvis_y - end_y)
-        angle = math.degrees(math.atan2(dy_up, dx + 1e-6))
-        angle = max(0.0, min(90.0, float(angle)))
-
-        return {
-            "angle": round(angle, 2),
-            "method": "skin_fallback_highest_component",
-            "pelvis_x": round(pelvis_x, 1),
-            "pelvis_y": round(pelvis_y, 1),
-            "endpoint_x": round(end_x, 1),
-            "endpoint_y": round(end_y, 1),
-            "component_area": int(best["area"]),
-            "component_height": int(best["h"]),
-            "component_width": int(best["w"])
-        }
-
-    except Exception as e:
-        return {
-            "angle": None,
-            "method": "skin_fallback_failed",
-            "error": str(e)
-        }
-
 def analyze_aslr(xy, conf, side="RIGHT", img=None):
+    """ASLR V101.27: same-limb geometry with fail-safe quality gates.
+
+    The subject keeps the same head-left orientation for both tests. The
+    workflow assigns left/right; COCO side labels are diagnostic only.
     """
-    Active Straight Leg Raise (ASLR) analysis — V15.2 endpoint-elevation fix.
-
-    Why V15.2:
-    - In lying ASLR photos, YOLO often swaps left/right and sometimes mislabels the floor leg.
-    - The most reliable visual cue is: the raised leg has the knee/ankle highest above the pelvis.
-    - Therefore we detect the raised limb by searching all lower-limb endpoints and selecting the
-      endpoint with the greatest vertical elevation above the pelvis center.
-    - This should fix the case where a straight leg above the hip is incorrectly read as ~30°.
-
-    Output:
-    - 0° = leg close to floor
-    - 90° = leg vertical above hip
-    - <45 red, 45–70 yellow, >=70 green
-    """
-
-    L_HIP, R_HIP = 11, 12
-    L_KNEE, R_KNEE = 13, 14
-    L_ANK, R_ANK = 15, 16
-
-    MIN_CONF = 0.08
-    GOOD_CONF = 0.25
-
-    left_hip, right_hip = xy[L_HIP], xy[R_HIP]
-    pelvis = (left_hip + right_hip) / 2.0
-    pelvis_conf = float((conf[L_HIP] + conf[R_HIP]) / 2.0)
-
-    diagnostic_flags = []
-    if pelvis_conf < MIN_CONF:
-        diagnostic_flags.append("low_pelvis_confidence")
-
-    def angle_from_pelvis(endpoint):
-        # Image y-axis goes downward. For anatomical upward movement:
-        dx = float(endpoint[0] - pelvis[0])
-        dy_up = float(pelvis[1] - endpoint[1])
-        angle = math.degrees(math.atan2(max(0.0, dy_up), abs(dx) + 1e-6))
-        return max(0.0, min(90.0, float(angle)))
-
-    # Build endpoint candidates. Ankles get higher weight, but knees can rescue detection.
-    candidates = []
-    for label, idx, point_type, weight in [
-        ("left_knee", L_KNEE, "knee", 0.85),
-        ("right_knee", R_KNEE, "knee", 0.85),
-        ("left_ankle", L_ANK, "ankle", 1.15),
-        ("right_ankle", R_ANK, "ankle", 1.15),
-    ]:
-        c = float(conf[idx])
-        if c < MIN_CONF:
-            continue
-        p = xy[idx]
-        dy_up = float(pelvis[1] - p[1])
-        # Endpoint must be above or approximately at pelvis level. If below pelvis, it is probably floor leg.
-        if dy_up < -15:
-            continue
-        angle = angle_from_pelvis(p)
-        # Prefer endpoints that are high above pelvis and close to vertical.
-        vertical_elevation = max(0.0, dy_up)
-        selection_score = (angle * 1.6 + vertical_elevation * 0.06) * (0.65 + 0.35 * min(1.0, c)) * weight
-        candidates.append({
-            "label": label,
-            "idx": idx,
-            "point_type": point_type,
-            "confidence": c,
-            "point": p,
-            "angle": angle,
-            "dy_up": dy_up,
-            "selection_score": selection_score,
-        })
-
-    if not candidates:
-        diagnostic_flags.append("no_valid_raised_leg_endpoint")
-        aslr_angle = 0.0
-        selected = None
-    else:
-        selected = max(candidates, key=lambda x: x["selection_score"])
-        aslr_angle = selected["angle"]
-
-    # Extra segment diagnostics when possible.
-    def point_angle(a, b):
-        dx = float(b[0] - a[0])
-        dy_up = float(a[1] - b[1])
-        return max(0.0, min(90.0, math.degrees(math.atan2(max(0.0, dy_up), abs(dx) + 1e-6))))
-
-    left_hip_ankle = point_angle(xy[L_HIP], xy[L_ANK]) if float(conf[L_HIP]) >= MIN_CONF and float(conf[L_ANK]) >= MIN_CONF else None
-    right_hip_ankle = point_angle(xy[R_HIP], xy[R_ANK]) if float(conf[R_HIP]) >= MIN_CONF and float(conf[R_ANK]) >= MIN_CONF else None
-    left_hip_knee = point_angle(xy[L_HIP], xy[L_KNEE]) if float(conf[L_HIP]) >= MIN_CONF and float(conf[L_KNEE]) >= MIN_CONF else None
-    right_hip_knee = point_angle(xy[R_HIP], xy[R_KNEE]) if float(conf[R_HIP]) >= MIN_CONF and float(conf[R_KNEE]) >= MIN_CONF else None
-
-    # If ankle and knee from the same side are both strong, refine using their average.
-    # This helps avoid an overestimated angle from a misplaced knee alone.
-    if selected is not None:
-        if "left" in selected["label"]:
-            side_angles = [a for a in [left_hip_ankle, left_hip_knee] if a is not None]
-            side_confs = [float(conf[i]) for i in [L_ANK, L_KNEE] if float(conf[i]) >= MIN_CONF]
-            detected_coco_side = "COCO_LEFT"
-        else:
-            side_angles = [a for a in [right_hip_ankle, right_hip_knee] if a is not None]
-            side_confs = [float(conf[i]) for i in [R_ANK, R_KNEE] if float(conf[i]) >= MIN_CONF]
-            detected_coco_side = "COCO_RIGHT"
-
-        if len(side_angles) >= 2 and max(side_confs) >= GOOD_CONF:
-            aslr_angle = (max(side_angles) * 0.7 + min(side_angles) * 0.3)
-
-        if selected["confidence"] < GOOD_CONF:
-            diagnostic_flags.append("low_selected_endpoint_confidence")
-    else:
-        detected_coco_side = "UNKNOWN"
-
-    requested_side = side.upper()
-    if (requested_side == "RIGHT" and detected_coco_side == "COCO_LEFT") or (requested_side == "LEFT" and detected_coco_side == "COCO_RIGHT"):
-        diagnostic_flags.append("yolo_left_right_swap_possible")
-
-    # Opposite leg compensation proxy: if the second-best endpoint is also very high, the opposite leg may be lifted.
-    sorted_candidates = sorted(candidates, key=lambda x: x["selection_score"], reverse=True)
-    if len(sorted_candidates) > 1:
-        second = sorted_candidates[1]
-        if second["angle"] > 35 and second["dy_up"] > 40:
-            diagnostic_flags.append("opposite_leg_or_second_endpoint_high")
-
-    aslr_angle = max(0.0, min(90.0, float(aslr_angle)))
-
-    # V15.3 fallback: if YOLO endpoint logic gives a low angle but the image clearly
-    # contains a raised leg, use a skin/shape-based estimate as rescue.
-    image_fallback = None
-    if img is not None and aslr_angle < 55:
-        image_fallback = estimate_aslr_from_image_skin(img, xy, conf)
-        if isinstance(image_fallback, dict) and image_fallback.get("angle") is not None:
-            if float(image_fallback["angle"]) > aslr_angle + 12:
-                diagnostic_flags.append("image_skin_fallback_used")
-                aslr_angle = float(image_fallback["angle"])
-
-    if aslr_angle < 45:
-        score = 40.0
-    elif aslr_angle < 70:
-        score = 60.0 + ((aslr_angle - 45.0) / 25.0) * 19.0
-    else:
-        score = 85.0 + (min(aslr_angle, 90.0) - 70.0) / 20.0 * 15.0
-
-    if "low_selected_endpoint_confidence" in diagnostic_flags:
-        score -= 3.0
-    score = max(0.0, min(100.0, score))
-
-    aslr_thr = make_thresholds(
-        "deg",
-        0,
-        90,
-        [
-            {"label": "Red", "min": 0, "max": 45, "color": "red"},
-            {"label": "Yellow", "min": 45, "max": 70, "color": "yellow"},
-            {"label": "Green", "min": 70, "max": 90, "color": "green"},
-        ],
-        aslr_angle
+    return analyze_aslr_v2(
+        xy,
+        conf,
+        side=side,
+        keypoint_min_conf=ASLR_KEYPOINT_MIN_CONF,
+        required_mean_conf=ASLR_REQUIRED_MEAN_CONF,
+        raised_knee_extension_min=ASLR_RAISED_KNEE_EXTENSION_MIN,
+        resting_knee_extension_min=ASLR_RESTING_KNEE_EXTENSION_MIN,
+        resting_leg_max_angle=ASLR_RESTING_LEG_MAX_ANGLE,
     )
-
-    selected_conf = float(selected["confidence"]) if selected is not None else 0.0
-    conf_out = max(0.0, min(1.0, (pelvis_conf + selected_conf) / 2.0))
-
-    quality_label = "good"
-    if conf_out < 0.30:
-        quality_label = "low"
-    elif conf_out < 0.55 or diagnostic_flags:
-        quality_label = "moderate"
-
-    return {
-        "score": round(float(score), 1),
-        "confidence": round(conf_out, 3),
-        "metrics": {
-            "aslr_angle": round(float(aslr_angle), 2),
-            "requested_side": requested_side,
-            "detected_coco_side": detected_coco_side,
-            "side": requested_side,
-            "angle_method": "pelvis_to_highest_lower_limb_endpoint_v15_2",
-            "quality_label": quality_label,
-            "diagnostic_flags": diagnostic_flags,
-            "selected_endpoint": selected["label"] if selected is not None else None,
-            "selected_endpoint_confidence": round(selected_conf, 3),
-            "image_fallback": image_fallback,
-            "candidate_angles": [
-                {
-                    "label": c["label"],
-                    "angle": round(float(c["angle"]), 2),
-                    "dy_up": round(float(c["dy_up"]), 1),
-                    "confidence": round(float(c["confidence"]), 3),
-                    "selection_score": round(float(c["selection_score"]), 2),
-                }
-                for c in sorted_candidates
-            ],
-            "left_hip_ankle_angle": round(float(left_hip_ankle), 2) if left_hip_ankle is not None else None,
-            "right_hip_ankle_angle": round(float(right_hip_ankle), 2) if right_hip_ankle is not None else None,
-            "left_hip_knee_angle": round(float(left_hip_knee), 2) if left_hip_knee is not None else None,
-            "right_hip_knee_angle": round(float(right_hip_knee), 2) if right_hip_knee is not None else None,
-            "keypoint_confidence": {
-                "left_hip": round(float(conf[L_HIP]), 3),
-                "right_hip": round(float(conf[R_HIP]), 3),
-                "left_knee": round(float(conf[L_KNEE]), 3),
-                "right_knee": round(float(conf[R_KNEE]), 3),
-                "left_ankle": round(float(conf[L_ANK]), 3),
-                "right_ankle": round(float(conf[R_ANK]), 3),
-            }
-        },
-        "thresholds": {
-            "aslr_angle": aslr_thr
-        }
-    }
 
 
 def compute_composite(posture, shoulder_r, shoulder_l, squat, aslr_r=None, aslr_l=None):
@@ -2379,6 +2083,22 @@ def run_yolo_analysis_from_bytes(img_bytes, test_type, capture_metadata=None):
         if getattr(res[0].boxes, "conf", None) is not None
         else np.zeros(len(boxes), dtype=float)
     )
+
+    if str(test_type).startswith("aslr") and len(boxes) > 1:
+        main_area = max(float(areas[main_idx]), 1.0)
+        significant_others = [
+            index
+            for index, area in enumerate(areas)
+            if index != main_idx
+            and float(area) >= main_area * 0.35
+            and float(box_confidences[index]) >= 0.25
+        ]
+        if significant_others:
+            raise ASLRQualityError(
+                "multiple_people",
+                "More than one person is visible. Retake the photo with only the person being assessed in the frame.",
+                {"significant_other_person_count": len(significant_others)},
+            )
 
     xy = res[0].keypoints.xy[main_idx].cpu().numpy()
     conf = res[0].keypoints.conf[main_idx].cpu().numpy()
