@@ -335,7 +335,8 @@ async def request_timing_middleware(request, call_next):
 def health():
     return {
         "ok": True,
-        "patch_version": "V101.28-native-camera-vision-qa",
+        "patch_version": "V101.28.1-aslr-endpoint-first",
+        "base_patch": "V101.28-native-camera-vision-qa",
         "exercise_library_mode": EXERCISE_LIBRARY_MODE,
         "exercise_library_path": EXERCISE_LIBRARY_PATH,
         "exercise_library_count": len(EXERCISE_LIBRARY or []),
@@ -355,6 +356,7 @@ def health():
             "resting_leg_max_angle": ASLR_RESTING_LEG_MAX_ANGLE,
             "visual_thresholds_preserved": True,
             "source_orientation_requirement": "none",
+            "chain_strategy": "raised_ankle_first_then_best_knee_and_hip_combination",
         },
         "vision_qa": {
             "version": VISION_QA_VERSION,
@@ -368,7 +370,7 @@ def health():
 @app.get("/library_status")
 def library_status():
     return {
-        "patch_version": "V101.26-assessment-foundation",
+        "patch_version": "V101.28.1-aslr-endpoint-first",
         "exercise_library_mode": EXERCISE_LIBRARY_MODE,
         "exercise_library_path": EXERCISE_LIBRARY_PATH,
         "exercise_library_count": len(EXERCISE_LIBRARY or []),
@@ -830,10 +832,11 @@ def analyze_squat(xy, conf):
 
 
 def analyze_aslr(xy, conf, side="RIGHT", img=None):
-    """ASLR V101.27: same-limb geometry with fail-safe quality gates.
+    """ASLR V101.28.1: endpoint-first chain reconstruction.
 
-    The subject keeps the same head-left orientation for both tests. The
-    workflow assigns left/right; COCO side labels are diagnostic only.
+    The raised ankle is selected geometrically, then connected to the most
+    plausible knee and hip. The workflow assigns left/right; COCO bilateral
+    labels remain diagnostic only.
     """
     return analyze_aslr_v2(
         xy,
