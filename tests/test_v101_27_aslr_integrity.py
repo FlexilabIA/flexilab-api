@@ -82,7 +82,7 @@ class FlexiLabV10127ASLRIntegrityTests(unittest.TestCase):
 
     def test_patch_version_and_health_configuration(self):
         source = (ROOT / "app.py").read_text(encoding="utf-8")
-        self.assertIn('"patch_version": "V101.28.1-aslr-endpoint-first"', source)
+        self.assertIn('"patch_version": "V101.28.2-aslr-dual-orientation"', source)
         self.assertIn('"visual_thresholds_preserved": True', source)
         self.assertIn("ASLR_ENGINE_VERSION", source)
 
