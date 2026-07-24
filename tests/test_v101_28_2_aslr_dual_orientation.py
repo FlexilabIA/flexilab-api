@@ -50,12 +50,12 @@ def valid_pose():
 
 class ASLRDualOrientationTests(unittest.TestCase):
     def test_patch_contract(self):
-        self.assertIn('"patch_version": "V101.28.2-aslr-dual-orientation"', APP_SOURCE)
+        self.assertIn('"patch_version": "V101.28.3-aslr-dedicated-yolo11m"', APP_SOURCE)
         self.assertIn('cv2.ROTATE_90_CLOCKWISE', APP_SOURCE)
         self.assertIn('"mode": "aslr_dual_orientation"', APP_SOURCE)
         self.assertIn('inference_imgsz=max(POSE_INFERENCE_IMGSZ, 960)', APP_SOURCE)
         self.assertIn('not is_aslr', APP_SOURCE)
-        self.assertEqual(ASLR_ENGINE_VERSION, "aslr-dual-orientation-pelvis-anchor-v4")
+        self.assertEqual(ASLR_ENGINE_VERSION, "aslr-dedicated-yolo11m-dual-orientation-v5")
 
     def test_clockwise_pose_mapping_returns_source_coordinates(self):
         mapper, = _load_app_functions("_map_rotated_cw_pose_to_original")
