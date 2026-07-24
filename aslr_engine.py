@@ -1,6 +1,6 @@
 """FlexiLab ASLR endpoint-first measurement engine.
 
-V101.28.2 keeps endpoint-first chain reconstruction but measures from one
+V101.28.3 keeps endpoint-first chain reconstruction but measures from one
 stable pelvic anchor and supports dual-orientation pose selection in the caller.
 of trusting COCO left/right chains. This is designed for side-view supine ASLR
 where bilateral hip/knee labels can cross or swap while both ankles remain
@@ -16,7 +16,7 @@ import math
 from typing import Any, Dict, Mapping, Sequence, Tuple
 
 
-ASLR_ENGINE_VERSION = "aslr-dual-orientation-pelvis-anchor-v4"
+ASLR_ENGINE_VERSION = "aslr-dedicated-yolo11m-dual-orientation-v5"
 ASLR_THRESHOLD_EVIDENCE_STATUS = (
     "provisional_flexilab_reference_bands_not_diagnostic_cutoffs"
 )

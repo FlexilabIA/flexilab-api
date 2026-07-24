@@ -14,7 +14,7 @@ import cv2
 import numpy as np
 
 
-VISION_QA_VERSION = "vision-qa-overlay-v1.1-aslr-pelvis-anchor"
+VISION_QA_VERSION = "vision-qa-overlay-v1.2-aslr-model-label"
 
 COCO_NAMES = [
     "nose",
@@ -253,11 +253,13 @@ def _draw_aslr_measurement(image: np.ndarray, metrics: Mapping[str, Any]) -> Non
 
     analysis_pass = metrics.get("analysis_pass") or {}
     selected_pass = analysis_pass.get("selected_pass") or analysis_pass.get("mode") or "unknown"
+    model_runtime = metrics.get("model_runtime") or {}
+    model_name = str(model_runtime.get("model") or "unknown-model")
     _put_label(
         image,
-        f"ASLR {metrics.get('requested_side', '')}: {float(metrics.get('aslr_angle', 0)):.1f} deg | knee {float(metrics.get('raised_knee_extension_angle', 0)):.1f} deg | pass {selected_pass}",
+        f"ASLR {metrics.get('requested_side', '')}: {float(metrics.get('aslr_angle', 0)):.1f} deg | knee {float(metrics.get('raised_knee_extension_angle', 0)):.1f} deg | pass {selected_pass} | model {model_name}",
         (18, 34),
-        0.50,
+        0.44,
     )
 
 
