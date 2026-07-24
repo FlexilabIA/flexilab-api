@@ -14,7 +14,7 @@ import cv2
 import numpy as np
 
 
-VISION_QA_VERSION = "vision-qa-overlay-v1"
+VISION_QA_VERSION = "vision-qa-overlay-v1.1-aslr-pelvis-anchor"
 
 COCO_NAMES = [
     "nose",
@@ -211,6 +211,11 @@ def _draw_squat_measurement(image: np.ndarray, metrics: Mapping[str, Any]) -> No
 
 def _draw_aslr_measurement(image: np.ndarray, metrics: Mapping[str, Any]) -> None:
     candidates = metrics.get("candidate_limbs") or []
+    selected_points = metrics.get("selected_limb_points") or {}
+    pelvis_value = selected_points.get("pelvis") or metrics.get("pelvis_center")
+    pelvis = _point(pelvis_value) if pelvis_value else None
+    selected_ankle = None
+
     for candidate in candidates:
         if not isinstance(candidate, Mapping):
             continue
@@ -225,6 +230,8 @@ def _draw_aslr_measurement(image: np.ndarray, metrics: Mapping[str, Any]) -> Non
         thickness = 6 if selected else 3
         cv2.line(image, hip, knee, color, thickness, cv2.LINE_AA)
         cv2.line(image, knee, ankle, color, thickness, cv2.LINE_AA)
+        if selected:
+            selected_ankle = ankle
         _put_label(
             image,
             f"{candidate.get('label')} {float(candidate.get('body_relative_angle', 0)):.1f} deg",
@@ -232,18 +239,25 @@ def _draw_aslr_measurement(image: np.ndarray, metrics: Mapping[str, Any]) -> Non
             0.43,
         )
 
+    if pelvis is not None:
+        cv2.circle(image, pelvis, 10, (230, 100, 240), -1, cv2.LINE_AA)
+        _put_label(image, "Pelvic anchor", (pelvis[0] + 10, pelvis[1] - 10), 0.45)
+        if selected_ankle is not None:
+            cv2.line(image, pelvis, selected_ankle, (70, 245, 245), 6, cv2.LINE_AA)
+
     baseline = metrics.get("body_baseline") or {}
     if isinstance(baseline, Mapping) and baseline.get("shoulder") and baseline.get("hip"):
         shoulder = _point(baseline["shoulder"])
         hip = _point(baseline["hip"])
-        cv2.line(image, shoulder, hip, (230, 100, 240), 6, cv2.LINE_AA)
-        _put_label(image, "Body baseline", (hip[0] + 8, hip[1] + 18), 0.45)
+        cv2.line(image, shoulder, hip, (230, 100, 240), 4, cv2.LINE_AA)
 
+    analysis_pass = metrics.get("analysis_pass") or {}
+    selected_pass = analysis_pass.get("selected_pass") or analysis_pass.get("mode") or "unknown"
     _put_label(
         image,
-        f"ASLR {metrics.get('requested_side', '')}: {float(metrics.get('aslr_angle', 0)):.1f} deg | knee {float(metrics.get('raised_knee_extension_angle', 0)):.1f} deg",
+        f"ASLR {metrics.get('requested_side', '')}: {float(metrics.get('aslr_angle', 0)):.1f} deg | knee {float(metrics.get('raised_knee_extension_angle', 0)):.1f} deg | pass {selected_pass}",
         (18, 34),
-        0.56,
+        0.50,
     )
 
 
