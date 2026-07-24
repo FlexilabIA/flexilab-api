@@ -211,7 +211,7 @@ model = _load_pose_model()
 
 app = FastAPI(
     title="FlexiLab Movement Intelligence API",
-    version="101.26",
+    version="101.26.1",
 )
 app.include_router(create_account_router(supabase))
 app.include_router(create_stripe_router(supabase))
@@ -327,7 +327,7 @@ async def request_timing_middleware(request, call_next):
 def health():
     return {
         "ok": True,
-        "patch_version": "V101.26-assessment-foundation",
+        "patch_version": "V101.26.1-idempotency-recovery",
         "exercise_library_mode": EXERCISE_LIBRARY_MODE,
         "exercise_library_path": EXERCISE_LIBRARY_PATH,
         "exercise_library_count": len(EXERCISE_LIBRARY or []),
@@ -2174,20 +2174,25 @@ async def analyze(
         intake_data=intake_data,
     )
 
-    supabase.table("screenings").insert(row).execute()
-    supabase.table("sessions").update(session_update).eq("id", session_id).execute()
+    try:
+        supabase.table("screenings").insert(row).execute()
+        result_json = _analysis_result_from_runtime(
+            authoritative_email, session_id, test_type, result, intake_data
+        )
+    except Exception as exc:
+        if not _is_duplicate_screening_error(exc):
+            raise
+        existing_screening = _find_existing_screening(session_id, test_type)
+        if not existing_screening:
+            raise
+        result_json = _analysis_result_from_screening(existing_screening, intake_data)
 
-    return {
-        "user_email": authoritative_email,
-        "session_id": session_id,
-        "test_type": test_type,
-        "score": result["score"],
-        "confidence": result["confidence"],
-        "metrics": result["metrics"],
-        "thresholds": result.get("thresholds"),
-        "intake_json": intake_data,
-        "annotated_image_url": None,
-    }
+    _update_session_score_best_effort(
+        session_id,
+        _session_score_update_for_test(test_type, result_json.get("score")),
+        test_type=test_type,
+    )
+    return result_json
 
 
 def utc_now_iso():
@@ -2224,6 +2229,111 @@ def build_screening_row(user_email, user_id, session_id, test_type, result, inta
         row["squat_trunk_lean_deg"] = result["metrics"].get("trunk_lean")
 
     return row
+
+
+def _is_duplicate_screening_error(exc):
+    text = str(exc or "").lower()
+    return (
+        "23505" in text
+        or "duplicate key" in text
+        or "screenings_idempotency_unique_idx" in text
+    )
+
+
+def _find_existing_screening(session_id, test_type):
+    if supabase is None:
+        return None
+    response = (
+        supabase.table("screenings")
+        .select("*")
+        .eq("session_id", session_id)
+        .eq("test_type", test_type)
+        .order("created_at", desc=True)
+        .limit(1)
+        .execute()
+    )
+    return response.data[0] if response.data else None
+
+
+def _session_score_update_for_test(test_type, score):
+    column_by_test = {
+        "posture_side": "posture_score",
+        "shoulder_right": "shoulder_right_score",
+        "shoulder_left": "shoulder_left_score",
+        "squat": "squat_score",
+        "aslr_right": "aslr_right_score",
+        "aslr_left": "aslr_left_score",
+    }
+    column = column_by_test.get(str(test_type or ""))
+    return {column: float(score)} if column and score is not None else {}
+
+
+def _analysis_result_from_screening(screening, fallback_intake=None):
+    return {
+        "user_email": screening.get("user_email"),
+        "session_id": screening.get("session_id"),
+        "test_type": screening.get("test_type"),
+        "score": screening.get("score"),
+        "confidence": screening.get("confidence"),
+        "metrics": screening.get("metrics") or {},
+        "thresholds": screening.get("thresholds"),
+        "intake_json": screening.get("intake_json") or fallback_intake or {},
+        "annotated_image_url": screening.get("annotated_image_url"),
+    }
+
+
+def _analysis_result_from_runtime(user_email, session_id, test_type, result, intake_data):
+    return {
+        "user_email": user_email,
+        "session_id": session_id,
+        "test_type": test_type,
+        "score": result["score"],
+        "confidence": result["confidence"],
+        "metrics": result["metrics"],
+        "thresholds": result.get("thresholds"),
+        "intake_json": intake_data,
+        "annotated_image_url": None,
+    }
+
+
+def _update_session_score_best_effort(session_id, session_update, *, job_id=None, test_type=None):
+    if not session_update:
+        return
+    try:
+        supabase.table("sessions").update(session_update).eq("id", session_id).execute()
+    except Exception:
+        # Session score columns are a cache. The authoritative result remains in
+        # screenings, so a cache/schema mismatch must never invalidate a test.
+        logger.exception(
+            "analysis_session_score_update_failed job_id=%s session_id=%s test_type=%s fields=%s",
+            job_id,
+            session_id,
+            test_type,
+            sorted(session_update.keys()),
+        )
+
+
+def _complete_analysis_job(job_id, result_json, *, image_expires_at=None):
+    supabase.table("analysis_jobs").update({
+        "status": "completed",
+        "completed_at": utc_now_iso(),
+        "result_json": result_json,
+        "error_message": None,
+        "image_base64": None,
+        "image_expires_at": image_expires_at,
+    }).eq("id", job_id).execute()
+
+
+def _public_analysis_error(exc):
+    text = str(exc or "")
+    lowered = text.lower()
+    if _is_duplicate_screening_error(exc):
+        return "This test was already saved. Please wait while the saved result is recovered."
+    if isinstance(exc, ValueError):
+        return text
+    if "column" in lowered or "schema cache" in lowered or "database" in lowered:
+        return "The analysis was completed but could not be finalized. Please retry once."
+    return "The analysis could not be completed. Please retake the photo and try again."
 
 
 def decode_and_normalize_analysis_image(img_bytes):
@@ -2315,6 +2425,7 @@ def process_analysis_job(job_id: str):
     if supabase is None:
         return
 
+    job = None
     try:
         resp = (
             supabase.table("analysis_jobs")
@@ -2363,6 +2474,34 @@ def process_analysis_job(job_id: str):
             # Another web process or worker claimed this job first.
             return
 
+        test_type = job.get("test_type")
+        user_email = job.get("user_email")
+        session_id = job.get("session_id")
+        intake_data, capture_metadata = _split_job_intake_and_capture_metadata(
+            job.get("intake_json")
+        )
+
+        # Recovery path: a previous attempt may have inserted the authoritative
+        # screening row and then failed while updating a non-authoritative cache.
+        existing_screening = _find_existing_screening(session_id, test_type)
+        if existing_screening:
+            result_json = _analysis_result_from_screening(existing_screening, intake_data)
+            _update_session_score_best_effort(
+                session_id,
+                _session_score_update_for_test(test_type, result_json.get("score")),
+                job_id=job_id,
+                test_type=test_type,
+            )
+            _complete_analysis_job(job_id, result_json, image_expires_at=None)
+            image_path = str(job.get("image_path") or "").strip()
+            if image_path:
+                try:
+                    supabase.storage.from_(ANALYSIS_STORAGE_BUCKET).remove([image_path])
+                    supabase.table("analysis_jobs").update({"image_path": None}).eq("id", job_id).execute()
+                except Exception:
+                    pass
+            return
+
         image_path = str(job.get("image_path") or "").strip()
         img_b64 = job.get("image_base64")
         if image_path:
@@ -2376,13 +2515,6 @@ def process_analysis_job(job_id: str):
             img_bytes = base64.b64decode(img_b64)
         else:
             raise ValueError("Missing queued image")
-
-        test_type = job.get("test_type")
-        user_email = job.get("user_email")
-        session_id = job.get("session_id")
-        intake_data, capture_metadata = _split_job_intake_and_capture_metadata(
-            job.get("intake_json")
-        )
 
         result, session_update = run_yolo_analysis_from_bytes(
             img_bytes,
@@ -2399,32 +2531,38 @@ def process_analysis_job(job_id: str):
             intake_data=intake_data
         )
 
-        supabase.table("screenings").insert(screening_row).execute()
-        supabase.table("sessions").update(session_update).eq("id", session_id).execute()
+        try:
+            supabase.table("screenings").insert(screening_row).execute()
+            result_json = _analysis_result_from_runtime(
+                user_email, session_id, test_type, result, intake_data
+            )
+        except Exception as exc:
+            if not _is_duplicate_screening_error(exc):
+                raise
+            existing_screening = _find_existing_screening(session_id, test_type)
+            if not existing_screening:
+                raise
+            result_json = _analysis_result_from_screening(existing_screening, intake_data)
+
+        # Failure to update denormalized session score columns must not convert a
+        # successfully saved screening into a failed job.
+        _update_session_score_best_effort(
+            session_id,
+            _session_score_update_for_test(test_type, result_json.get("score")),
+            job_id=job_id,
+            test_type=test_type,
+        )
 
         keep_diagnostic_image = bool(image_path and DIAGNOSTIC_RETENTION_HOURS > 0)
         diagnostic_expiry = (
             datetime.now(timezone.utc) + timedelta(hours=DIAGNOSTIC_RETENTION_HOURS)
         ).isoformat() if keep_diagnostic_image else None
 
-        supabase.table("analysis_jobs").update({
-            "status": "completed",
-            "completed_at": utc_now_iso(),
-            "result_json": {
-                "user_email": user_email,
-                "session_id": session_id,
-                "test_type": test_type,
-                "score": result["score"],
-                "confidence": result["confidence"],
-                "metrics": result["metrics"],
-                "thresholds": result.get("thresholds"),
-                "intake_json": intake_data,
-                "annotated_image_url": None
-            },
-            "error_message": None,
-            "image_base64": None,
-            "image_expires_at": diagnostic_expiry,
-        }).eq("id", job_id).execute()
+        _complete_analysis_job(
+            job_id,
+            result_json,
+            image_expires_at=diagnostic_expiry,
+        )
 
         if image_path and not keep_diagnostic_image:
             try:
@@ -2433,12 +2571,21 @@ def process_analysis_job(job_id: str):
             except Exception:
                 pass
 
-    except Exception as e:
-        supabase.table("analysis_jobs").update({
-            "status": "failed",
-            "completed_at": utc_now_iso(),
-            "error_message": str(e)
-        }).eq("id", job_id).execute()
+    except Exception as exc:
+        logger.exception(
+            "analysis_job_failed job_id=%s session_id=%s test_type=%s",
+            job_id,
+            (job or {}).get("session_id"),
+            (job or {}).get("test_type"),
+        )
+        try:
+            supabase.table("analysis_jobs").update({
+                "status": "failed",
+                "completed_at": utc_now_iso(),
+                "error_message": _public_analysis_error(exc),
+            }).eq("id", job_id).execute()
+        except Exception:
+            logger.exception("analysis_job_failure_status_update_failed job_id=%s", job_id)
 
 
 @app.post("/submit_analysis")
@@ -2487,6 +2634,26 @@ async def submit_analysis(
                 "status": existing_status,
                 "reused": True,
             }
+
+    # A failed job may already have saved the screening before a later cache
+    # update failed. Reconcile it immediately instead of uploading/re-analysing.
+    existing_screening = _find_existing_screening(session_id, test_type)
+    if existing_screening and existing_jobs.data:
+        recovered_job_id = existing_jobs.data[0].get("id")
+        result_json = _analysis_result_from_screening(existing_screening, intake_data)
+        _update_session_score_best_effort(
+            session_id,
+            _session_score_update_for_test(test_type, result_json.get("score")),
+            job_id=recovered_job_id,
+            test_type=test_type,
+        )
+        _complete_analysis_job(recovered_job_id, result_json, image_expires_at=None)
+        return {
+            "job_id": recovered_job_id,
+            "status": "completed",
+            "reused": True,
+            "recovered": True,
+        }
 
     img_bytes = await image.read()
     if not img_bytes:
