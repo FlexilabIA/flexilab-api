@@ -365,6 +365,43 @@ def create_trainer_router(supabase_client) -> APIRouter:
             "total": int(getattr(response, "count", len(result)) or len(result)),
         }
 
+
+    @router.get("/trainer/bootstrap")
+    def trainer_bootstrap(user: dict[str, str] = Depends(require_user)):
+        """
+        Return the complete initial Trainer workspace in one authoritative response.
+
+        The frontend must not render default zero balances or empty client/history
+        states when only part of the workspace has loaded. If any required query
+        fails, the whole request fails and the frontend keeps its loading/retry
+        screen visible.
+        """
+        require_trainer(user)
+
+        overview_payload = overview(user=user)
+        clients_payload = list_clients(
+            page=1,
+            page_size=100,
+            q=None,
+            user=user,
+        )
+        self_payload = self_screenings(user=user)
+        token_history_payload = token_history(user=user)
+
+        return {
+            "overview": overview_payload,
+            "clients": clients_payload.get("clients", []),
+            "clients_page": clients_payload.get("page", 1),
+            "clients_page_size": clients_payload.get("page_size", 100),
+            "clients_total": clients_payload.get(
+                "total",
+                len(clients_payload.get("clients", [])),
+            ),
+            "self_screenings": self_payload.get("screenings", []),
+            "token_history": token_history_payload,
+            "loaded_at": _iso_now(),
+        }
+
     @router.post("/trainer/clients")
     def create_client(payload: TrainerClientCreate, user: dict[str, str] = Depends(require_user)):
         require_trainer(user)
