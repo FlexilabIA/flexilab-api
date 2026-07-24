@@ -17,7 +17,8 @@ class FlexiLabV10126AssessmentFoundationTests(unittest.TestCase):
         self.assertIn("with POSE_MODEL_INFERENCE_LOCK", source)
         self.assertIn("POSE_MODEL_RELOAD_COUNT", source)
         self.assertIn("known_fused_conv_error", source)
-        self.assertIn("imgsz=POSE_INFERENCE_IMGSZ", source)
+        self.assertIn("requested_imgsz = int(inference_imgsz or POSE_INFERENCE_IMGSZ)", source)
+        self.assertIn("imgsz=requested_imgsz", source)
 
     def test_capture_metadata_is_accepted_without_schema_change(self) -> None:
         source = text("app.py")
