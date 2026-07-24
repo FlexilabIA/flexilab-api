@@ -181,6 +181,16 @@ POSE_MODEL_LOAD_ERROR = None
 POSE_MODEL_INFERENCE_LOCK = threading.RLock()
 POSE_MODEL_RELOAD_COUNT = 0
 
+# Dedicated higher-accuracy model used only for the two ASLR tests.
+# YOLO11m-pose has materially higher COCO pose mAP than nano variants while
+# remaining a reasonable fit for the current 2 GB Render instance.
+ASLR_POSE_MODEL_NAME = os.environ.get(
+    "FLEXILAB_ASLR_POSE_MODEL", "yolo11m-pose.pt"
+).strip() or "yolo11m-pose.pt"
+ASLR_POSE_MODEL_LOAD_ERROR = None
+ASLR_POSE_MODEL_INFERENCE_LOCK = threading.RLock()
+ASLR_POSE_MODEL_RELOAD_COUNT = 0
+
 
 def _load_pose_model():
     global POSE_MODEL_LOAD_ERROR
@@ -190,6 +200,17 @@ def _load_pose_model():
         return loaded_model
     except Exception as exc:
         POSE_MODEL_LOAD_ERROR = str(exc)
+        return None
+
+
+def _load_aslr_pose_model():
+    global ASLR_POSE_MODEL_LOAD_ERROR
+    try:
+        loaded_model = YOLO(ASLR_POSE_MODEL_NAME)
+        ASLR_POSE_MODEL_LOAD_ERROR = None
+        return loaded_model
+    except Exception as exc:
+        ASLR_POSE_MODEL_LOAD_ERROR = str(exc)
         return None
 
 
@@ -216,10 +237,11 @@ RUNTIME_PACKAGE_VERSIONS = {
 
 
 model = _load_pose_model()
+aslr_model = _load_aslr_pose_model()
 
 app = FastAPI(
     title="FlexiLab Movement Intelligence API",
-    version="101.27",
+    version="101.28.3",
 )
 app.include_router(create_account_router(supabase))
 app.include_router(create_stripe_router(supabase))
@@ -241,6 +263,13 @@ app.include_router(
                 "inference_imgsz": POSE_INFERENCE_IMGSZ,
                 "analysis_max_edge": ANALYSIS_MAX_EDGE,
                 "runtime_versions": RUNTIME_PACKAGE_VERSIONS,
+            },
+            "aslr_pose_model": {
+                "configured_model": ASLR_POSE_MODEL_NAME,
+                "loaded": aslr_model is not None,
+                "load_error": ASLR_POSE_MODEL_LOAD_ERROR,
+                "reload_count": ASLR_POSE_MODEL_RELOAD_COUNT,
+                "inference_imgsz": 960,
             },
         },
     )
@@ -335,8 +364,8 @@ async def request_timing_middleware(request, call_next):
 def health():
     return {
         "ok": True,
-        "patch_version": "V101.28.2-aslr-dual-orientation",
-        "base_patch": "V101.28.1-aslr-endpoint-first",
+        "patch_version": "V101.28.3-aslr-dedicated-yolo11m",
+        "base_patch": "V101.28.2-aslr-dual-orientation",
         "exercise_library_mode": EXERCISE_LIBRARY_MODE,
         "exercise_library_path": EXERCISE_LIBRARY_PATH,
         "exercise_library_count": len(EXERCISE_LIBRARY or []),
@@ -345,6 +374,10 @@ def health():
         "pose_model_error": POSE_MODEL_LOAD_ERROR,
         "pose_model_reload_count": POSE_MODEL_RELOAD_COUNT,
         "pose_inference_imgsz": POSE_INFERENCE_IMGSZ,
+        "aslr_pose_model_loaded": aslr_model is not None,
+        "aslr_pose_model_name": ASLR_POSE_MODEL_NAME,
+        "aslr_pose_model_error": ASLR_POSE_MODEL_LOAD_ERROR,
+        "aslr_pose_model_reload_count": ASLR_POSE_MODEL_RELOAD_COUNT,
         "analysis_max_edge": ANALYSIS_MAX_EDGE,
         "diagnostic_retention_hours": DIAGNOSTIC_RETENTION_HOURS,
         "aslr_engine": {
@@ -356,10 +389,12 @@ def health():
             "resting_leg_max_angle": ASLR_RESTING_LEG_MAX_ANGLE,
             "visual_thresholds_preserved": True,
             "source_orientation_requirement": "none",
-            "chain_strategy": "dual_orientation_then_raised_ankle_first_chain",
+            "chain_strategy": "dedicated_yolo11m_dual_orientation_then_endpoint_chain",
             "pose_passes": ["original", "rotated_90_clockwise"],
             "aslr_inference_imgsz": 960,
             "measurement_anchor": "single_pelvic_anchor",
+            "dedicated_pose_model": ASLR_POSE_MODEL_NAME,
+            "general_model_fallback": False,
         },
         "vision_qa": {
             "version": VISION_QA_VERSION,
@@ -373,7 +408,7 @@ def health():
 @app.get("/library_status")
 def library_status():
     return {
-        "patch_version": "V101.28.2-aslr-dual-orientation",
+        "patch_version": "V101.28.3-aslr-dedicated-yolo11m",
         "exercise_library_mode": EXERCISE_LIBRARY_MODE,
         "exercise_library_path": EXERCISE_LIBRARY_PATH,
         "exercise_library_count": len(EXERCISE_LIBRARY or []),
@@ -2035,6 +2070,75 @@ def detect_pose_with_fallback(img, test_type, inference_imgsz=None):
     )
 
 
+def detect_aslr_pose_with_fallback(img, inference_imgsz=None):
+    """Run ASLR with its dedicated higher-accuracy model, fail closed on error."""
+    global aslr_model, ASLR_POSE_MODEL_LOAD_ERROR, ASLR_POSE_MODEL_RELOAD_COUNT
+
+    thresholds = [0.25, 0.18, 0.12]
+    requested_imgsz = int(inference_imgsz or 960)
+    requested_imgsz = max(640, min(1280, requested_imgsz))
+
+    with ASLR_POSE_MODEL_INFERENCE_LOCK:
+        if aslr_model is None:
+            aslr_model = _load_aslr_pose_model()
+        if aslr_model is None:
+            raise ValueError(
+                "The dedicated ASLR pose model is temporarily unavailable. Please retry shortly."
+            )
+
+        recovered_once = False
+        for threshold in thresholds:
+            while True:
+                try:
+                    prediction = aslr_model(
+                        img,
+                        conf=threshold,
+                        classes=[0],
+                        imgsz=requested_imgsz,
+                        verbose=False,
+                    )
+                    break
+                except AttributeError as exc:
+                    error_text = str(exc)
+                    known_fused_conv_error = (
+                        "Conv" in error_text
+                        and "has no attribute" in error_text
+                        and "bn" in error_text
+                    )
+                    if not known_fused_conv_error or recovered_once:
+                        raise ValueError(
+                            "ASLR pose analysis is temporarily unavailable. Please retry."
+                        ) from exc
+                    logger.warning(
+                        "Reloading dedicated ASLR pose model after fused Conv error: %s",
+                        error_text,
+                    )
+                    recovered_once = True
+                    ASLR_POSE_MODEL_RELOAD_COUNT += 1
+                    aslr_model = _load_aslr_pose_model()
+                    if aslr_model is None:
+                        raise ValueError(
+                            "The ASLR pose model could not be reloaded. Please retry shortly."
+                        ) from exc
+                except Exception as exc:
+                    logger.exception("Dedicated ASLR YOLO inference failed")
+                    raise ValueError(
+                        "ASLR pose analysis is temporarily unavailable. Please retry."
+                    ) from exc
+
+            if (
+                prediction
+                and prediction[0].keypoints is not None
+                and len(prediction[0].keypoints.xy) > 0
+            ):
+                return prediction, threshold, requested_imgsz
+
+    raise ValueError(
+        "The ASLR pose could not be detected reliably. Keep the pelvis, both knees, "
+        "and both feet visible, then retake the photo."
+    )
+
+
 @app.post("/analyze")
 async def analyze(
     image: UploadFile = File(...),
@@ -2278,7 +2382,11 @@ def run_yolo_analysis_from_bytes(img_bytes, test_type, capture_metadata=None):
     is_aslr = str(test_type).startswith("aslr")
 
     first_requested_imgsz = max(POSE_INFERENCE_IMGSZ, 960) if is_aslr else None
-    first_prediction, first_threshold, first_imgsz = detect_pose_with_fallback(
+    pose_detector = detect_aslr_pose_with_fallback if is_aslr else detect_pose_with_fallback
+    first_prediction, first_threshold, first_imgsz = pose_detector(
+        img,
+        inference_imgsz=first_requested_imgsz,
+    ) if is_aslr else pose_detector(
         img,
         test_type,
         inference_imgsz=first_requested_imgsz,
@@ -2401,9 +2509,8 @@ def run_yolo_analysis_from_bytes(img_bytes, test_type, capture_metadata=None):
         rotated_failure = None
         try:
             rotated_img = cv2.rotate(img, cv2.ROTATE_90_CLOCKWISE)
-            rotated_prediction, rotated_threshold, rotated_imgsz = detect_pose_with_fallback(
+            rotated_prediction, rotated_threshold, rotated_imgsz = detect_aslr_pose_with_fallback(
                 rotated_img,
-                test_type,
                 inference_imgsz=max(POSE_INFERENCE_IMGSZ, 960),
             )
             (
@@ -2556,10 +2663,11 @@ def run_yolo_analysis_from_bytes(img_bytes, test_type, capture_metadata=None):
                 "image_quality_diagnostics": image_quality,
                 "capture_metadata": capture_metadata or {},
                 "model_runtime": {
-                    "model": POSE_MODEL_NAME,
+                    "model": ASLR_POSE_MODEL_NAME,
+                    "model_role": "dedicated_aslr_pose",
                     "inference_imgsz": inference_imgsz,
                     "analysis_max_edge": ANALYSIS_MAX_EDGE,
-                    "reload_count": POSE_MODEL_RELOAD_COUNT,
+                    "reload_count": ASLR_POSE_MODEL_RELOAD_COUNT,
                 },
             }
             rejected_result = {
@@ -2596,10 +2704,11 @@ def run_yolo_analysis_from_bytes(img_bytes, test_type, capture_metadata=None):
     result["metrics"]["capture_metadata"] = capture_metadata or {}
     result["metrics"]["analysis_pass"] = analysis_pass
     result["metrics"]["model_runtime"] = {
-        "model": POSE_MODEL_NAME,
+        "model": ASLR_POSE_MODEL_NAME if is_aslr else POSE_MODEL_NAME,
+        "model_role": "dedicated_aslr_pose" if is_aslr else "general_pose",
         "inference_imgsz": inference_imgsz,
         "analysis_max_edge": ANALYSIS_MAX_EDGE,
-        "reload_count": POSE_MODEL_RELOAD_COUNT,
+        "reload_count": ASLR_POSE_MODEL_RELOAD_COUNT if is_aslr else POSE_MODEL_RELOAD_COUNT,
     }
 
     vision_qa_requested = bool((capture_metadata or {}).get("vision_qa_requested"))
