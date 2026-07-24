@@ -335,8 +335,8 @@ async def request_timing_middleware(request, call_next):
 def health():
     return {
         "ok": True,
-        "patch_version": "V101.28.1-aslr-endpoint-first",
-        "base_patch": "V101.28-native-camera-vision-qa",
+        "patch_version": "V101.28.2-aslr-dual-orientation",
+        "base_patch": "V101.28.1-aslr-endpoint-first",
         "exercise_library_mode": EXERCISE_LIBRARY_MODE,
         "exercise_library_path": EXERCISE_LIBRARY_PATH,
         "exercise_library_count": len(EXERCISE_LIBRARY or []),
@@ -356,7 +356,10 @@ def health():
             "resting_leg_max_angle": ASLR_RESTING_LEG_MAX_ANGLE,
             "visual_thresholds_preserved": True,
             "source_orientation_requirement": "none",
-            "chain_strategy": "raised_ankle_first_then_best_knee_and_hip_combination",
+            "chain_strategy": "dual_orientation_then_raised_ankle_first_chain",
+            "pose_passes": ["original", "rotated_90_clockwise"],
+            "aslr_inference_imgsz": 960,
+            "measurement_anchor": "single_pelvic_anchor",
         },
         "vision_qa": {
             "version": VISION_QA_VERSION,
@@ -370,7 +373,7 @@ def health():
 @app.get("/library_status")
 def library_status():
     return {
-        "patch_version": "V101.28.1-aslr-endpoint-first",
+        "patch_version": "V101.28.2-aslr-dual-orientation",
         "exercise_library_mode": EXERCISE_LIBRARY_MODE,
         "exercise_library_path": EXERCISE_LIBRARY_PATH,
         "exercise_library_count": len(EXERCISE_LIBRARY or []),
@@ -1828,6 +1831,71 @@ def _map_crop_pose_to_full(xy, boxes, crop_bounds):
     return mapped_xy, mapped_boxes
 
 
+def _map_rotated_cw_pose_to_original(xy, boxes, original_shape):
+    """Map 90-degree-clockwise inference coordinates back to the source image."""
+    original_height, original_width = original_shape[:2]
+    mapped_xy = np.array(xy, dtype=float, copy=True)
+    rotated_x = mapped_xy[:, 0].copy()
+    rotated_y = mapped_xy[:, 1].copy()
+    mapped_xy[:, 0] = rotated_y
+    mapped_xy[:, 1] = float(original_height - 1) - rotated_x
+
+    mapped_boxes = []
+    for box in np.array(boxes, dtype=float):
+        x1, y1, x2, y2 = [float(value) for value in box[:4]]
+        corners = np.array(
+            [[x1, y1], [x2, y1], [x2, y2], [x1, y2]],
+            dtype=float,
+        )
+        source_x = corners[:, 1]
+        source_y = float(original_height - 1) - corners[:, 0]
+        mapped_boxes.append(
+            [
+                float(np.min(source_x)),
+                float(np.min(source_y)),
+                float(np.max(source_x)),
+                float(np.max(source_y)),
+            ]
+        )
+    return mapped_xy, np.array(mapped_boxes, dtype=float)
+
+
+def _aslr_pose_pass_quality(result):
+    """Score pose-pass reliability without selecting the largest clinical angle."""
+    metrics = result.get("metrics") or {}
+    confidence = float(result.get("confidence") or 0.0)
+    chain_score = float(metrics.get("selected_chain_score") or 0.0)
+    mean_conf = float(metrics.get("selected_limb_mean_confidence") or 0.0)
+    min_conf = float(metrics.get("selected_limb_min_confidence") or 0.0)
+    angle = float(metrics.get("aslr_angle") or 0.0)
+    endpoint_count = int(metrics.get("detected_ankle_endpoint_count") or 0)
+    endpoints_distinct = bool(metrics.get("ankle_endpoints_are_distinct"))
+    resting_verified = bool(metrics.get("resting_leg_verified"))
+    flags = set(metrics.get("diagnostic_flags") or [])
+
+    quality = (
+        confidence * 0.36
+        + chain_score * 0.24
+        + mean_conf * 0.18
+        + min_conf * 0.12
+    )
+    if endpoints_distinct:
+        quality += 0.12
+    elif endpoint_count < 2:
+        quality -= 0.08
+    if resting_verified:
+        quality += 0.08
+    if "resting_ankle_not_independently_resolved" in flags:
+        quality -= 0.06
+    if "ankle_endpoints_duplicated_by_pose_model" in flags:
+        quality -= 0.10
+    # A lone near-baseline endpoint is likely the resting ankle. This is a
+    # detection-quality penalty, not a preference for a larger clinical result.
+    if not endpoints_distinct and angle < 18.0:
+        quality -= 0.50
+    return round(float(quality), 6)
+
+
 def _relevant_pose_confidence(conf, test_type):
     test_type = str(test_type or "")
     if test_type.startswith("aslr"):
@@ -2209,7 +2277,12 @@ def run_yolo_analysis_from_bytes(img_bytes, test_type, capture_metadata=None):
     img, image_quality = decode_and_normalize_analysis_image(img_bytes)
     is_aslr = str(test_type).startswith("aslr")
 
-    first_prediction, first_threshold, first_imgsz = detect_pose_with_fallback(img, test_type)
+    first_requested_imgsz = max(POSE_INFERENCE_IMGSZ, 960) if is_aslr else None
+    first_prediction, first_threshold, first_imgsz = detect_pose_with_fallback(
+        img,
+        test_type,
+        inference_imgsz=first_requested_imgsz,
+    )
     (
         first_boxes,
         first_areas,
@@ -2248,12 +2321,10 @@ def run_yolo_analysis_from_bytes(img_bytes, test_type, capture_metadata=None):
     # landmarks are weak. Portrait ASLR and desktop webcam frames are therefore
     # supported without imposing any source orientation.
     should_use_crop_pass = bool(
-        crop_img is not None
+        not is_aslr
+        and crop_img is not None
         and crop_bounds is not None
-        and (
-            person_coverage < (0.48 if is_aslr else 0.24)
-            or (is_aslr and first_relevant_conf < 0.42)
-        )
+        and person_coverage < 0.24
         and (crop_bounds["width"] * crop_bounds["height"]) < image_area * 0.94
     )
 
@@ -2311,6 +2382,139 @@ def run_yolo_analysis_from_bytes(img_bytes, test_type, capture_metadata=None):
                 "relevant_keypoint_mean_confidence_after_crop": round(crop_relevant_conf, 4),
             }
 
+    aslr_precomputed_result = None
+    aslr_precomputed_error = None
+    if is_aslr:
+        requested_side = "RIGHT" if test_type == "aslr_right" else "LEFT"
+        pose_passes = [
+            {
+                "name": "original",
+                "xy": final_xy,
+                "conf": final_conf,
+                "boxes": final_boxes,
+                "box_confidences": final_box_confidences,
+                "main_idx": final_main_idx,
+                "threshold": detection_threshold,
+                "imgsz": inference_imgsz,
+            }
+        ]
+        rotated_failure = None
+        try:
+            rotated_img = cv2.rotate(img, cv2.ROTATE_90_CLOCKWISE)
+            rotated_prediction, rotated_threshold, rotated_imgsz = detect_pose_with_fallback(
+                rotated_img,
+                test_type,
+                inference_imgsz=max(POSE_INFERENCE_IMGSZ, 960),
+            )
+            (
+                rotated_boxes,
+                _rotated_areas,
+                rotated_box_confidences,
+                rotated_main_idx,
+                rotated_xy,
+                rotated_conf,
+            ) = _pose_arrays(rotated_prediction)
+            mapped_xy, mapped_boxes = _map_rotated_cw_pose_to_original(
+                rotated_xy,
+                rotated_boxes,
+                img.shape,
+            )
+            pose_passes.append(
+                {
+                    "name": "rotated_90_clockwise",
+                    "xy": mapped_xy,
+                    "conf": rotated_conf,
+                    "boxes": mapped_boxes,
+                    "box_confidences": rotated_box_confidences,
+                    "main_idx": rotated_main_idx,
+                    "threshold": rotated_threshold,
+                    "imgsz": rotated_imgsz,
+                }
+            )
+        except Exception as exc:
+            rotated_failure = str(exc)
+            logger.warning("ASLR rotated pose pass unavailable: %s", exc)
+
+        evaluated_passes = []
+        accepted_passes = []
+        rejected_passes = []
+        for pose_pass in pose_passes:
+            try:
+                pass_result = analyze_aslr(
+                    pose_pass["xy"],
+                    pose_pass["conf"],
+                    requested_side,
+                    img,
+                )
+                pass_quality = _aslr_pose_pass_quality(pass_result)
+                entry = {
+                    "name": pose_pass["name"],
+                    "status": "accepted",
+                    "quality_score": pass_quality,
+                    "aslr_angle": (pass_result.get("metrics") or {}).get("aslr_angle"),
+                    "confidence": pass_result.get("confidence"),
+                    "ankle_endpoint_count": (pass_result.get("metrics") or {}).get("detected_ankle_endpoint_count"),
+                    "ankle_endpoints_are_distinct": (pass_result.get("metrics") or {}).get("ankle_endpoints_are_distinct"),
+                }
+                evaluated_passes.append(entry)
+                accepted_passes.append((pass_quality, pose_pass, pass_result))
+            except ASLRQualityError as exc:
+                detail_score = 0.0
+                if isinstance(exc.details, dict):
+                    detail_score = float(exc.details.get("candidate_angle") or 0.0) / 180.0
+                entry = {
+                    "name": pose_pass["name"],
+                    "status": "rejected",
+                    "code": exc.code,
+                    "message": str(exc),
+                    "diagnostic_score": round(detail_score, 6),
+                }
+                evaluated_passes.append(entry)
+                rejected_passes.append((detail_score, pose_pass, exc))
+
+        if accepted_passes:
+            _quality, selected_pass, aslr_precomputed_result = max(
+                accepted_passes,
+                key=lambda item: item[0],
+            )
+            final_xy = selected_pass["xy"]
+            final_conf = selected_pass["conf"]
+            final_boxes = selected_pass["boxes"]
+            final_box_confidences = selected_pass["box_confidences"]
+            final_main_idx = selected_pass["main_idx"]
+            detection_threshold = selected_pass["threshold"]
+            inference_imgsz = selected_pass["imgsz"]
+            analysis_pass = {
+                "mode": "aslr_dual_orientation",
+                "selected_pass": selected_pass["name"],
+                "source_orientation_required": False,
+                "pose_passes": evaluated_passes,
+                "rotated_pass_failure": rotated_failure,
+                "person_coverage": round(person_coverage, 4),
+                "adaptive_crop_used": False,
+            }
+        else:
+            _diagnostic, selected_pass, aslr_precomputed_error = max(
+                rejected_passes,
+                key=lambda item: item[0],
+            )
+            final_xy = selected_pass["xy"]
+            final_conf = selected_pass["conf"]
+            final_boxes = selected_pass["boxes"]
+            final_box_confidences = selected_pass["box_confidences"]
+            final_main_idx = selected_pass["main_idx"]
+            detection_threshold = selected_pass["threshold"]
+            inference_imgsz = selected_pass["imgsz"]
+            analysis_pass = {
+                "mode": "aslr_dual_orientation",
+                "selected_pass": selected_pass["name"],
+                "source_orientation_required": False,
+                "pose_passes": evaluated_passes,
+                "rotated_pass_failure": rotated_failure,
+                "person_coverage": round(person_coverage, 4),
+                "adaptive_crop_used": False,
+            }
+
     xy = final_xy
     conf = final_conf
 
@@ -2328,9 +2532,15 @@ def run_yolo_analysis_from_bytes(img_bytes, test_type, capture_metadata=None):
         session_update = {"squat_score": result["score"]}
     elif test_type in {"aslr_right", "aslr_left"}:
         requested_side = "RIGHT" if test_type == "aslr_right" else "LEFT"
-        try:
-            result = analyze_aslr(xy, conf, requested_side, img)
-        except ASLRQualityError as exc:
+        exc = aslr_precomputed_error
+        if exc is None:
+            result = aslr_precomputed_result
+            if result is None:
+                try:
+                    result = analyze_aslr(xy, conf, requested_side, img)
+                except ASLRQualityError as runtime_exc:
+                    exc = runtime_exc
+        if exc is not None:
             rejection_metrics = {
                 "requested_side": requested_side,
                 "capture_rejection": {
