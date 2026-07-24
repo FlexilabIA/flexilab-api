@@ -35,9 +35,11 @@ class FlexiLabV101261IdempotencyRecoveryTests(unittest.TestCase):
         self.assertIn("analysis_job_failed", text)
         self.assertIn('"error_message": _public_analysis_error(exc)', text)
 
-    def test_patch_version(self) -> None:
+    def test_idempotency_recovery_remains_present_in_later_versions(self) -> None:
         text = source()
-        self.assertIn('"patch_version": "V101.26.1-idempotency-recovery"', text)
+        self.assertIn("idempotency_key", text)
+        self.assertIn("_complete_analysis_job", text)
+        self.assertIn("existing_screening = _find_existing_screening", text)
 
 
 if __name__ == "__main__":
