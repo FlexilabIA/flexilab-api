@@ -1,6 +1,7 @@
 """FlexiLab ASLR endpoint-first measurement engine.
 
-V101.28.1 reconstructs the raised leg from the visible distal endpoint instead
+V101.28.2 keeps endpoint-first chain reconstruction but measures from one
+stable pelvic anchor and supports dual-orientation pose selection in the caller.
 of trusting COCO left/right chains. This is designed for side-view supine ASLR
 where bilateral hip/knee labels can cross or swap while both ankles remain
 visually distinct.
@@ -15,7 +16,7 @@ import math
 from typing import Any, Dict, Mapping, Sequence, Tuple
 
 
-ASLR_ENGINE_VERSION = "aslr-endpoint-first-chain-v3"
+ASLR_ENGINE_VERSION = "aslr-dual-orientation-pelvis-anchor-v4"
 ASLR_THRESHOLD_EVIDENCE_STATUS = (
     "provisional_flexilab_reference_bands_not_diagnostic_cutoffs"
 )
@@ -479,9 +480,14 @@ def analyze_aslr_v2(
 
     resting_chain = None
     endpoints_are_distinct = False
+    endpoint_separation = None
+    endpoint_separation_ratio = None
+    distinct_threshold = None
     if resting_endpoint is not None:
         endpoint_separation = _distance(raised_endpoint["ankle"], resting_endpoint["ankle"])
-        distinct_threshold = max(8.0, 0.08 * max(raised_endpoint["length_px"], resting_endpoint["length_px"]))
+        reference_length = max(raised_endpoint["length_px"], resting_endpoint["length_px"], 1.0)
+        endpoint_separation_ratio = endpoint_separation / reference_length
+        distinct_threshold = max(8.0, 0.08 * reference_length)
         endpoints_are_distinct = endpoint_separation >= distinct_threshold
         if endpoints_are_distinct:
             resting_chain = _best_chain_for_ankle(
@@ -497,19 +503,31 @@ def analyze_aslr_v2(
             flags.append("ankle_endpoints_duplicated_by_pose_model")
             flags.append("resting_leg_not_independently_resolved_by_pose_model")
 
-    raised_measurement_vector = _vector(raised_chain["hip"], raised_chain["ankle"])
-    if resting_endpoint is not None and endpoints_are_distinct and resting_chain is not None:
-        final_baseline_vector = _vector(resting_chain["hip"], resting_chain["ankle"])
-        final_baseline_method = "resting_hip_to_ankle"
-    elif resting_endpoint is not None and endpoints_are_distinct:
-        final_baseline_vector = resting_endpoint["vector"]
-        final_baseline_method = "pelvis_to_resting_ankle"
+    # A strict side-view ASLR does not provide two visually separable hips.
+    # Measurement therefore starts from one confidence-weighted pelvic anchor.
+    raised_measurement_vector = _vector(pelvis_center, raised_chain["ankle"])
+    if resting_endpoint is not None and endpoints_are_distinct:
+        final_baseline_vector = _vector(pelvis_center, resting_endpoint["ankle"])
+        final_baseline_method = "pelvis_anchor_to_resting_ankle"
     else:
         final_baseline_vector = torso_vector
         final_baseline_method = baseline_method
         flags.append("resting_ankle_not_independently_resolved")
 
     raised_angle = _acute_angle_between(final_baseline_vector, raised_measurement_vector)
+    # A lone ankle close to the resting/body baseline is almost always the
+    # resting ankle, not a severe-mobility result. Reject instead of saving a
+    # false low score. A clearly elevated single endpoint remains measurable.
+    if not endpoints_are_distinct and raised_angle < 18.0:
+        raise ASLRQualityError(
+            "raised_ankle_not_detected",
+            "The raised foot could not be detected reliably. Keep both feet fully visible and retake the photo.",
+            {
+                "detected_endpoint_count": len(endpoints),
+                "candidate_angle": round(raised_angle, 2),
+                "selected_ankle": _rounded_point(raised_chain["ankle"]),
+            },
+        )
     if raised_angle < minimum_detectable_raise:
         raise ASLRQualityError(
             "raised_leg_not_detected",
@@ -640,8 +658,9 @@ def analyze_aslr_v2(
             "detected_coco_side": detected_coco_side,
             "side_identity_method": "workflow_side_with_endpoint_first_chain_reconstruction",
             "measurement_engine_version": ASLR_ENGINE_VERSION,
-            "angle_method": "pelvis_to_raised_ankle_relative_to_resting_ankle_or_body_axis",
+            "angle_method": "single_pelvic_anchor_to_raised_ankle_relative_to_resting_ankle_or_body_axis",
             "chain_reconstruction_method": "raised_ankle_first_then_best_knee_and_hip_combination",
+            "pelvic_anchor_method": "confidence_weighted_visible_hip_region",
             "source_orientation_requirement": "none",
             "body_baseline": baseline_public,
             "raised_knee_extension_angle": round(raised_knee_extension, 2),
@@ -660,7 +679,13 @@ def analyze_aslr_v2(
             "selected_chain_score": round(float(raised_chain["chain_score"]), 3),
             "candidate_limbs": candidate_limbs,
             "endpoint_candidates": endpoint_diagnostics,
+            "detected_ankle_endpoint_count": len(endpoints),
+            "ankle_endpoints_are_distinct": endpoints_are_distinct,
+            "ankle_endpoint_separation_px": round(endpoint_separation, 2) if endpoint_separation is not None else None,
+            "ankle_endpoint_separation_ratio": round(endpoint_separation_ratio, 4) if endpoint_separation_ratio is not None else None,
+            "ankle_distinct_threshold_px": round(distinct_threshold, 2) if distinct_threshold is not None else None,
             "selected_limb_points": {
+                "pelvis": _rounded_point(pelvis_center),
                 "hip": _rounded_point(raised_chain["hip"]),
                 "knee": _rounded_point(raised_chain["knee"]),
                 "ankle": _rounded_point(raised_chain["ankle"]),
