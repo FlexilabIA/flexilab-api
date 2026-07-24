@@ -32,7 +32,9 @@ import base64
 import logging
 import time
 import uuid
+import threading
 import httpx
+from importlib.metadata import PackageNotFoundError, version as package_version
 from datetime import datetime, timedelta, timezone
 # FlexiLab V2 backend architecture imports.
 # Old engines remain in the repository for rollback, but /program now uses:
@@ -81,6 +83,9 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(BASE_DIR, "data")
 ANALYSIS_STORAGE_BUCKET = os.environ.get("FLEXILAB_ANALYSIS_BUCKET", "screening-private").strip() or "screening-private"
 ANALYSIS_INLINE_ENABLED = os.environ.get("FLEXILAB_INLINE_ANALYSIS", "true").strip().lower() in {"1", "true", "yes", "on"}
+ANALYSIS_MAX_EDGE = max(640, min(1920, int(os.environ.get("FLEXILAB_ANALYSIS_MAX_EDGE", "960"))))
+POSE_INFERENCE_IMGSZ = max(320, min(1280, int(os.environ.get("FLEXILAB_POSE_IMGSZ", "640"))))
+DIAGNOSTIC_RETENTION_HOURS = max(0, min(168, int(os.environ.get("FLEXILAB_DIAGNOSTIC_RETENTION_HOURS", "0"))))
 
 MOVEMENT_PATTERNS_PATH = os.path.join(DATA_DIR, "movement_patterns_v1.json")
 PRESCRIPTION_RULES_PATH = os.path.join(DATA_DIR, "prescription_rules_v1.json")
@@ -165,15 +170,48 @@ ALLOWED_ORIGINS = [
 
 POSE_MODEL_NAME = os.environ.get("FLEXILAB_POSE_MODEL", "yolov8n-pose.pt")
 POSE_MODEL_LOAD_ERROR = None
-try:
-    model = YOLO(POSE_MODEL_NAME)
-except Exception as exc:
-    model = None
-    POSE_MODEL_LOAD_ERROR = str(exc)
+POSE_MODEL_INFERENCE_LOCK = threading.RLock()
+POSE_MODEL_RELOAD_COUNT = 0
+
+
+def _load_pose_model():
+    global POSE_MODEL_LOAD_ERROR
+    try:
+        loaded_model = YOLO(POSE_MODEL_NAME)
+        POSE_MODEL_LOAD_ERROR = None
+        return loaded_model
+    except Exception as exc:
+        POSE_MODEL_LOAD_ERROR = str(exc)
+        return None
+
+
+def _installed_version(distribution_name):
+    try:
+        return package_version(distribution_name)
+    except PackageNotFoundError:
+        return None
+    except Exception:
+        return None
+
+
+RUNTIME_PACKAGE_VERSIONS = {
+    "fastapi": _installed_version("fastapi"),
+    "uvicorn": _installed_version("uvicorn"),
+    "python-multipart": _installed_version("python-multipart"),
+    "opencv-python-headless": _installed_version("opencv-python-headless"),
+    "numpy": _installed_version("numpy"),
+    "supabase": _installed_version("supabase"),
+    "ultralytics": _installed_version("ultralytics"),
+    "torch": _installed_version("torch"),
+    "stripe": _installed_version("stripe"),
+}
+
+
+model = _load_pose_model()
 
 app = FastAPI(
     title="FlexiLab Movement Intelligence API",
-    version="101.16",
+    version="101.26",
 )
 app.include_router(create_account_router(supabase))
 app.include_router(create_stripe_router(supabase))
@@ -191,6 +229,10 @@ app.include_router(
                 "configured_model": POSE_MODEL_NAME,
                 "loaded": model is not None,
                 "load_error": POSE_MODEL_LOAD_ERROR,
+                "reload_count": POSE_MODEL_RELOAD_COUNT,
+                "inference_imgsz": POSE_INFERENCE_IMGSZ,
+                "analysis_max_edge": ANALYSIS_MAX_EDGE,
+                "runtime_versions": RUNTIME_PACKAGE_VERSIONS,
             },
         },
     )
@@ -285,20 +327,25 @@ async def request_timing_middleware(request, call_next):
 def health():
     return {
         "ok": True,
-        "patch_version": "V101.16-backend-resilience",
+        "patch_version": "V101.26-assessment-foundation",
         "exercise_library_mode": EXERCISE_LIBRARY_MODE,
         "exercise_library_path": EXERCISE_LIBRARY_PATH,
         "exercise_library_count": len(EXERCISE_LIBRARY or []),
         "resource_load_errors": RESOURCE_LOAD_ERRORS,
         "pose_model_loaded": model is not None,
         "pose_model_error": POSE_MODEL_LOAD_ERROR,
+        "pose_model_reload_count": POSE_MODEL_RELOAD_COUNT,
+        "pose_inference_imgsz": POSE_INFERENCE_IMGSZ,
+        "analysis_max_edge": ANALYSIS_MAX_EDGE,
+        "diagnostic_retention_hours": DIAGNOSTIC_RETENTION_HOURS,
+        "runtime_versions": RUNTIME_PACKAGE_VERSIONS,
     }
 
 
 @app.get("/library_status")
 def library_status():
     return {
-        "patch_version": "V101.16-backend-resilience",
+        "patch_version": "V101.26-assessment-foundation",
         "exercise_library_mode": EXERCISE_LIBRARY_MODE,
         "exercise_library_path": EXERCISE_LIBRARY_PATH,
         "exercise_library_count": len(EXERCISE_LIBRARY or []),
@@ -313,6 +360,46 @@ def safe_json_loads(raw):
         return json.loads(raw) if raw else None
     except Exception:
         return None
+
+
+def _sanitize_capture_metadata(value, depth=0):
+    if depth > 4:
+        return None
+    if value is None or isinstance(value, (bool, int, float)):
+        return value
+    if isinstance(value, str):
+        return value[:240]
+    if isinstance(value, list):
+        return [
+            _sanitize_capture_metadata(item, depth + 1)
+            for item in value[:40]
+        ]
+    if isinstance(value, dict):
+        sanitized = {}
+        for key, item in list(value.items())[:80]:
+            sanitized[str(key)[:80]] = _sanitize_capture_metadata(item, depth + 1)
+        return sanitized
+    return str(value)[:240]
+
+
+def parse_capture_metadata(capture_metadata_json=None):
+    if not capture_metadata_json:
+        return {}
+    if len(capture_metadata_json) > 20000:
+        raise ValueError("Capture metadata is too large.")
+    parsed = safe_json_loads(capture_metadata_json)
+    if not isinstance(parsed, dict):
+        return {}
+    sanitized = _sanitize_capture_metadata(parsed)
+    return sanitized if isinstance(sanitized, dict) else {}
+
+
+def _split_job_intake_and_capture_metadata(value):
+    intake = dict(value or {}) if isinstance(value, dict) else {}
+    capture_metadata = intake.pop("_flexilab_capture_metadata", {})
+    if not isinstance(capture_metadata, dict):
+        capture_metadata = {}
+    return intake, capture_metadata
 
 
 def parse_intake_payload(intake_json=None, questionnaire_json=None):
@@ -1970,35 +2057,74 @@ def finalize_session(
 
 def detect_pose_with_fallback(img, test_type):
     """
-    Run YOLO pose with a strict first pass and controlled lower-confidence
-    fallbacks. This reduces false 'No person detected' failures while keeping
-    the strict result whenever it succeeds.
+    Run YOLO pose inference under one model lock.
+
+    Ultralytics model instances keep mutable predictor and fusion state. The
+    lock protects overlapping web/worker requests, and the known fused-Conv
+    state failure triggers one in-lock model reload and retry.
     """
-    if model is None:
-        raise ValueError(
-            "Pose model is unavailable. Check FLEXILAB_POSE_MODEL and the model file on the worker."
-        )
+    global model, POSE_MODEL_LOAD_ERROR, POSE_MODEL_RELOAD_COUNT
 
     is_aslr = str(test_type).startswith("aslr")
     thresholds = [0.20, 0.14, 0.10] if is_aslr else [0.50, 0.35, 0.25]
 
-    for threshold in thresholds:
-        prediction = model(
-            img,
-            conf=threshold,
-            classes=[0],
-            verbose=False,
-        )
-        if (
-            prediction
-            and prediction[0].keypoints is not None
-            and len(prediction[0].keypoints.xy) > 0
-        ):
-            return prediction, threshold
+    with POSE_MODEL_INFERENCE_LOCK:
+        if model is None:
+            model = _load_pose_model()
+        if model is None:
+            raise ValueError("Pose model is temporarily unavailable. Please retry shortly.")
+
+        recovered_once = False
+        for threshold in thresholds:
+            while True:
+                try:
+                    prediction = model(
+                        img,
+                        conf=threshold,
+                        classes=[0],
+                        imgsz=POSE_INFERENCE_IMGSZ,
+                        verbose=False,
+                    )
+                    break
+                except AttributeError as exc:
+                    error_text = str(exc)
+                    known_fused_conv_error = (
+                        "Conv" in error_text
+                        and "has no attribute" in error_text
+                        and "bn" in error_text
+                    )
+                    if not known_fused_conv_error or recovered_once:
+                        raise ValueError(
+                            "Pose analysis is temporarily unavailable. Please retry."
+                        ) from exc
+
+                    logger.warning(
+                        "Reloading pose model after fused Conv state error: %s",
+                        error_text,
+                    )
+                    recovered_once = True
+                    POSE_MODEL_RELOAD_COUNT += 1
+                    model = _load_pose_model()
+                    if model is None:
+                        raise ValueError(
+                            "Pose model could not be reloaded. Please retry shortly."
+                        ) from exc
+                except Exception as exc:
+                    logger.exception("YOLO pose inference failed")
+                    raise ValueError(
+                        "Pose analysis is temporarily unavailable. Please retry."
+                    ) from exc
+
+            if (
+                prediction
+                and prediction[0].keypoints is not None
+                and len(prediction[0].keypoints.xy) > 0
+            ):
+                return prediction, threshold
 
     raise ValueError(
-        "No person detected. Keep the full body visible, improve lighting, "
-        "and avoid cropping the head or feet."
+        "No person detected. Keep the required body area visible, improve lighting, "
+        "and avoid cropping the active joints."
     )
 
 
@@ -2010,6 +2136,7 @@ async def analyze(
     session_id: str = Form(...),
     intake_json: str = Form(None),
     questionnaire_json: str = Form(None),
+    capture_metadata_json: str = Form(None),
     authorization: str = Header(None),
 ):
     if supabase is None:
@@ -2019,87 +2146,33 @@ async def analyze(
     session = require_owned_session(user, session_id)
     authoritative_email = str(session.get("user_email") or user["email"]).strip().lower()
     intake_data = parse_intake_payload(intake_json=intake_json, questionnaire_json=questionnaire_json)
+    try:
+        capture_metadata = parse_capture_metadata(capture_metadata_json)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
     try_save_session_intake(session_id, intake_data)
 
     img_bytes = await image.read()
-    nparr = np.frombuffer(img_bytes, np.uint8)
-    img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-    if img is None:
-        raise HTTPException(status_code=422, detail="Invalid image")
-
-    h, w = img.shape[:2]
-    max_side = 960
-    scale = max_side / max(h, w)
-    if scale < 1.0:
-        img = cv2.resize(
-            img,
-            (int(w * scale), int(h * scale)),
-            interpolation=cv2.INTER_AREA
-        )
+    if not img_bytes:
+        raise HTTPException(status_code=422, detail="The uploaded image is empty.")
 
     try:
-        res, detection_threshold = detect_pose_with_fallback(img, test_type)
+        result, session_update = run_yolo_analysis_from_bytes(
+            img_bytes,
+            test_type,
+            capture_metadata=capture_metadata,
+        )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 
-    boxes = res[0].boxes.xyxy.cpu().numpy()
-    areas = [(b[2] - b[0]) * (b[3] - b[1]) for b in boxes]
-    main_idx = int(np.argmax(areas))
-
-    xy = res[0].keypoints.xy[main_idx].cpu().numpy()
-    conf = res[0].keypoints.conf[main_idx].cpu().numpy()
-
-    if test_type == "posture_side":
-        result = analyze_posture(xy, conf)
-        session_update = {"posture_score": result["score"]}
-    elif test_type == "shoulder_right":
-        result = analyze_shoulder(xy, conf, "RIGHT")
-        session_update = {"shoulder_right_score": result["score"]}
-    elif test_type == "shoulder_left":
-        result = analyze_shoulder(xy, conf, "LEFT")
-        session_update = {"shoulder_left_score": result["score"]}
-    elif test_type == "squat":
-        result = analyze_squat(xy, conf)
-        session_update = {"squat_score": result["score"]}
-    elif test_type == "aslr_right":
-        result = analyze_aslr(xy, conf, "RIGHT", img)
-        session_update = {"aslr_right_score": result["score"]}
-    elif test_type == "aslr_left":
-        result = analyze_aslr(xy, conf, "LEFT", img)
-        session_update = {"aslr_left_score": result["score"]}
-    else:
-        raise HTTPException(status_code=422, detail="Invalid test_type")
-
-    row = {
-        "user_email": authoritative_email,
-        "user_id": session.get("user_id"),
-        "session_id": session_id,
-        "idempotency_key": f"{session_id}:{test_type}",
-        "test_type": test_type,
-        "score": float(result["score"]),
-        "confidence": float(result["confidence"]),
-        "metrics": result["metrics"],
-        "thresholds": result.get("thresholds"),
-        "intake_json": intake_data,
-        "annotated_image_url": None
-    }
-
-    if test_type == "posture_side":
-        row["neck_angle_deg"] = result["metrics"].get("neck_angle")
-        row["thoracic_angle_deg"] = result["metrics"].get("thoracic_angle")
-        row["pelvic_proxy_angle_deg"] = result["metrics"].get("pelvic_proxy_angle")
-        row["side_used"] = result["metrics"].get("side_used")
-
-    elif test_type in ["shoulder_right", "shoulder_left"]:
-        row["shoulder_flexion_angle_deg"] = result["metrics"].get("shoulder_flexion_angle")
-        row["shoulder_side"] = result["metrics"].get("side")
-
-    elif test_type == "squat":
-        row["squat_knee_angle_deg"] = result["metrics"].get("knee_angle")
-        row["squat_trunk_lean_deg"] = result["metrics"].get("trunk_lean")
-
-    result.setdefault("metrics", {})["detection_confidence_threshold"] = detection_threshold
-    row["metrics"] = result["metrics"]
+    row = build_screening_row(
+        user_email=authoritative_email,
+        user_id=session.get("user_id"),
+        session_id=session_id,
+        test_type=test_type,
+        result=result,
+        intake_data=intake_data,
+    )
 
     supabase.table("screenings").insert(row).execute()
     supabase.table("sessions").update(session_update).eq("id", session_id).execute()
@@ -2113,9 +2186,8 @@ async def analyze(
         "metrics": result["metrics"],
         "thresholds": result.get("thresholds"),
         "intake_json": intake_data,
-        "annotated_image_url": None
+        "annotated_image_url": None,
     }
-
 
 
 def utc_now_iso():
@@ -2154,29 +2226,49 @@ def build_screening_row(user_email, user_id, session_id, test_type, result, inta
     return row
 
 
-def run_yolo_analysis_from_bytes(img_bytes, test_type):
+def decode_and_normalize_analysis_image(img_bytes):
     nparr = np.frombuffer(img_bytes, np.uint8)
     img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-
     if img is None:
         raise ValueError("Invalid image")
 
-    h, w = img.shape[:2]
-    max_side = 960
-    scale = max_side / max(h, w)
-
+    original_h, original_w = img.shape[:2]
+    scale = min(1.0, ANALYSIS_MAX_EDGE / max(original_h, original_w))
     if scale < 1.0:
         img = cv2.resize(
             img,
-            (int(w * scale), int(h * scale)),
-            interpolation=cv2.INTER_AREA
+            (max(1, int(round(original_w * scale))), max(1, int(round(original_h * scale)))),
+            interpolation=cv2.INTER_AREA,
         )
 
+    normalized_h, normalized_w = img.shape[:2]
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    quality = {
+        "original_width": int(original_w),
+        "original_height": int(original_h),
+        "normalized_width": int(normalized_w),
+        "normalized_height": int(normalized_h),
+        "resize_scale": round(float(scale), 6),
+        "brightness_mean": round(float(np.mean(gray)), 2),
+        "blur_laplacian_variance": round(float(cv2.Laplacian(gray, cv2.CV_64F).var()), 2),
+    }
+    return img, quality
+
+
+def run_yolo_analysis_from_bytes(img_bytes, test_type, capture_metadata=None):
+    img, image_quality = decode_and_normalize_analysis_image(img_bytes)
     res, detection_threshold = detect_pose_with_fallback(img, test_type)
 
     boxes = res[0].boxes.xyxy.cpu().numpy()
+    if len(boxes) == 0:
+        raise ValueError("No person detected.")
     areas = [(b[2] - b[0]) * (b[3] - b[1]) for b in boxes]
     main_idx = int(np.argmax(areas))
+    box_confidences = (
+        res[0].boxes.conf.cpu().numpy()
+        if getattr(res[0].boxes, "conf", None) is not None
+        else np.zeros(len(boxes), dtype=float)
+    )
 
     xy = res[0].keypoints.xy[main_idx].cpu().numpy()
     conf = res[0].keypoints.conf[main_idx].cpu().numpy()
@@ -2184,31 +2276,38 @@ def run_yolo_analysis_from_bytes(img_bytes, test_type):
     if test_type == "posture_side":
         result = analyze_posture(xy, conf)
         session_update = {"posture_score": result["score"]}
-
     elif test_type == "shoulder_right":
         result = analyze_shoulder(xy, conf, "RIGHT")
         session_update = {"shoulder_right_score": result["score"]}
-
     elif test_type == "shoulder_left":
         result = analyze_shoulder(xy, conf, "LEFT")
         session_update = {"shoulder_left_score": result["score"]}
-
     elif test_type == "squat":
         result = analyze_squat(xy, conf)
         session_update = {"squat_score": result["score"]}
-
     elif test_type == "aslr_right":
         result = analyze_aslr(xy, conf, "RIGHT", img)
         session_update = {"aslr_right_score": result["score"]}
-
     elif test_type == "aslr_left":
         result = analyze_aslr(xy, conf, "LEFT", img)
         session_update = {"aslr_left_score": result["score"]}
-
     else:
         raise ValueError("Invalid test_type")
 
     result.setdefault("metrics", {})["detection_confidence_threshold"] = detection_threshold
+    result["metrics"]["person_detection"] = {
+        "person_count": int(len(boxes)),
+        "selected_index": main_idx,
+        "selected_box_confidence": round(float(box_confidences[main_idx]), 4),
+    }
+    result["metrics"]["image_quality_diagnostics"] = image_quality
+    result["metrics"]["capture_metadata"] = capture_metadata or {}
+    result["metrics"]["model_runtime"] = {
+        "model": POSE_MODEL_NAME,
+        "inference_imgsz": POSE_INFERENCE_IMGSZ,
+        "analysis_max_edge": ANALYSIS_MAX_EDGE,
+        "reload_count": POSE_MODEL_RELOAD_COUNT,
+    }
     return result, session_update
 
 
@@ -2281,9 +2380,15 @@ def process_analysis_job(job_id: str):
         test_type = job.get("test_type")
         user_email = job.get("user_email")
         session_id = job.get("session_id")
-        intake_data = job.get("intake_json")
+        intake_data, capture_metadata = _split_job_intake_and_capture_metadata(
+            job.get("intake_json")
+        )
 
-        result, session_update = run_yolo_analysis_from_bytes(img_bytes, test_type)
+        result, session_update = run_yolo_analysis_from_bytes(
+            img_bytes,
+            test_type,
+            capture_metadata=capture_metadata,
+        )
 
         screening_row = build_screening_row(
             user_email=user_email,
@@ -2296,6 +2401,11 @@ def process_analysis_job(job_id: str):
 
         supabase.table("screenings").insert(screening_row).execute()
         supabase.table("sessions").update(session_update).eq("id", session_id).execute()
+
+        keep_diagnostic_image = bool(image_path and DIAGNOSTIC_RETENTION_HOURS > 0)
+        diagnostic_expiry = (
+            datetime.now(timezone.utc) + timedelta(hours=DIAGNOSTIC_RETENTION_HOURS)
+        ).isoformat() if keep_diagnostic_image else None
 
         supabase.table("analysis_jobs").update({
             "status": "completed",
@@ -2313,10 +2423,10 @@ def process_analysis_job(job_id: str):
             },
             "error_message": None,
             "image_base64": None,
-            "image_expires_at": None
+            "image_expires_at": diagnostic_expiry,
         }).eq("id", job_id).execute()
 
-        if image_path:
+        if image_path and not keep_diagnostic_image:
             try:
                 supabase.storage.from_(ANALYSIS_STORAGE_BUCKET).remove([image_path])
                 supabase.table("analysis_jobs").update({"image_path": None}).eq("id", job_id).execute()
@@ -2340,6 +2450,7 @@ async def submit_analysis(
     session_id: str = Form(...),
     intake_json: str = Form(None),
     questionnaire_json: str = Form(None),
+    capture_metadata_json: str = Form(None),
     authorization: str = Header(None),
 ):
     if supabase is None:
@@ -2353,6 +2464,10 @@ async def submit_analysis(
         intake_json=intake_json,
         questionnaire_json=questionnaire_json,
     )
+    try:
+        capture_metadata = parse_capture_metadata(capture_metadata_json)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
     try_save_session_intake(session_id, intake_data)
 
     existing_jobs = (
@@ -2395,6 +2510,10 @@ async def submit_analysis(
         image_path = None
         image_base64_fallback = base64.b64encode(img_bytes).decode("utf-8")
 
+    job_intake_data = dict(intake_data or {})
+    if capture_metadata:
+        job_intake_data["_flexilab_capture_metadata"] = capture_metadata
+
     job = {
         "session_id": session_id,
         "session_uuid": session_id,
@@ -2405,8 +2524,11 @@ async def submit_analysis(
         "status": "queued",
         "image_path": image_path,
         "image_base64": image_base64_fallback,
-        "image_expires_at": (datetime.now(timezone.utc) + timedelta(hours=6)).isoformat(),
-        "intake_json": intake_data,
+        "image_expires_at": (
+            datetime.now(timezone.utc)
+            + timedelta(hours=max(6, DIAGNOSTIC_RETENTION_HOURS))
+        ).isoformat(),
+        "intake_json": job_intake_data,
     }
 
     resp = supabase.table("analysis_jobs").insert(job).execute()
