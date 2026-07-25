@@ -248,7 +248,7 @@ aslr_model = _load_aslr_pose_model()
 
 app = FastAPI(
     title="FlexiLab Movement Intelligence API",
-    version="101.29.0",
+    version="101.30.1",
 )
 app.include_router(create_account_router(supabase))
 app.include_router(create_stripe_router(supabase))
@@ -371,7 +371,7 @@ async def request_timing_middleware(request, call_next):
 def health():
     return {
         "ok": True,
-        "patch_version": "V101.29-production-efficiency",
+        "patch_version": "V101.30.1-phase1-report-audit",
         "base_patch": "V101.28.4-aslr-thresholds-60-75",
         "exercise_library_mode": EXERCISE_LIBRARY_MODE,
         "exercise_library_path": EXERCISE_LIBRARY_PATH,
@@ -421,7 +421,7 @@ def health():
 @app.get("/library_status")
 def library_status():
     return {
-        "patch_version": "V101.29-production-efficiency",
+        "patch_version": "V101.30.1-phase1-report-audit",
         "exercise_library_mode": EXERCISE_LIBRARY_MODE,
         "exercise_library_path": EXERCISE_LIBRARY_PATH,
         "exercise_library_count": len(EXERCISE_LIBRARY or []),
@@ -3234,50 +3234,50 @@ def report(
 
     def rating_word(rating):
         if rating == "green":
-            return txt("Bon", "Good")
+            return txt("Dans la cible", "On target")
         if rating == "yellow":
-            return txt("À améliorer", "Improve")
+            return txt("À développer", "Develop")
         if rating == "red":
             return txt("Priorité", "Priority")
-        return txt("Info", "Info")
+        return txt("Mesure", "Measure")
 
     def insight_posture(label_fr, label_en, rating):
         if rating == "green":
-            fr = f"{label_fr} satisfaisant."
-            en = f"{label_en} is satisfactory."
+            fr = f"{label_fr} dans la zone cible."
+            en = f"{label_en} is within the target zone."
         elif rating == "yellow":
-            fr = f"{label_fr} à améliorer légèrement."
-            en = f"{label_en} can be slightly improved."
+            fr = f"{label_fr} constitue un axe de progression modéré."
+            en = f"{label_en} is a moderate development area."
         elif rating == "red":
-            fr = f"{label_fr} prioritaire à corriger."
-            en = f"{label_en} is a priority to correct."
+            fr = f"{label_fr} constitue un axe prioritaire du programme."
+            en = f"{label_en} is a priority focus for the program."
         else:
-            fr = f"{label_fr} : données insuffisantes."
-            en = f"{label_en}: insufficient data."
+            fr = f"{label_fr} sera suivi lors du prochain screening."
+            en = f"{label_en} will be tracked at the next screening."
         return fr, en, txt(fr, en)
 
     def insight_shoulder(rating):
         pairs = {
-            "green": ("Mobilité au-dessus de la tête très bonne.", "Overhead mobility is very good."),
-            "yellow": ("Légère limitation par rapport à l'objectif.", "Slight limitation compared with the target."),
-            "red": ("Limitation marquée : priorité mobilité.", "Marked limitation: mobility is a priority."),
+            "green": ("Élévation active fluide et dans la zone cible.", "Active elevation is fluid and within the target zone."),
+            "yellow": ("L’élévation active peut gagner en amplitude et en contrôle.", "Active elevation can gain range and control."),
+            "red": ("L’élévation active est un axe prioritaire pour la mobilité et le contrôle.", "Active elevation is a priority for mobility and control."),
         }
-        fr, en = pairs.get(rating, ("Données insuffisantes.", "Insufficient data."))
+        fr, en = pairs.get(rating, ("Mesure à suivre au prochain screening.", "Measure to track at the next screening."))
         return fr, en, txt(fr, en)
 
     def insight_squat(label_fr, label_en, rating):
         if rating == "green":
-            fr = f"{label_fr} satisfaisant."
-            en = f"{label_en} is satisfactory."
+            fr = f"{label_fr} dans la zone cible."
+            en = f"{label_en} is within the target zone."
         elif rating == "yellow":
-            fr = f"{label_fr} à améliorer."
-            en = f"{label_en} can be improved."
+            fr = f"{label_fr} constitue un axe de progression."
+            en = f"{label_en} is a development area."
         elif rating == "red":
-            fr = f"{label_fr} prioritaire à améliorer."
-            en = f"{label_en} is a priority to improve."
+            fr = f"{label_fr} constitue un axe prioritaire du programme."
+            en = f"{label_en} is a priority focus for the program."
         else:
-            fr = f"{label_fr} : données insuffisantes."
-            en = f"{label_en}: insufficient data."
+            fr = f"{label_fr} sera suivi lors du prochain screening."
+            en = f"{label_en} will be tracked at the next screening."
         return fr, en, txt(fr, en)
 
     def item_obj(item_id, value, unit, rating, thresholds):
@@ -3294,11 +3294,11 @@ def report(
             if rating == "green":
                 ins_fr, ins_en = "Mobilité active de hanche satisfaisante.", "Active hip mobility is satisfactory."
             elif rating == "yellow":
-                ins_fr, ins_en = "Mobilité active de hanche à améliorer.", "Active hip mobility can be improved."
+                ins_fr, ins_en = "La mobilité active de hanche constitue un axe de progression.", "Active hip mobility is a development area."
             elif rating == "red":
-                ins_fr, ins_en = "Restriction importante : priorité mobilité hanche/ischio-jambiers.", "Important restriction: hip/hamstring mobility is a priority."
+                ins_fr, ins_en = "La mobilité active de hanche et le contrôle du bassin constituent un axe prioritaire.", "Active hip mobility and pelvic control are a priority focus."
             else:
-                ins_fr, ins_en = "Données insuffisantes.", "Insufficient data."
+                ins_fr, ins_en = "Mesure à suivre au prochain screening.", "Measure to track at the next screening."
             ins = txt(ins_fr, ins_en)
         else:
             ins_fr, ins_en, ins = ("", "", "")
@@ -3451,9 +3451,10 @@ def report(
 
     candidates = []
 
-    def add_candidate(sev, title_fr, title_en, why_fr, why_en):
+    def add_candidate(sev, metric_id, title_fr, title_en, why_fr, why_en):
         candidates.append({
             "severity": sev,
+            "metric_id": metric_id,
             "title_fr": title_fr,
             "title_en": title_en,
             "title": txt(title_fr, title_en),
@@ -3468,40 +3469,42 @@ def report(
         ta = thr_item(t, "thoracic_angle")
         pa = thr_item(t, "pelvic_proxy_angle")
         if (na or {}).get("rating") in ["red", "yellow"]:
-            add_candidate((na or {}).get("rating"), "Alignement cervical", "Cervical alignment", "L’angle cervical est hors de la zone optimale.", "Cervical alignment is outside the optimal zone.")
+            add_candidate((na or {}).get("rating"), "neck_angle", "Alignement cervical", "Cervical alignment", "Cette mesure guidera le travail d’alignement cervical actif.", "This measure will guide active cervical-alignment work.")
         if (ta or {}).get("rating") in ["red", "yellow"]:
-            add_candidate((ta or {}).get("rating"), "Alignement thoracique", "Thoracic alignment", "L’angle thoracique est hors de la zone optimale.", "Thoracic alignment is outside the optimal zone.")
+            add_candidate((ta or {}).get("rating"), "thoracic_angle", "Alignement thoracique", "Thoracic alignment", "Cette mesure guidera le travail de mobilité et de contrôle thoracique.", "This measure will guide thoracic mobility and control work.")
         if (pa or {}).get("rating") in ["red", "yellow"]:
-            add_candidate((pa or {}).get("rating"), "Alignement tronc-bassin", "Trunk-pelvis alignment", "Le contrôle tronc-bassin est hors de la zone optimale.", "Trunk-pelvis control is outside the optimal zone.")
+            add_candidate((pa or {}).get("rating"), "pelvic_proxy_angle", "Alignement tronc-bassin", "Trunk-pelvis alignment", "Cette mesure guidera le travail de coordination entre le tronc et le bassin.", "This measure will guide trunk-pelvis coordination work.")
 
     if sh_r:
         thr = thr_item((sh_r.get("thresholds") or {}), "shoulder_flexion")
         if (thr or {}).get("rating") in ["red", "yellow"]:
-            add_candidate((thr or {}).get("rating"), "Mobilité épaule droite", "Right shoulder mobility", "La flexion de l’épaule droite est sous l’objectif.", "Right shoulder flexion is below the target.")
+            add_candidate((thr or {}).get("rating"), "shoulder_right_flexion", "Mobilité épaule droite", "Right shoulder mobility", "Cette mesure guidera la progression de l’élévation active de l’épaule droite.", "This measure will guide progression of active right-shoulder elevation.")
 
     if sh_l:
         thr = thr_item((sh_l.get("thresholds") or {}), "shoulder_flexion")
         if (thr or {}).get("rating") in ["red", "yellow"]:
-            add_candidate((thr or {}).get("rating"), "Mobilité épaule gauche", "Left shoulder mobility", "La flexion de l’épaule gauche est sous l’objectif.", "Left shoulder flexion is below the target.")
+            add_candidate((thr or {}).get("rating"), "shoulder_left_flexion", "Mobilité épaule gauche", "Left shoulder mobility", "Cette mesure guidera la progression de l’élévation active de l’épaule gauche.", "This measure will guide progression of active left-shoulder elevation.")
 
     if aslr_r:
-        thr = thr_item((aslr_r.get("thresholds") or {}), "aslr_angle")
+        aslr_value = _safe_number((aslr_r.get("metrics") or {}).get("aslr_angle"))
+        thr = make_aslr_thresholds(aslr_value) if aslr_value is not None else thr_item((aslr_r.get("thresholds") or {}), "aslr_angle")
         if (thr or {}).get("rating") in ["red", "yellow"]:
-            add_candidate((thr or {}).get("rating"), "Mobilité ASLR droite", "Right ASLR mobility", "L’élévation active de la jambe droite est sous l’objectif.", "Right active straight leg raise is below the target.")
+            add_candidate((thr or {}).get("rating"), "aslr_right_angle", "Mobilité ASLR droite", "Right ASLR mobility", "Cette mesure guidera la progression de la mobilité active de hanche droite.", "This measure will guide progression of active right-hip mobility.")
 
     if aslr_l:
-        thr = thr_item((aslr_l.get("thresholds") or {}), "aslr_angle")
+        aslr_value = _safe_number((aslr_l.get("metrics") or {}).get("aslr_angle"))
+        thr = make_aslr_thresholds(aslr_value) if aslr_value is not None else thr_item((aslr_l.get("thresholds") or {}), "aslr_angle")
         if (thr or {}).get("rating") in ["red", "yellow"]:
-            add_candidate((thr or {}).get("rating"), "Mobilité ASLR gauche", "Left ASLR mobility", "L’élévation active de la jambe gauche est sous l’objectif.", "Left active straight leg raise is below the target.")
+            add_candidate((thr or {}).get("rating"), "aslr_left_angle", "Mobilité ASLR gauche", "Left ASLR mobility", "Cette mesure guidera la progression de la mobilité active de hanche gauche.", "This measure will guide progression of active left-hip mobility.")
 
     if squat:
         ts = squat.get("thresholds") or {}
         tr = thr_item(ts, "trunk_lean")
         kn = thr_item(ts, "knee_angle")
         if (tr or {}).get("rating") in ["red", "yellow"]:
-            add_candidate((tr or {}).get("rating"), "Inclinaison du tronc en squat", "Trunk lean during squat", "L’inclinaison du tronc est hors zone cible.", "Trunk lean is outside the target zone.")
+            add_candidate((tr or {}).get("rating"), "squat_trunk_lean", "Inclinaison du tronc en squat", "Trunk lean during squat", "Cette mesure guidera le travail de contrôle du tronc pendant le squat.", "This measure will guide trunk-control work during the squat.")
         if (kn or {}).get("rating") in ["red", "yellow"]:
-            add_candidate((kn or {}).get("rating"), "Profondeur du squat", "Squat depth", "L’angle du genou est hors zone cible.", "Knee angle is outside the target zone.")
+            add_candidate((kn or {}).get("rating"), "squat_knee_angle", "Profondeur du squat", "Squat depth", "Cette mesure guidera la progression de la profondeur et de la coordination du squat.", "This measure will guide progression of squat depth and coordination.")
 
     sev_order = {"red": 0, "yellow": 1, "green": 2, "unknown": 3, None: 4}
     candidates.sort(key=lambda x: sev_order.get(x["severity"], 9))
@@ -3510,6 +3513,7 @@ def report(
     for i, c in enumerate(candidates[:3], start=1):
         top_priorities.append({
             "id": f"priority_{i}",
+            "metric_id": c.get("metric_id"),
             "title_fr": c["title_fr"],
             "title_en": c["title_en"],
             "title": c["title"],
