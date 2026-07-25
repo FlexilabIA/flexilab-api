@@ -14,7 +14,7 @@ import cv2
 import numpy as np
 
 
-VISION_QA_VERSION = "vision-qa-overlay-v1.9-aslr-bijective-two-leg"
+VISION_QA_VERSION = "vision-qa-overlay-v2.0-aslr-shared-pelvic-anchor"
 
 COCO_NAMES = [
     "nose",
@@ -210,12 +210,12 @@ def _draw_squat_measurement(image: np.ndarray, metrics: Mapping[str, Any]) -> No
 
 
 def _draw_aslr_measurement(image: np.ndarray, metrics: Mapping[str, Any]) -> None:
-    """Draw the exact two jointly paired ASLR leg axes on the normal image.
+    """Draw both ASLR leg axes from one shared side-view pelvic anchor.
 
-    Pink: geometrically selected resting hip to resting YOLO ankle.
-    Yellow: geometrically selected raised hip to raised YOLO ankle.
-    Each leg keeps its own anatomical hip origin; the knee points are validation
-    markers only. The reported angle is calculated from these same two vectors.
+    Pink: shared pelvic anchor to resting YOLO ankle.
+    Yellow: the same pelvic anchor to raised YOLO ankle.
+    Knee points are validation markers only. The reported angle is calculated
+    from these exact same two vectors.
     """
     selected_points = metrics.get("selected_limb_points") or {}
     resting_points = metrics.get("resting_limb_points") or {}
@@ -249,14 +249,14 @@ def _draw_aslr_measurement(image: np.ndarray, metrics: Mapping[str, Any]) -> Non
         cv2.line(image, resting_hip, resting_ankle, (230, 100, 240), 6, cv2.LINE_AA)
         cv2.circle(image, resting_hip, 9, (230, 100, 240), -1, cv2.LINE_AA)
         cv2.circle(image, resting_ankle, 9, (230, 100, 240), -1, cv2.LINE_AA)
-        _put_label(image, "Resting hip", (resting_hip[0] + 10, resting_hip[1] - 10), 0.42)
+        _put_label(image, "Pelvic anchor", (resting_hip[0] + 10, resting_hip[1] - 10), 0.42)
         _put_label(image, "Resting ankle (YOLO)", (resting_ankle[0] + 10, resting_ankle[1] - 10), 0.42)
 
     if raised_hip is not None and raised_ankle is not None:
         cv2.line(image, raised_hip, raised_ankle, (40, 235, 250), 7, cv2.LINE_AA)
         cv2.circle(image, raised_hip, 10, (40, 235, 250), -1, cv2.LINE_AA)
         cv2.circle(image, raised_ankle, 10, (40, 235, 250), -1, cv2.LINE_AA)
-        _put_label(image, "Raised hip", (raised_hip[0] + 10, raised_hip[1] - 10), 0.45)
+        _put_label(image, "Pelvic anchor", (raised_hip[0] + 10, raised_hip[1] - 10), 0.45)
         _put_label(image, "Raised ankle (YOLO)", (raised_ankle[0] + 10, raised_ankle[1] - 10), 0.45)
 
     if resting_knee is not None:
