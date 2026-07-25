@@ -14,7 +14,7 @@ import cv2
 import numpy as np
 
 
-VISION_QA_VERSION = "vision-qa-overlay-v1.7-aslr-ear-hip-two-line"
+VISION_QA_VERSION = "vision-qa-overlay-v1.8-aslr-two-leg-normal-display"
 
 COCO_NAMES = [
     "nose",
@@ -212,9 +212,8 @@ def _draw_squat_measurement(image: np.ndarray, metrics: Mapping[str, Any]) -> No
 def _draw_aslr_measurement(image: np.ndarray, metrics: Mapping[str, Any]) -> None:
     """Draw a common-vertex ASLR construction with exactly two lines.
 
-    Pink: subject reference direction, translated through the selected raised
-    hip and extended from the head side toward the resting-foot side.
-    Yellow: the same selected raised hip to the genuine YOLO ankle.
+    Pink: resting hip to genuine YOLO resting ankle.
+    Yellow: raised hip to genuine YOLO raised ankle.
     The knee is a validation marker only and never creates a triangle.
     """
     selected_points = metrics.get("selected_limb_points") or {}
@@ -249,7 +248,7 @@ def _draw_aslr_measurement(image: np.ndarray, metrics: Mapping[str, Any]) -> Non
             origin_point = _point(origin_value)
             cv2.circle(image, origin_point, 9, (230, 100, 240), -1, cv2.LINE_AA)
             _put_label(image, f"{origin_label.title()} reference", (origin_point[0] + 10, origin_point[1] - 10), 0.42)
-        _put_label(image, "Body reference", (body_start[0] + 10, body_start[1] - 10), 0.45)
+        _put_label(image, "Resting leg reference", (body_start[0] + 10, body_start[1] - 10), 0.45)
 
     if hip is not None and ankle is not None:
         cv2.line(image, hip, ankle, (40, 235, 250), 7, cv2.LINE_AA)
@@ -261,7 +260,7 @@ def _draw_aslr_measurement(image: np.ndarray, metrics: Mapping[str, Any]) -> Non
     if hip is not None:
         cv2.circle(image, hip, 12, (245, 245, 245), -1, cv2.LINE_AA)
         cv2.circle(image, hip, 8, (230, 100, 240), -1, cv2.LINE_AA)
-        _put_label(image, "Common hip vertex", (hip[0] + 10, hip[1] - 10), 0.45)
+        _put_label(image, "Raised hip", (hip[0] + 10, hip[1] - 10), 0.45)
 
     if knee is not None:
         cv2.circle(image, knee, 9, (85, 225, 125), -1, cv2.LINE_AA)
