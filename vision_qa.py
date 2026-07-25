@@ -14,7 +14,7 @@ import cv2
 import numpy as np
 
 
-VISION_QA_VERSION = "vision-qa-overlay-v2.1-aslr-postpair-knee-validation"
+VISION_QA_VERSION = "vision-qa-overlay-v2.2-aslr-hybrid-resting-reference"
 
 COCO_NAMES = [
     "nose",
@@ -210,47 +210,53 @@ def _draw_squat_measurement(image: np.ndarray, metrics: Mapping[str, Any]) -> No
 
 
 def _draw_aslr_measurement(image: np.ndarray, metrics: Mapping[str, Any]) -> None:
-    """Draw both ASLR leg axes from one shared side-view pelvic anchor.
+    """Draw the raised leg and the selected hybrid resting reference.
 
-    Pink: shared pelvic anchor to resting YOLO ankle.
-    Yellow: the same pelvic anchor to raised YOLO ankle.
-    Knee points are validation markers only. The reported angle is calculated
-    from these exact same two vectors.
+    Pink: shared pelvic anchor to either the reliable resting ankle, an extended
+    resting-knee direction, or an extended shoulder-to-pelvis body axis.
+    Yellow: the same pelvic anchor to the true raised YOLO ankle.
     """
     selected_points = metrics.get("selected_limb_points") or {}
     resting_points = metrics.get("resting_limb_points") or {}
+    baseline = metrics.get("body_baseline") or {}
     if not isinstance(selected_points, Mapping):
         selected_points = {}
     if not isinstance(resting_points, Mapping):
         resting_points = {}
+    if not isinstance(baseline, Mapping):
+        baseline = {}
 
     raised_hip_value = selected_points.get("hip")
     raised_ankle_value = selected_points.get("ankle")
     raised_knee_value = selected_points.get("knee")
-    resting_hip_value = resting_points.get("hip")
-    resting_ankle_value = resting_points.get("ankle")
     resting_knee_value = resting_points.get("knee")
+    resting_ankle_value = resting_points.get("ankle")
 
     raised_hip = _point(raised_hip_value) if raised_hip_value else None
     raised_ankle = _point(raised_ankle_value) if raised_ankle_value else None
     raised_knee = _point(raised_knee_value) if raised_knee_value else None
-    resting_hip = _point(resting_hip_value) if resting_hip_value else None
-    resting_ankle = _point(resting_ankle_value) if resting_ankle_value else None
     resting_knee = _point(resting_knee_value) if resting_knee_value else None
+    resting_ankle = _point(resting_ankle_value) if resting_ankle_value else None
 
-    baseline = metrics.get("body_baseline") or {}
-    if isinstance(baseline, Mapping):
-        if resting_hip is None and baseline.get("line_start"):
-            resting_hip = _point(baseline.get("line_start"))
-        if resting_ankle is None and baseline.get("line_end"):
-            resting_ankle = _point(baseline.get("line_end"))
+    reference_start_value = baseline.get("line_start") or resting_points.get("hip")
+    reference_end_value = baseline.get("line_end") or resting_points.get("reference_endpoint")
+    reference_start = _point(reference_start_value) if reference_start_value else None
+    reference_end = _point(reference_end_value) if reference_end_value else None
+    reference_source = str(metrics.get("reference_source") or baseline.get("reference_source") or "unknown")
 
-    if resting_hip is not None and resting_ankle is not None:
-        cv2.line(image, resting_hip, resting_ankle, (230, 100, 240), 6, cv2.LINE_AA)
-        cv2.circle(image, resting_hip, 9, (230, 100, 240), -1, cv2.LINE_AA)
-        cv2.circle(image, resting_ankle, 9, (230, 100, 240), -1, cv2.LINE_AA)
-        _put_label(image, "Pelvic anchor", (resting_hip[0] + 10, resting_hip[1] - 10), 0.42)
-        _put_label(image, "Resting ankle (YOLO)", (resting_ankle[0] + 10, resting_ankle[1] - 10), 0.42)
+    reference_labels = {
+        "resting_ankle": "Resting ankle reference (YOLO)",
+        "resting_knee": "Resting knee direction (extended)",
+        "torso_axis_fallback": "Body-axis fallback",
+    }
+    reference_label = reference_labels.get(reference_source, "Resting reference")
+
+    if reference_start is not None and reference_end is not None:
+        cv2.line(image, reference_start, reference_end, (230, 100, 240), 6, cv2.LINE_AA)
+        cv2.circle(image, reference_start, 9, (230, 100, 240), -1, cv2.LINE_AA)
+        cv2.circle(image, reference_end, 7, (230, 100, 240), -1, cv2.LINE_AA)
+        _put_label(image, "Pelvic anchor", (reference_start[0] + 10, reference_start[1] - 10), 0.42)
+        _put_label(image, reference_label, (reference_end[0] + 10, reference_end[1] - 10), 0.40)
 
     if raised_hip is not None and raised_ankle is not None:
         cv2.line(image, raised_hip, raised_ankle, (40, 235, 250), 7, cv2.LINE_AA)
@@ -261,7 +267,9 @@ def _draw_aslr_measurement(image: np.ndarray, metrics: Mapping[str, Any]) -> Non
 
     if resting_knee is not None:
         cv2.circle(image, resting_knee, 8, (215, 125, 235), -1, cv2.LINE_AA)
-        _put_label(image, "Resting knee check", (resting_knee[0] + 10, resting_knee[1] - 10), 0.38)
+        _put_label(image, "Resting knee", (resting_knee[0] + 10, resting_knee[1] - 10), 0.38)
+    if resting_ankle is not None and reference_source == "resting_ankle":
+        cv2.circle(image, resting_ankle, 8, (215, 125, 235), -1, cv2.LINE_AA)
 
     if raised_knee is not None:
         cv2.circle(image, raised_knee, 9, (85, 225, 125), -1, cv2.LINE_AA)
@@ -273,13 +281,12 @@ def _draw_aslr_measurement(image: np.ndarray, metrics: Mapping[str, Any]) -> Non
     model_name = str(model_runtime.get("model") or "unknown-model")
     knee_angle = metrics.get("raised_knee_extension_angle")
     knee_text = f"{float(knee_angle):.1f}" if knee_angle is not None else "n/a"
-    pairing_score = metrics.get("joint_pairing_score")
-    pairing_text = f"{float(pairing_score):.2f}" if pairing_score is not None else "n/a"
+    reference_text = reference_source.replace("_", " ")
     _put_label(
         image,
-        f"ASLR {metrics.get('requested_side', '')}: {float(metrics.get('aslr_angle', 0)):.1f} deg | pair {pairing_text} | knee {knee_text} deg | pass {selected_pass} | model {model_name}",
+        f"ASLR {metrics.get('requested_side', '')}: {float(metrics.get('aslr_angle', 0)):.1f} deg | ref {reference_text} | knee {knee_text} deg | pass {selected_pass} | model {model_name}",
         (18, 34),
-        0.55,
+        0.52,
     )
 
 def _draw_measurement(
