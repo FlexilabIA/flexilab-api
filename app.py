@@ -371,7 +371,7 @@ async def request_timing_middleware(request, call_next):
 def health():
     return {
         "ok": True,
-        "patch_version": "V101.32.0-program-lifecycle",
+        "patch_version": "V101.33.0-aslr-robust-geometry",
         "base_patch": "V101.28.4-aslr-thresholds-60-75",
         "exercise_library_mode": EXERCISE_LIBRARY_MODE,
         "exercise_library_path": EXERCISE_LIBRARY_PATH,
@@ -421,7 +421,7 @@ def health():
 @app.get("/library_status")
 def library_status():
     return {
-        "patch_version": "V101.32.0-program-lifecycle",
+        "patch_version": "V101.33.0-aslr-robust-geometry",
         "exercise_library_mode": EXERCISE_LIBRARY_MODE,
         "exercise_library_path": EXERCISE_LIBRARY_PATH,
         "exercise_library_count": len(EXERCISE_LIBRARY or []),
@@ -1987,6 +1987,7 @@ def _aslr_pose_pass_quality(result):
     endpoint_count = int(metrics.get("detected_ankle_endpoint_count") or 0)
     endpoints_distinct = bool(metrics.get("ankle_endpoints_are_distinct"))
     resting_verified = bool(metrics.get("resting_leg_verified"))
+    estimator_spread = float((metrics.get("angle_estimators") or {}).get("spread") or 0.0)
     flags = set(metrics.get("diagnostic_flags") or [])
 
     quality = (
@@ -2001,6 +2002,10 @@ def _aslr_pose_pass_quality(result):
         quality -= 0.08
     if resting_verified:
         quality += 0.08
+    if estimator_spread <= 5.0:
+        quality += 0.08
+    elif estimator_spread > 10.0:
+        quality -= 0.12
     if "resting_ankle_not_independently_resolved" in flags:
         quality -= 0.06
     if "ankle_endpoints_duplicated_by_pose_model" in flags:
