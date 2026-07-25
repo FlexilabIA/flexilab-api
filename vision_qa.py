@@ -14,7 +14,7 @@ import cv2
 import numpy as np
 
 
-VISION_QA_VERSION = "vision-qa-overlay-v1.8-aslr-two-leg-normal-display"
+VISION_QA_VERSION = "vision-qa-overlay-v1.9-aslr-bijective-two-leg"
 
 COCO_NAMES = [
     "nose",
@@ -210,61 +210,62 @@ def _draw_squat_measurement(image: np.ndarray, metrics: Mapping[str, Any]) -> No
 
 
 def _draw_aslr_measurement(image: np.ndarray, metrics: Mapping[str, Any]) -> None:
-    """Draw a common-vertex ASLR construction with exactly two lines.
+    """Draw the exact two jointly paired ASLR leg axes on the normal image.
 
-    Pink: resting hip to genuine YOLO resting ankle.
-    Yellow: raised hip to genuine YOLO raised ankle.
-    The knee is a validation marker only and never creates a triangle.
+    Pink: geometrically selected resting hip to resting YOLO ankle.
+    Yellow: geometrically selected raised hip to raised YOLO ankle.
+    Each leg keeps its own anatomical hip origin; the knee points are validation
+    markers only. The reported angle is calculated from these same two vectors.
     """
     selected_points = metrics.get("selected_limb_points") or {}
+    resting_points = metrics.get("resting_limb_points") or {}
     if not isinstance(selected_points, Mapping):
         selected_points = {}
+    if not isinstance(resting_points, Mapping):
+        resting_points = {}
 
-    hip_value = selected_points.get("hip")
-    ankle_value = selected_points.get("ankle")
-    knee_value = selected_points.get("knee")
-    hip = _point(hip_value) if hip_value else None
-    ankle = _point(ankle_value) if ankle_value else None
-    knee = _point(knee_value) if knee_value else None
+    raised_hip_value = selected_points.get("hip")
+    raised_ankle_value = selected_points.get("ankle")
+    raised_knee_value = selected_points.get("knee")
+    resting_hip_value = resting_points.get("hip")
+    resting_ankle_value = resting_points.get("ankle")
+    resting_knee_value = resting_points.get("knee")
+
+    raised_hip = _point(raised_hip_value) if raised_hip_value else None
+    raised_ankle = _point(raised_ankle_value) if raised_ankle_value else None
+    raised_knee = _point(raised_knee_value) if raised_knee_value else None
+    resting_hip = _point(resting_hip_value) if resting_hip_value else None
+    resting_ankle = _point(resting_ankle_value) if resting_ankle_value else None
+    resting_knee = _point(resting_knee_value) if resting_knee_value else None
 
     baseline = metrics.get("body_baseline") or {}
-    body_start = None
-    body_end = None
     if isinstance(baseline, Mapping):
-        start_value = baseline.get("line_start")
-        end_value = baseline.get("line_end")
-        vertex_value = baseline.get("measurement_vertex")
-        if hip is None and vertex_value:
-            hip = _point(vertex_value)
-        if start_value and end_value:
-            body_start = _point(start_value)
-            body_end = _point(end_value)
+        if resting_hip is None and baseline.get("line_start"):
+            resting_hip = _point(baseline.get("line_start"))
+        if resting_ankle is None and baseline.get("line_end"):
+            resting_ankle = _point(baseline.get("line_end"))
 
-    if body_start is not None and body_end is not None:
-        cv2.line(image, body_start, body_end, (230, 100, 240), 6, cv2.LINE_AA)
-        origin_value = baseline.get("reference_origin") if isinstance(baseline, Mapping) else None
-        origin_label = str((baseline.get("reference_origin_label") if isinstance(baseline, Mapping) else None) or "Body")
-        if origin_value:
-            origin_point = _point(origin_value)
-            cv2.circle(image, origin_point, 9, (230, 100, 240), -1, cv2.LINE_AA)
-            _put_label(image, f"{origin_label.title()} reference", (origin_point[0] + 10, origin_point[1] - 10), 0.42)
-        _put_label(image, "Resting leg reference", (body_start[0] + 10, body_start[1] - 10), 0.45)
+    if resting_hip is not None and resting_ankle is not None:
+        cv2.line(image, resting_hip, resting_ankle, (230, 100, 240), 6, cv2.LINE_AA)
+        cv2.circle(image, resting_hip, 9, (230, 100, 240), -1, cv2.LINE_AA)
+        cv2.circle(image, resting_ankle, 9, (230, 100, 240), -1, cv2.LINE_AA)
+        _put_label(image, "Resting hip", (resting_hip[0] + 10, resting_hip[1] - 10), 0.42)
+        _put_label(image, "Resting ankle (YOLO)", (resting_ankle[0] + 10, resting_ankle[1] - 10), 0.42)
 
-    if hip is not None and ankle is not None:
-        cv2.line(image, hip, ankle, (40, 235, 250), 7, cv2.LINE_AA)
-        cv2.circle(image, ankle, 10, (40, 235, 250), -1, cv2.LINE_AA)
-        _put_label(image, "Raised ankle (YOLO)", (ankle[0] + 10, ankle[1] - 10), 0.45)
+    if raised_hip is not None and raised_ankle is not None:
+        cv2.line(image, raised_hip, raised_ankle, (40, 235, 250), 7, cv2.LINE_AA)
+        cv2.circle(image, raised_hip, 10, (40, 235, 250), -1, cv2.LINE_AA)
+        cv2.circle(image, raised_ankle, 10, (40, 235, 250), -1, cv2.LINE_AA)
+        _put_label(image, "Raised hip", (raised_hip[0] + 10, raised_hip[1] - 10), 0.45)
+        _put_label(image, "Raised ankle (YOLO)", (raised_ankle[0] + 10, raised_ankle[1] - 10), 0.45)
 
-    # Draw one shared vertex after both lines, so the overlay visibly confirms
-    # that the pink and yellow calculations start from exactly the same point.
-    if hip is not None:
-        cv2.circle(image, hip, 12, (245, 245, 245), -1, cv2.LINE_AA)
-        cv2.circle(image, hip, 8, (230, 100, 240), -1, cv2.LINE_AA)
-        _put_label(image, "Raised hip", (hip[0] + 10, hip[1] - 10), 0.45)
+    if resting_knee is not None:
+        cv2.circle(image, resting_knee, 8, (215, 125, 235), -1, cv2.LINE_AA)
+        _put_label(image, "Resting knee check", (resting_knee[0] + 10, resting_knee[1] - 10), 0.38)
 
-    if knee is not None:
-        cv2.circle(image, knee, 9, (85, 225, 125), -1, cv2.LINE_AA)
-        _put_label(image, "Raised knee check", (knee[0] + 10, knee[1] - 10), 0.40)
+    if raised_knee is not None:
+        cv2.circle(image, raised_knee, 9, (85, 225, 125), -1, cv2.LINE_AA)
+        _put_label(image, "Raised knee check", (raised_knee[0] + 10, raised_knee[1] - 10), 0.40)
 
     analysis_pass = metrics.get("analysis_pass") or {}
     selected_pass = analysis_pass.get("selected_pass") or analysis_pass.get("mode") or "unknown"
@@ -272,9 +273,11 @@ def _draw_aslr_measurement(image: np.ndarray, metrics: Mapping[str, Any]) -> Non
     model_name = str(model_runtime.get("model") or "unknown-model")
     knee_angle = metrics.get("raised_knee_extension_angle")
     knee_text = f"{float(knee_angle):.1f}" if knee_angle is not None else "n/a"
+    pairing_score = metrics.get("joint_pairing_score")
+    pairing_text = f"{float(pairing_score):.2f}" if pairing_score is not None else "n/a"
     _put_label(
         image,
-        f"ASLR {metrics.get('requested_side', '')}: {float(metrics.get('aslr_angle', 0)):.1f} deg | body {float((metrics.get('body_baseline') or {}).get('image_angle_deg') or 0):.1f} deg | knee {knee_text} deg | pass {selected_pass} | model {model_name}",
+        f"ASLR {metrics.get('requested_side', '')}: {float(metrics.get('aslr_angle', 0)):.1f} deg | pair {pairing_text} | knee {knee_text} deg | pass {selected_pass} | model {model_name}",
         (18, 34),
         0.55,
     )
