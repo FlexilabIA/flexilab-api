@@ -1,14 +1,16 @@
 """FlexiLab ASLR hybrid body-reference / true-ankle engine.
 
-V101.35.2 uses two pose views for different jobs:
+V101.35.4 uses two pose views for different jobs:
 
 * the original normalized image supplies the subject reference axis from a
   coherent ear -> shoulder -> hip chain;
 * a 90-degree-clockwise inference pass supplies a coherent raised
   hip -> knee -> ankle chain, mapped back to original-image coordinates.
 
-The clinical line always ends at the YOLO ankle keypoint. A skin contour, toe
-or highest-visible foot pixel is never accepted as the measurement endpoint.
+The clinical line always ends at the YOLO ankle keypoint. The subject-reference
+line is translated through the selected raised hip so both measurement lines
+share one exact vertex. A skin contour, toe or highest-visible foot pixel is
+never accepted as the measurement endpoint.
 """
 
 from __future__ import annotations
@@ -18,7 +20,7 @@ from typing import Any, Dict, Mapping, Sequence, Tuple
 
 import numpy as np
 
-ASLR_ENGINE_VERSION = "aslr-dedicated-yolo11m-body-axis-ankle-first-v14"
+ASLR_ENGINE_VERSION = "aslr-dedicated-yolo11m-common-hip-body-axis-ankle-first-v15"
 ASLR_THRESHOLD_EVIDENCE_STATUS = (
     "provisional_flexilab_reference_bands_not_diagnostic_cutoffs"
 )
@@ -264,6 +266,87 @@ def _vector(
     end: Tuple[float, float],
 ) -> Tuple[float, float]:
     return (end[0] - start[0], end[1] - start[1])
+
+
+def _dot(
+    a: Tuple[float, float],
+    b: Tuple[float, float],
+) -> float:
+    return float(a[0] * b[0] + a[1] * b[1])
+
+
+def _reference_line_through_selected_hip(
+    body_baseline: Mapping[str, Any],
+    selected_hip: Tuple[float, float],
+    reference_xy: Sequence[Sequence[float]],
+    reference_conf: Sequence[float],
+) -> Dict[str, Any]:
+    """Translate the fitted body direction through the selected raised hip.
+
+    The angle between two vectors is translation invariant, so this does not
+    alter the formula. It makes the visual and mathematical construction share
+    one exact vertex: the selected raised hip. The line begins near the ear and
+    extends toward the most distal confidently detected resting-foot endpoint.
+    """
+    direction = (
+        float(body_baseline["direction"][0]),
+        float(body_baseline["direction"][1]),
+    )
+    upper = body_baseline.get("ear") or body_baseline.get("shoulder")
+    source_hip = body_baseline.get("hip") or selected_hip
+    body_length = max(80.0, _distance(upper, source_hip) if upper is not None else 180.0)
+
+    def projection(point: Tuple[float, float]) -> float:
+        return _dot(_vector(selected_hip, point), direction)
+
+    start_projection = projection(upper) if upper is not None else -body_length
+    # Ensure the line visibly reaches the head side even if the selected rotated
+    # hip differs by a few pixels from the original-photo hip landmark.
+    start_projection = min(start_projection, -0.72 * body_length)
+
+    distal_candidates = []
+    for index in (15, 16, 13, 14):
+        if index >= len(reference_xy) or index >= len(reference_conf):
+            continue
+        confidence = _confidence(reference_conf, index)
+        if confidence < 0.08:
+            continue
+        point = _point(reference_xy, index)
+        scalar = projection(point)
+        if scalar > 0:
+            distal_candidates.append((scalar, point, index, confidence))
+
+    if distal_candidates:
+        distal_scalar, distal_point, distal_index, distal_confidence = max(
+            distal_candidates, key=lambda item: item[0]
+        )
+        end_projection = max(distal_scalar, body_length * 1.05)
+    else:
+        distal_point = None
+        distal_index = None
+        distal_confidence = None
+        end_projection = body_length * 1.35
+
+    line_start = (
+        selected_hip[0] + start_projection * direction[0],
+        selected_hip[1] + start_projection * direction[1],
+    )
+    line_end = (
+        selected_hip[0] + end_projection * direction[0],
+        selected_hip[1] + end_projection * direction[1],
+    )
+
+    return {
+        "line_start": line_start,
+        "line_end": line_end,
+        "measurement_vertex": selected_hip,
+        "start_projection_px": start_projection,
+        "end_projection_px": end_projection,
+        "distal_reference_point": distal_point,
+        "distal_reference_index": distal_index,
+        "distal_reference_confidence": distal_confidence,
+        "policy": "body_direction_translated_through_selected_raised_hip",
+    }
 
 
 def _clamp(value: float, low: float = 0.0, high: float = 1.0) -> float:
@@ -598,14 +681,28 @@ def analyze_aslr_v2(
         reliability *= 0.93
     reliability = _clamp(reliability)
 
+    common_reference = _reference_line_through_selected_hip(
+        body_baseline,
+        selected["hip"],
+        reference_xy,
+        reference_conf,
+    )
+
     body_baseline_payload = {
-        "method": "best_visible_single_side_ear_shoulder_hip_straight_line",
+        "method": "ear_shoulder_hip_direction_translated_through_selected_raised_hip",
         "side": body_baseline["side"],
         "ear": _rounded_point(body_baseline["ear"]),
         "shoulder": _rounded_point(body_baseline["shoulder"]),
         "pelvis": _rounded_point(body_baseline["hip"]),
-        "line_start": _rounded_point(body_baseline["line_start"]),
-        "line_end": _rounded_point(body_baseline["line_end"]),
+        "source_fit_line_start": _rounded_point(body_baseline["line_start"]),
+        "source_fit_line_end": _rounded_point(body_baseline["line_end"]),
+        "line_start": _rounded_point(common_reference["line_start"]),
+        "line_end": _rounded_point(common_reference["line_end"]),
+        "measurement_vertex": _rounded_point(common_reference["measurement_vertex"]),
+        "common_vertex_policy": common_reference["policy"],
+        "distal_reference_point": _rounded_point(common_reference["distal_reference_point"]),
+        "distal_reference_index": common_reference["distal_reference_index"],
+        "distal_reference_confidence": round(float(common_reference["distal_reference_confidence"]), 3) if common_reference["distal_reference_confidence"] is not None else None,
         "direction": {
             "x": round(float(body_baseline["direction"][0]), 6),
             "y": round(float(body_baseline["direction"][1]), 6),
@@ -665,9 +762,10 @@ def analyze_aslr_v2(
             "detected_coco_side": selected_endpoint["ankle_label"].replace("_ANKLE", ""),
             "side_identity_method": "workflow_label_plus_ankle_first_geometry",
             "measurement_engine_version": ASLR_ENGINE_VERSION,
-            "angle_method": "original_ear_shoulder_hip_axis_to_raised_hip_true_yolo_ankle",
+            "angle_method": "common_raised_hip_vertex_body_axis_to_true_yolo_ankle",
             "source_orientation_requirement": "none_dual_orientation_pose_detection",
-            "reference_axis": "subject_body_axis_original_photo",
+            "reference_axis": "subject_body_direction_translated_through_selected_raised_hip",
+            "measurement_vertex_policy": "pink_reference_and_yellow_leg_line_share_selected_raised_hip",
             "body_baseline": body_baseline_payload,
             "endpoint_source": "true_yolo_ankle_keypoint",
             "endpoint_policy": "ankle_indices_15_or_16_only_no_toe_no_skin_endpoint",
