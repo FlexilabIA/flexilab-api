@@ -248,7 +248,7 @@ aslr_model = _load_aslr_pose_model()
 
 app = FastAPI(
     title="FlexiLab Movement Intelligence API",
-    version="101.32.0",
+    version="101.35.0",
 )
 app.include_router(create_account_router(supabase))
 app.include_router(create_stripe_router(supabase))
@@ -371,7 +371,7 @@ async def request_timing_middleware(request, call_next):
 def health():
     return {
         "ok": True,
-        "patch_version": "V101.34.0-aslr-horizontal-simplification",
+        "patch_version": "V101.35.0-aslr-body-axis-two-line",
         "base_patch": "V101.28.4-aslr-thresholds-60-75",
         "exercise_library_mode": EXERCISE_LIBRARY_MODE,
         "exercise_library_path": EXERCISE_LIBRARY_PATH,
@@ -402,10 +402,10 @@ def health():
                 "green": ">75",
             },
             "source_orientation_requirement": "none",
-            "chain_strategy": "dedicated_yolo11m_original_horizontal_endpoint",
+            "chain_strategy": "dedicated_yolo11m_previous_endpoint_plus_ear_shoulder_hip_axis",
             "pose_passes": ["original_normalized_photo"],
             "aslr_inference_imgsz": 960,
-            "measurement_anchor": "single_pelvic_anchor",
+            "measurement_anchor": "straight_ear_shoulder_pelvis_axis_plus_pelvis_ankle_line",
             "dedicated_pose_model": ASLR_POSE_MODEL_NAME,
             "general_model_fallback": False,
         },
@@ -421,7 +421,7 @@ def health():
 @app.get("/library_status")
 def library_status():
     return {
-        "patch_version": "V101.34.0-aslr-horizontal-simplification",
+        "patch_version": "V101.35.0-aslr-body-axis-two-line",
         "exercise_library_mode": EXERCISE_LIBRARY_MODE,
         "exercise_library_path": EXERCISE_LIBRARY_PATH,
         "exercise_library_count": len(EXERCISE_LIBRARY or []),
