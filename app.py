@@ -372,7 +372,7 @@ async def request_timing_middleware(request, call_next):
 def health():
     return {
         "ok": True,
-        "patch_version": "V101.35.10-aslr-hybrid-resting-reference",
+        "patch_version": "V101.35.11-aslr-body-axis-primary",
         "base_patch": "V101.28.4-aslr-thresholds-60-75",
         "exercise_library_mode": EXERCISE_LIBRARY_MODE,
         "exercise_library_path": EXERCISE_LIBRARY_PATH,
@@ -403,10 +403,10 @@ def health():
                 "green": ">75",
             },
             "source_orientation_requirement": "head_left_capture_protocol_internal_90_clockwise_inference",
-            "chain_strategy": "rotated_90_clockwise_fullbody_then_hybrid_resting_reference",
+            "chain_strategy": "rotated_90_clockwise_fullbody_then_body_axis_primary",
             "pose_passes": ["rotated_90_clockwise_fullbody_detection"],
             "aslr_inference_imgsz": 960,
-            "measurement_anchor": "separate_anatomical_hip_origins_between_two_true_yolo_ankle_axes",
+            "measurement_anchor": "single_shared_pelvic_anchor_body_axis_to_true_raised_ankle",
             "dedicated_pose_model": ASLR_POSE_MODEL_NAME,
             "general_model_fallback": False,
         },
@@ -422,7 +422,7 @@ def health():
 @app.get("/library_status")
 def library_status():
     return {
-        "patch_version": "V101.35.10-aslr-hybrid-resting-reference",
+        "patch_version": "V101.35.11-aslr-body-axis-primary",
         "exercise_library_mode": EXERCISE_LIBRARY_MODE,
         "exercise_library_path": EXERCISE_LIBRARY_PATH,
         "exercise_library_count": len(EXERCISE_LIBRARY or []),
@@ -2727,7 +2727,7 @@ def run_yolo_analysis_from_bytes(img_bytes, test_type, capture_metadata=None):
             selected_pass_name = selected_pass["name"]
 
         analysis_pass = {
-            "mode": "aslr_rotated_fullbody_hybrid_resting_reference",
+            "mode": "aslr_rotated_fullbody_body_axis_primary",
             "selected_pass": selected_pass_name,
             "source_orientation_required": False,
             "pose_passes": evaluated_passes,
@@ -2735,9 +2735,9 @@ def run_yolo_analysis_from_bytes(img_bytes, test_type, capture_metadata=None):
             "rotated_pass_failure": rotated_failure,
             "fallback_used": False,
             "visual_endpoint_allowed": False,
-            "endpoint_policy": "raised_true_yolo_ankle_required_resting_ankle_optional",
-            "chain_policy": "raised_ankle_first_then_resting_ankle_knee_or_torso_reference",
-            "body_reference_policy": "resting_ankle_else_resting_knee_else_shoulder_to_pelvis_axis",
+            "endpoint_policy": "raised_true_yolo_ankle_required_floor_leg_optional_validation_only",
+            "chain_policy": "raised_ankle_first_then_invariant_shoulder_to_pelvis_body_axis",
+            "body_reference_policy": "shoulder_midpoint_to_pelvis_axis_always_primary_floor_leg_optional_validation_only",
             "person_coverage": round(person_coverage, 4),
             "adaptive_crop_used": False,
         }
