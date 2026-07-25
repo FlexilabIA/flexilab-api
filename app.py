@@ -248,7 +248,7 @@ aslr_model = _load_aslr_pose_model()
 
 app = FastAPI(
     title="FlexiLab Movement Intelligence API",
-    version="101.35.3",
+    version="101.35.4",
 )
 app.include_router(create_account_router(supabase))
 app.include_router(create_stripe_router(supabase))
@@ -371,7 +371,7 @@ async def request_timing_middleware(request, call_next):
 def health():
     return {
         "ok": True,
-        "patch_version": "V101.35.3-aslr-ankle-first-body-axis",
+        "patch_version": "V101.35.4-aslr-common-hip-reference",
         "base_patch": "V101.28.4-aslr-thresholds-60-75",
         "exercise_library_mode": EXERCISE_LIBRARY_MODE,
         "exercise_library_path": EXERCISE_LIBRARY_PATH,
@@ -402,10 +402,10 @@ def health():
                 "green": ">75",
             },
             "source_orientation_requirement": "none",
-            "chain_strategy": "dual_orientation_ankle_first_cross_label_chain_plus_original_body_axis",
+            "chain_strategy": "dual_orientation_ankle_first_cross_label_chain_plus_common_hip_body_axis",
             "pose_passes": ["original_limb_detection", "rotated_90_clockwise_limb_detection", "original_body_reference"],
             "aslr_inference_imgsz": 960,
-            "measurement_anchor": "endpoint_first_raised_hip_to_true_yolo_ankle",
+            "measurement_anchor": "common_raised_hip_vertex_to_true_yolo_ankle",
             "dedicated_pose_model": ASLR_POSE_MODEL_NAME,
             "general_model_fallback": False,
         },
@@ -421,7 +421,7 @@ def health():
 @app.get("/library_status")
 def library_status():
     return {
-        "patch_version": "V101.35.3-aslr-ankle-first-body-axis",
+        "patch_version": "V101.35.4-aslr-common-hip-reference",
         "exercise_library_mode": EXERCISE_LIBRARY_MODE,
         "exercise_library_path": EXERCISE_LIBRARY_PATH,
         "exercise_library_count": len(EXERCISE_LIBRARY or []),
@@ -2737,7 +2737,7 @@ def run_yolo_analysis_from_bytes(img_bytes, test_type, capture_metadata=None):
             selected_pass_name = selected_pass["name"]
 
         analysis_pass = {
-            "mode": "aslr_dual_orientation_ankle_first_body_axis",
+            "mode": "aslr_dual_orientation_ankle_first_common_hip_axis",
             "selected_pass": selected_pass_name,
             "source_orientation_required": False,
             "pose_passes": evaluated_passes,
@@ -2747,7 +2747,7 @@ def run_yolo_analysis_from_bytes(img_bytes, test_type, capture_metadata=None):
             "visual_endpoint_allowed": False,
             "endpoint_policy": "true_yolo_ankle_indices_15_or_16_only",
             "chain_policy": "ankle_first_then_best_cross_label_hip_knee_combination",
-            "body_reference_policy": "original_photo_ear_shoulder_hip_straight_axis",
+            "body_reference_policy": "original_ear_shoulder_hip_direction_translated_through_selected_raised_hip",
             "person_coverage": round(person_coverage, 4),
             "adaptive_crop_used": False,
         }
