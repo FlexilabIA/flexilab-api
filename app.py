@@ -248,7 +248,7 @@ aslr_model = _load_aslr_pose_model()
 
 app = FastAPI(
     title="FlexiLab Movement Intelligence API",
-    version="101.35.0",
+    version="101.35.3",
 )
 app.include_router(create_account_router(supabase))
 app.include_router(create_stripe_router(supabase))
@@ -371,7 +371,7 @@ async def request_timing_middleware(request, call_next):
 def health():
     return {
         "ok": True,
-        "patch_version": "V101.35.0-aslr-body-axis-two-line",
+        "patch_version": "V101.35.3-aslr-ankle-first-body-axis",
         "base_patch": "V101.28.4-aslr-thresholds-60-75",
         "exercise_library_mode": EXERCISE_LIBRARY_MODE,
         "exercise_library_path": EXERCISE_LIBRARY_PATH,
@@ -402,10 +402,10 @@ def health():
                 "green": ">75",
             },
             "source_orientation_requirement": "none",
-            "chain_strategy": "dedicated_yolo11m_previous_endpoint_plus_ear_shoulder_hip_axis",
-            "pose_passes": ["original_normalized_photo"],
+            "chain_strategy": "dual_orientation_ankle_first_cross_label_chain_plus_original_body_axis",
+            "pose_passes": ["original_limb_detection", "rotated_90_clockwise_limb_detection", "original_body_reference"],
             "aslr_inference_imgsz": 960,
-            "measurement_anchor": "straight_ear_shoulder_pelvis_axis_plus_pelvis_ankle_line",
+            "measurement_anchor": "endpoint_first_raised_hip_to_true_yolo_ankle",
             "dedicated_pose_model": ASLR_POSE_MODEL_NAME,
             "general_model_fallback": False,
         },
@@ -421,7 +421,7 @@ def health():
 @app.get("/library_status")
 def library_status():
     return {
-        "patch_version": "V101.35.0-aslr-body-axis-two-line",
+        "patch_version": "V101.35.3-aslr-ankle-first-body-axis",
         "exercise_library_mode": EXERCISE_LIBRARY_MODE,
         "exercise_library_path": EXERCISE_LIBRARY_PATH,
         "exercise_library_count": len(EXERCISE_LIBRARY or []),
@@ -882,12 +882,12 @@ def analyze_squat(xy, conf):
 
 
 
-def analyze_aslr(xy, conf, side="RIGHT", img=None):
-    """ASLR V101.28.1: endpoint-first chain reconstruction.
+def analyze_aslr(xy, conf, side="RIGHT", img=None, body_xy=None, body_conf=None):
+    """ASLR hybrid analysis.
 
-    The raised ankle is selected geometrically, then connected to the most
-    plausible knee and hip. The workflow assigns left/right; COCO bilateral
-    labels remain diagnostic only.
+    `xy/conf` come from the selected original-or-rotated limb pass. The engine
+    restores the V101.28 ankle-first reconstruction across both hip/knee labels.
+    `body_xy/body_conf` always come from the original normalized photo.
     """
     return analyze_aslr_v2(
         xy,
@@ -899,6 +899,8 @@ def analyze_aslr(xy, conf, side="RIGHT", img=None):
         resting_knee_extension_min=ASLR_RESTING_KNEE_EXTENSION_MIN,
         resting_leg_max_angle=ASLR_RESTING_LEG_MAX_ANGLE,
         img=img,
+        body_xy=body_xy,
+        body_conf=body_conf,
     )
 
 
@@ -2585,51 +2587,167 @@ def run_yolo_analysis_from_bytes(img_bytes, test_type, capture_metadata=None):
     aslr_precomputed_error = None
     if is_aslr:
         requested_side = "RIGHT" if test_type == "aslr_right" else "LEFT"
-        selected_pass = {
-            "name": "original_normalized_photo",
-            "xy": final_xy,
-            "conf": final_conf,
-            "boxes": final_boxes,
-            "box_confidences": final_box_confidences,
-            "main_idx": final_main_idx,
-            "threshold": detection_threshold,
-            "imgsz": inference_imgsz,
-        }
+
+        # The original-photo pose is always the camera-tilt/body reference.
+        body_reference_xy = np.array(final_xy, dtype=float, copy=True)
+        body_reference_conf = np.array(final_conf, dtype=float, copy=True)
+
+        # Restore the stable V101.28 dual-orientation detection behaviour. Both
+        # passes are eligible to provide the true YOLO ankle/knee/hip landmarks;
+        # neither pass may substitute a toe, shoe contour or skin endpoint.
+        limb_pose_passes = [
+            {
+                "name": "original_limb_detection",
+                "xy": np.array(final_xy, dtype=float, copy=True),
+                "conf": np.array(final_conf, dtype=float, copy=True),
+                "boxes": np.array(final_boxes, dtype=float, copy=True),
+                "box_confidences": np.array(final_box_confidences, dtype=float, copy=True),
+                "main_idx": final_main_idx,
+                "threshold": detection_threshold,
+                "imgsz": inference_imgsz,
+            }
+        ]
+
+        rotated_failure = None
         try:
-            aslr_precomputed_result = analyze_aslr(
-                final_xy,
-                final_conf,
-                requested_side,
-                img,
+            rotated_pose_image = cv2.rotate(img, cv2.ROTATE_90_CLOCKWISE)
+            rotated_prediction, rotated_threshold, rotated_imgsz = detect_aslr_pose_with_fallback(
+                rotated_pose_image,
+                inference_imgsz=max(POSE_INFERENCE_IMGSZ, 960),
             )
-            selected_metrics = aslr_precomputed_result.get("metrics") or {}
-            evaluated_passes = [{
-                "name": "original_normalized_photo",
-                "status": "accepted",
-                "aslr_angle": selected_metrics.get("aslr_angle"),
-                "confidence": aslr_precomputed_result.get("confidence"),
-                "angle_method": selected_metrics.get("angle_method"),
-                "reference_axis": selected_metrics.get("reference_axis"),
-                "ankle_endpoint_count": selected_metrics.get("detected_ankle_endpoint_count"),
-                "ankle_endpoints_are_distinct": selected_metrics.get("ankle_endpoints_are_distinct"),
-            }]
-        except ASLRQualityError as exc:
-            aslr_precomputed_error = exc
-            evaluated_passes = [{
-                "name": "original_normalized_photo",
-                "status": "rejected",
-                "code": exc.code,
-                "message": str(exc),
-            }]
+            (
+                rotated_boxes,
+                rotated_areas,
+                rotated_box_confidences,
+                rotated_main_idx,
+                rotated_xy,
+                rotated_conf,
+            ) = _pose_arrays(rotated_prediction)
+            rotated_xy, rotated_boxes = _map_rotated_cw_pose_to_original(
+                rotated_xy,
+                rotated_boxes,
+                img.shape,
+            )
+            rotated_areas = np.array([
+                max(0.0, float(box[2] - box[0])) * max(0.0, float(box[3] - box[1]))
+                for box in rotated_boxes
+            ], dtype=float)
+            if len(rotated_boxes) > 1:
+                main_area = max(float(rotated_areas[rotated_main_idx]), 1.0)
+                significant_others = [
+                    index
+                    for index, area in enumerate(rotated_areas)
+                    if index != rotated_main_idx
+                    and float(area) >= main_area * 0.35
+                    and float(rotated_box_confidences[index]) >= 0.25
+                ]
+                if significant_others:
+                    raise ASLRQualityError(
+                        "multiple_people",
+                        "More than one person is visible. Retake the photo with only the person being assessed in the frame.",
+                        {"significant_other_person_count": len(significant_others)},
+                    )
+
+            limb_pose_passes.append({
+                "name": "rotated_90_clockwise_limb_detection",
+                "xy": rotated_xy,
+                "conf": rotated_conf,
+                "boxes": rotated_boxes,
+                "box_confidences": rotated_box_confidences,
+                "main_idx": rotated_main_idx,
+                "threshold": rotated_threshold,
+                "imgsz": rotated_imgsz,
+            })
+        except ASLRQualityError:
+            raise
+        except Exception as exc:
+            rotated_failure = str(exc)
+            logger.warning("ASLR rotated true-ankle pass unavailable: %s", exc)
+
+        evaluated_passes = []
+        accepted_passes = []
+        rejected_passes = []
+        for limb_pass in limb_pose_passes:
+            try:
+                pass_result = analyze_aslr(
+                    limb_pass["xy"],
+                    limb_pass["conf"],
+                    requested_side,
+                    img,
+                    body_xy=body_reference_xy,
+                    body_conf=body_reference_conf,
+                )
+                quality_score = _aslr_pose_pass_quality(pass_result)
+                pass_metrics = pass_result.get("metrics") or {}
+                evaluated_passes.append({
+                    "name": limb_pass["name"],
+                    "status": "accepted",
+                    "quality_score": quality_score,
+                    "aslr_angle": pass_metrics.get("aslr_angle"),
+                    "confidence": pass_result.get("confidence"),
+                    "endpoint_source": pass_metrics.get("endpoint_source"),
+                    "endpoint_index": (pass_metrics.get("selected_source_indices") or {}).get("ankle"),
+                    "knee_index": (pass_metrics.get("selected_source_indices") or {}).get("knee"),
+                    "chain_method": pass_metrics.get("chain_reconstruction_method"),
+                })
+                accepted_passes.append((quality_score, limb_pass, pass_result))
+            except ASLRQualityError as exc:
+                diagnostic_score = 0.0
+                if isinstance(exc.details, dict):
+                    diagnostic_score = float(exc.details.get("candidate_angle") or 0.0) / 180.0
+                evaluated_passes.append({
+                    "name": limb_pass["name"],
+                    "status": "rejected",
+                    "code": exc.code,
+                    "message": str(exc),
+                    "diagnostic_score": round(diagnostic_score, 6),
+                })
+                rejected_passes.append((diagnostic_score, limb_pass, exc))
+
+        if accepted_passes:
+            _quality, selected_pass, aslr_precomputed_result = max(
+                accepted_passes,
+                key=lambda item: item[0],
+            )
+            final_xy = selected_pass["xy"]
+            final_conf = selected_pass["conf"]
+            final_boxes = selected_pass["boxes"]
+            final_box_confidences = selected_pass["box_confidences"]
+            final_main_idx = selected_pass["main_idx"]
+            detection_threshold = selected_pass["threshold"]
+            inference_imgsz = selected_pass["imgsz"]
+            selected_pass_name = selected_pass["name"]
+        else:
+            if not rejected_passes:
+                raise ASLRQualityError(
+                    "raised_ankle_or_knee_not_detected",
+                    "The raised ankle and knee were not identified reliably. Retake the photo with the complete raised foot visible.",
+                )
+            _diagnostic, selected_pass, aslr_precomputed_error = max(
+                rejected_passes,
+                key=lambda item: item[0],
+            )
+            final_xy = selected_pass["xy"]
+            final_conf = selected_pass["conf"]
+            final_boxes = selected_pass["boxes"]
+            final_box_confidences = selected_pass["box_confidences"]
+            final_main_idx = selected_pass["main_idx"]
+            detection_threshold = selected_pass["threshold"]
+            inference_imgsz = selected_pass["imgsz"]
+            selected_pass_name = selected_pass["name"]
 
         analysis_pass = {
-            "mode": "aslr_original_horizontal_endpoint",
-            "selected_pass": "original_normalized_photo",
+            "mode": "aslr_dual_orientation_ankle_first_body_axis",
+            "selected_pass": selected_pass_name,
             "source_orientation_required": False,
             "pose_passes": evaluated_passes,
-            "pose_pass_count": 1,
+            "pose_pass_count": len(limb_pose_passes),
+            "rotated_pass_failure": rotated_failure,
             "fallback_used": False,
-            "fallback_failure": None,
+            "visual_endpoint_allowed": False,
+            "endpoint_policy": "true_yolo_ankle_indices_15_or_16_only",
+            "chain_policy": "ankle_first_then_best_cross_label_hip_knee_combination",
+            "body_reference_policy": "original_photo_ear_shoulder_hip_straight_axis",
             "person_coverage": round(person_coverage, 4),
             "adaptive_crop_used": False,
         }
