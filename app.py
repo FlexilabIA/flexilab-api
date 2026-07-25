@@ -43,6 +43,7 @@ from aslr_engine import (
     ASLR_RED_MAX_DEG,
     ASLR_YELLOW_MAX_DEG,
     analyze_aslr_v2,
+    analyze_aslr_rotated_fullbody,
     make_aslr_thresholds,
 )
 from vision_qa import VISION_QA_VERSION, build_vision_qa_payload
@@ -371,7 +372,7 @@ async def request_timing_middleware(request, call_next):
 def health():
     return {
         "ok": True,
-        "patch_version": "V101.35.5-aslr-ear-hip-reference",
+        "patch_version": "V101.35.6-aslr-rotated-fullbody-two-leg",
         "base_patch": "V101.28.4-aslr-thresholds-60-75",
         "exercise_library_mode": EXERCISE_LIBRARY_MODE,
         "exercise_library_path": EXERCISE_LIBRARY_PATH,
@@ -402,7 +403,7 @@ def health():
                 "green": ">75",
             },
             "source_orientation_requirement": "none",
-            "chain_strategy": "dual_orientation_ankle_first_cross_label_chain_plus_common_hip_body_axis",
+            "chain_strategy": "rotated_90_clockwise_fullbody_then_two_anatomical_leg_axes",
             "pose_passes": ["original_limb_detection", "rotated_90_clockwise_limb_detection", "original_body_reference"],
             "aslr_inference_imgsz": 960,
             "measurement_anchor": "common_raised_hip_vertex_to_true_yolo_ankle",
@@ -421,7 +422,7 @@ def health():
 @app.get("/library_status")
 def library_status():
     return {
-        "patch_version": "V101.35.5-aslr-ear-hip-reference",
+        "patch_version": "V101.35.6-aslr-rotated-fullbody-two-leg",
         "exercise_library_mode": EXERCISE_LIBRARY_MODE,
         "exercise_library_path": EXERCISE_LIBRARY_PATH,
         "exercise_library_count": len(EXERCISE_LIBRARY or []),
@@ -889,7 +890,7 @@ def analyze_aslr(xy, conf, side="RIGHT", img=None, body_xy=None, body_conf=None)
     restores the V101.28 ankle-first reconstruction across both hip/knee labels.
     `body_xy/body_conf` always come from the original normalized photo.
     """
-    return analyze_aslr_v2(
+    return analyze_aslr_rotated_fullbody(
         xy,
         conf,
         side=side,
@@ -2595,18 +2596,7 @@ def run_yolo_analysis_from_bytes(img_bytes, test_type, capture_metadata=None):
         # Restore the stable V101.28 dual-orientation detection behaviour. Both
         # passes are eligible to provide the true YOLO ankle/knee/hip landmarks;
         # neither pass may substitute a toe, shoe contour or skin endpoint.
-        limb_pose_passes = [
-            {
-                "name": "original_limb_detection",
-                "xy": np.array(final_xy, dtype=float, copy=True),
-                "conf": np.array(final_conf, dtype=float, copy=True),
-                "boxes": np.array(final_boxes, dtype=float, copy=True),
-                "box_confidences": np.array(final_box_confidences, dtype=float, copy=True),
-                "main_idx": final_main_idx,
-                "threshold": detection_threshold,
-                "imgsz": inference_imgsz,
-            }
-        ]
+        limb_pose_passes = []
 
         rotated_failure = None
         try:
