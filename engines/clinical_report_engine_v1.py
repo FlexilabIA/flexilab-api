@@ -118,16 +118,16 @@ def build_expert_report(report: Dict[str, Any], lang: str = "fr") -> Dict[str, A
     correlations = []
     if shoulder_limitation:
         correlations.append(_txt(lang,
-            "La limitation de l’élévation active de l’épaule peut refléter une contribution gléno-humérale, scapulaire ou thoracique. Le screening ne permet pas d’isoler une structure unique.",
-            "Reduced active shoulder elevation may reflect glenohumeral, scapular or thoracic contributions. This screening cannot isolate a single structure."))
+            "L’élévation active de l’épaule met en jeu la mobilité de l’épaule, le contrôle de l’omoplate et la contribution du haut du tronc. Le programme ciblera ces composantes de façon progressive.",
+            "Active shoulder elevation combines shoulder mobility, scapular control, and upper-trunk contribution. The program will address these components progressively."))
     if trunk_priority:
         correlations.append(_txt(lang,
-            "L’inclinaison accrue du tronc au squat traduit une stratégie globale. Elle peut être influencée par la cheville, la hanche, les proportions corporelles, l’équilibre ou le contrôle du tronc; aucun facteur isolé n’est confirmé.",
-            "Increased squat trunk inclination reflects a global strategy. It may be influenced by the ankle, hip, body proportions, balance or trunk control; no isolated contributor is confirmed."))
+            "L’inclinaison du tronc au squat reflète la stratégie utilisée pour conserver l’équilibre et la profondeur. Le travail privilégiera le contrôle du tronc, la mobilité disponible et la qualité du mouvement.",
+            "Squat trunk inclination reflects the strategy used to maintain balance and depth. Training will focus on trunk control, available mobility, and movement quality."))
     if aslr_limitation:
         correlations.append(_txt(lang,
-            "Une ASLR réduite peut être associée à une mobilité active limitée de la chaîne postérieure, à une stratégie pelvienne ou à une qualité de détection imparfaite; elle ne démontre pas une lésion des ischio-jambiers.",
-            "A reduced ASLR may relate to limited active posterior-chain mobility, pelvic strategy or imperfect detection quality; it does not demonstrate hamstring injury."))
+            "Une ASLR réduite indique une priorité de progression pour la mobilité active de hanche, la chaîne postérieure et le contrôle du bassin.",
+            "A reduced ASLR indicates a progression priority for active hip mobility, posterior-chain mobility, and pelvic control."))
 
     if shoulder_limitation and trunk_priority:
         summary = _txt(lang,
@@ -135,8 +135,8 @@ def build_expert_report(report: Dict[str, Any], lang: str = "fr") -> Dict[str, A
             "The profile primarily shows reduced active upper-quarter mobility together with a squat strategy involving trunk compensation. The priority is to improve active control and movement quality rather than correct an assumed postural deformity.")
     elif shoulder_limitation:
         summary = _txt(lang,
-            "Le principal axe d’amélioration concerne la mobilité active et le contrôle au-dessus de la tête. Les résultats ne permettent pas d’attribuer cette limitation à une structure spécifique.",
-            "The main improvement area is active overhead mobility and control. The findings do not allow the limitation to be attributed to a specific structure.")
+            "Le principal axe d’amélioration concerne la mobilité active et le contrôle au-dessus de la tête. Le programme associera mobilité, contrôle scapulaire et progression de l’élévation.",
+            "The main improvement area is active overhead mobility and control. The program will combine mobility, scapular control, and progressive elevation.")
     elif trunk_priority:
         summary = _txt(lang,
             "Le principal axe d’amélioration concerne la stratégie de mouvement au squat, notamment le contrôle du tronc sous contrainte fonctionnelle.",
@@ -153,15 +153,17 @@ def build_expert_report(report: Dict[str, Any], lang: str = "fr") -> Dict[str, A
             "Primary hypothesis: reduced active elevation and/or insufficient thoracic-scapular coordination."))
     if trunk_priority:
         hypotheses.append(_txt(lang,
-            "Hypothèse secondaire : stratégie de squat dominée par une compensation du tronc, à explorer par un travail de contrôle et de mobilité non diagnostique.",
-            "Secondary hypothesis: a squat strategy dominated by trunk compensation, to be explored through control and non-diagnostic mobility work."))
+            "Priorité secondaire : améliorer la stratégie de squat par un travail de contrôle du tronc, de mobilité et de coordination.",
+            "Secondary priority: improve squat strategy through trunk-control, mobility, and coordination work."))
 
     not_assessed = [
-        _txt(lang, "Dorsiflexion de cheville non mesurée directement.", "Ankle dorsiflexion was not directly measured."),
-        _txt(lang, "Rotation et contrôle scapulaires non mesurés directement.", "Scapular rotation and control were not directly measured."),
-        _txt(lang, "La vue de profil n’est pas un test de mobilité thoracique.", "The side view is not a thoracic mobility test."),
-        _txt(lang, "Aucune conclusion sur une lésion, une pathologie ou un risque de blessure ne peut être tirée.", "No conclusion regarding injury, pathology or injury risk can be drawn."),
+        _txt(
+            lang,
+            "FlexiLab analyse les mouvements visibles sur les photos afin de guider l’entraînement et le suivi.",
+            "FlexiLab analyses visible movement patterns to guide training and progress tracking.",
+        )
     ]
+
 
     plan = {
         "primary_objective": _txt(lang,
@@ -185,13 +187,13 @@ def build_expert_report(report: Dict[str, Any], lang: str = "fr") -> Dict[str, A
         "biomechanical_correlations": correlations,
         "ranked_movement_hypotheses": hypotheses,
         "functional_implications": _txt(lang,
-            "Les limitations observées peuvent réduire l’aisance lors des gestes au-dessus de la tête ou des tâches de squat, mais leur impact dépend du contexte, de la charge et des symptômes.",
-            "Observed limitations may reduce ease during overhead or squat-related tasks, but their impact depends on context, load and symptoms."),
+            "Les priorités observées orientent le programme vers une meilleure aisance, un meilleur contrôle et une progression plus régulière dans les gestes fonctionnels.",
+            "The observed priorities guide the program toward greater ease, better control, and more consistent progress in functional movements."),
         "not_assessed_and_limitations": not_assessed,
         "reassessment_plan": plan,
         "disclaimer": _txt(lang,
-            "Cette interprétation est fondée sur un screening photographique du mouvement. Elle ne constitue ni un diagnostic médical, ni une analyse structurelle.",
-            "This interpretation is based on photographic movement screening. It is neither a medical diagnosis nor a structural assessment."),
+            "FlexiLab fournit un screening du mouvement destiné au bien-être et à l’entraînement. Il ne remplace pas un avis médical.",
+            "FlexiLab provides movement screening for wellness and training guidance. It does not replace medical advice."),
     }
 
 def attach_expert_report(report: Dict[str, Any], lang: str = "fr") -> Dict[str, Any]:
