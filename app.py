@@ -371,7 +371,7 @@ async def request_timing_middleware(request, call_next):
 def health():
     return {
         "ok": True,
-        "patch_version": "V101.33.0-aslr-robust-geometry",
+        "patch_version": "V101.34.0-aslr-horizontal-simplification",
         "base_patch": "V101.28.4-aslr-thresholds-60-75",
         "exercise_library_mode": EXERCISE_LIBRARY_MODE,
         "exercise_library_path": EXERCISE_LIBRARY_PATH,
@@ -402,8 +402,8 @@ def health():
                 "green": ">75",
             },
             "source_orientation_requirement": "none",
-            "chain_strategy": "dedicated_yolo11m_rotated_fast_path_then_original_fallback",
-            "pose_passes": ["rotated_90_clockwise", "original_fallback"],
+            "chain_strategy": "dedicated_yolo11m_original_horizontal_endpoint",
+            "pose_passes": ["original_normalized_photo"],
             "aslr_inference_imgsz": 960,
             "measurement_anchor": "single_pelvic_anchor",
             "dedicated_pose_model": ASLR_POSE_MODEL_NAME,
@@ -421,7 +421,7 @@ def health():
 @app.get("/library_status")
 def library_status():
     return {
-        "patch_version": "V101.33.0-aslr-robust-geometry",
+        "patch_version": "V101.34.0-aslr-horizontal-simplification",
         "exercise_library_mode": EXERCISE_LIBRARY_MODE,
         "exercise_library_path": EXERCISE_LIBRARY_PATH,
         "exercise_library_count": len(EXERCISE_LIBRARY or []),
@@ -898,6 +898,7 @@ def analyze_aslr(xy, conf, side="RIGHT", img=None):
         raised_knee_extension_min=ASLR_RAISED_KNEE_EXTENSION_MIN,
         resting_knee_extension_min=ASLR_RESTING_KNEE_EXTENSION_MIN,
         resting_leg_max_angle=ASLR_RESTING_LEG_MAX_ANGLE,
+        img=img,
     )
 
 
@@ -2469,10 +2470,11 @@ def run_yolo_analysis_from_bytes(img_bytes, test_type, capture_metadata=None):
 
     first_requested_imgsz = max(POSE_INFERENCE_IMGSZ, 960) if is_aslr else None
     pose_detector = detect_aslr_pose_with_fallback if is_aslr else detect_pose_with_fallback
-    # ASLR protocol places the head on the left of the source image. Rotating
-    # clockwise presents the body upright to the dedicated pose model and is the
-    # primary fast path. The original orientation is evaluated only as fallback.
-    first_pose_image = cv2.rotate(img, cv2.ROTATE_90_CLOCKWISE) if is_aslr else img
+    # V101.34: ASLR uses the original normalized photo only. The clinical
+    # angle is measured against image horizontal, so rotating the source before
+    # inference creates an unnecessary second coordinate system and was the
+    # root of inconsistent 30°/65°/80° results.
+    first_pose_image = img
     first_prediction, first_threshold, first_imgsz = pose_detector(
         first_pose_image,
         inference_imgsz=first_requested_imgsz,
@@ -2489,17 +2491,6 @@ def run_yolo_analysis_from_bytes(img_bytes, test_type, capture_metadata=None):
         first_xy,
         first_conf,
     ) = _pose_arrays(first_prediction)
-    if is_aslr:
-        first_xy, first_boxes = _map_rotated_cw_pose_to_original(
-            first_xy,
-            first_boxes,
-            img.shape,
-        )
-        first_areas = np.array([
-            max(0.0, float(box[2] - box[0])) * max(0.0, float(box[3] - box[1]))
-            for box in first_boxes
-        ], dtype=float)
-
     if is_aslr and len(first_boxes) > 1:
         main_area = max(float(first_areas[first_main_idx]), 1.0)
         significant_others = [
@@ -2594,46 +2585,8 @@ def run_yolo_analysis_from_bytes(img_bytes, test_type, capture_metadata=None):
     aslr_precomputed_error = None
     if is_aslr:
         requested_side = "RIGHT" if test_type == "aslr_right" else "LEFT"
-        evaluated_passes = []
-        accepted_passes = []
-        rejected_passes = []
-
-        def evaluate_aslr_pass(pose_pass):
-            try:
-                pass_result = analyze_aslr(
-                    pose_pass["xy"],
-                    pose_pass["conf"],
-                    requested_side,
-                    img,
-                )
-                pass_quality = _aslr_pose_pass_quality(pass_result)
-                evaluated_passes.append({
-                    "name": pose_pass["name"],
-                    "status": "accepted",
-                    "quality_score": pass_quality,
-                    "aslr_angle": (pass_result.get("metrics") or {}).get("aslr_angle"),
-                    "confidence": pass_result.get("confidence"),
-                    "ankle_endpoint_count": (pass_result.get("metrics") or {}).get("detected_ankle_endpoint_count"),
-                    "ankle_endpoints_are_distinct": (pass_result.get("metrics") or {}).get("ankle_endpoints_are_distinct"),
-                })
-                accepted_passes.append((pass_quality, pose_pass, pass_result))
-                return pass_quality
-            except ASLRQualityError as exc:
-                detail_score = 0.0
-                if isinstance(exc.details, dict):
-                    detail_score = float(exc.details.get("candidate_angle") or 0.0) / 180.0
-                evaluated_passes.append({
-                    "name": pose_pass["name"],
-                    "status": "rejected",
-                    "code": exc.code,
-                    "message": str(exc),
-                    "diagnostic_score": round(detail_score, 6),
-                })
-                rejected_passes.append((detail_score, pose_pass, exc))
-                return None
-
-        primary_pass = {
-            "name": "rotated_90_clockwise",
+        selected_pass = {
+            "name": "original_normalized_photo",
             "xy": final_xy,
             "conf": final_conf,
             "boxes": final_boxes,
@@ -2642,64 +2595,41 @@ def run_yolo_analysis_from_bytes(img_bytes, test_type, capture_metadata=None):
             "threshold": detection_threshold,
             "imgsz": inference_imgsz,
         }
-        primary_quality = evaluate_aslr_pass(primary_pass)
-        fallback_failure = None
-        fallback_used = primary_quality is None or primary_quality < 0.72
-
-        if fallback_used:
-            try:
-                original_prediction, original_threshold, original_imgsz = detect_aslr_pose_with_fallback(
-                    img,
-                    inference_imgsz=max(POSE_INFERENCE_IMGSZ, 960),
-                )
-                (
-                    original_boxes,
-                    _original_areas,
-                    original_box_confidences,
-                    original_main_idx,
-                    original_xy,
-                    original_conf,
-                ) = _pose_arrays(original_prediction)
-                evaluate_aslr_pass({
-                    "name": "original",
-                    "xy": original_xy,
-                    "conf": original_conf,
-                    "boxes": original_boxes,
-                    "box_confidences": original_box_confidences,
-                    "main_idx": original_main_idx,
-                    "threshold": original_threshold,
-                    "imgsz": original_imgsz,
-                })
-            except Exception as exc:
-                fallback_failure = str(exc)
-                logger.warning("ASLR fallback pose pass unavailable: %s", exc)
-
-        if accepted_passes:
-            _quality, selected_pass, aslr_precomputed_result = max(
-                accepted_passes,
-                key=lambda item: item[0],
+        try:
+            aslr_precomputed_result = analyze_aslr(
+                final_xy,
+                final_conf,
+                requested_side,
+                img,
             )
-        else:
-            _diagnostic, selected_pass, aslr_precomputed_error = max(
-                rejected_passes,
-                key=lambda item: item[0],
-            )
+            selected_metrics = aslr_precomputed_result.get("metrics") or {}
+            evaluated_passes = [{
+                "name": "original_normalized_photo",
+                "status": "accepted",
+                "aslr_angle": selected_metrics.get("aslr_angle"),
+                "confidence": aslr_precomputed_result.get("confidence"),
+                "angle_method": selected_metrics.get("angle_method"),
+                "reference_axis": selected_metrics.get("reference_axis"),
+                "ankle_endpoint_count": selected_metrics.get("detected_ankle_endpoint_count"),
+                "ankle_endpoints_are_distinct": selected_metrics.get("ankle_endpoints_are_distinct"),
+            }]
+        except ASLRQualityError as exc:
+            aslr_precomputed_error = exc
+            evaluated_passes = [{
+                "name": "original_normalized_photo",
+                "status": "rejected",
+                "code": exc.code,
+                "message": str(exc),
+            }]
 
-        final_xy = selected_pass["xy"]
-        final_conf = selected_pass["conf"]
-        final_boxes = selected_pass["boxes"]
-        final_box_confidences = selected_pass["box_confidences"]
-        final_main_idx = selected_pass["main_idx"]
-        detection_threshold = selected_pass["threshold"]
-        inference_imgsz = selected_pass["imgsz"]
         analysis_pass = {
-            "mode": "aslr_fast_path_with_fallback",
-            "selected_pass": selected_pass["name"],
+            "mode": "aslr_original_horizontal_endpoint",
+            "selected_pass": "original_normalized_photo",
             "source_orientation_required": False,
             "pose_passes": evaluated_passes,
-            "pose_pass_count": len(evaluated_passes),
-            "fallback_used": fallback_used,
-            "fallback_failure": fallback_failure,
+            "pose_pass_count": 1,
+            "fallback_used": False,
+            "fallback_failure": None,
             "person_coverage": round(person_coverage, 4),
             "adaptive_crop_used": False,
         }
