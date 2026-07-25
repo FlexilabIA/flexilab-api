@@ -372,7 +372,7 @@ async def request_timing_middleware(request, call_next):
 def health():
     return {
         "ok": True,
-        "patch_version": "V101.35.6-aslr-rotated-fullbody-two-leg",
+        "patch_version": "V101.35.7-aslr-bijective-two-leg-pairing",
         "base_patch": "V101.28.4-aslr-thresholds-60-75",
         "exercise_library_mode": EXERCISE_LIBRARY_MODE,
         "exercise_library_path": EXERCISE_LIBRARY_PATH,
@@ -402,11 +402,11 @@ def health():
                 "yellow": "60-75_inclusive",
                 "green": ">75",
             },
-            "source_orientation_requirement": "none",
-            "chain_strategy": "rotated_90_clockwise_fullbody_then_two_anatomical_leg_axes",
-            "pose_passes": ["original_limb_detection", "rotated_90_clockwise_limb_detection", "original_body_reference"],
+            "source_orientation_requirement": "head_left_capture_protocol_internal_90_clockwise_inference",
+            "chain_strategy": "rotated_90_clockwise_fullbody_then_joint_bijective_leg_pairing",
+            "pose_passes": ["rotated_90_clockwise_fullbody_detection"],
             "aslr_inference_imgsz": 960,
-            "measurement_anchor": "common_raised_hip_vertex_to_true_yolo_ankle",
+            "measurement_anchor": "separate_anatomical_hip_origins_between_two_true_yolo_ankle_axes",
             "dedicated_pose_model": ASLR_POSE_MODEL_NAME,
             "general_model_fallback": False,
         },
@@ -422,7 +422,7 @@ def health():
 @app.get("/library_status")
 def library_status():
     return {
-        "patch_version": "V101.35.6-aslr-rotated-fullbody-two-leg",
+        "patch_version": "V101.35.7-aslr-bijective-two-leg-pairing",
         "exercise_library_mode": EXERCISE_LIBRARY_MODE,
         "exercise_library_path": EXERCISE_LIBRARY_PATH,
         "exercise_library_count": len(EXERCISE_LIBRARY or []),
@@ -2727,7 +2727,7 @@ def run_yolo_analysis_from_bytes(img_bytes, test_type, capture_metadata=None):
             selected_pass_name = selected_pass["name"]
 
         analysis_pass = {
-            "mode": "aslr_dual_orientation_ankle_first_common_hip_axis",
+            "mode": "aslr_rotated_fullbody_joint_bijective_leg_pairing",
             "selected_pass": selected_pass_name,
             "source_orientation_required": False,
             "pose_passes": evaluated_passes,
@@ -2736,8 +2736,8 @@ def run_yolo_analysis_from_bytes(img_bytes, test_type, capture_metadata=None):
             "fallback_used": False,
             "visual_endpoint_allowed": False,
             "endpoint_policy": "true_yolo_ankle_indices_15_or_16_only",
-            "chain_policy": "ankle_first_then_best_cross_label_hip_knee_combination",
-            "body_reference_policy": "original_ear_shoulder_hip_direction_translated_through_selected_raised_hip",
+            "chain_policy": "joint_bijective_pairing_each_hip_knee_ankle_used_once",
+            "body_reference_policy": "resting_leg_axis_selected_by_torso_alignment",
             "person_coverage": round(person_coverage, 4),
             "adaptive_crop_used": False,
         }
