@@ -372,7 +372,7 @@ async def request_timing_middleware(request, call_next):
 def health():
     return {
         "ok": True,
-        "patch_version": "V101.35.7-aslr-bijective-two-leg-pairing",
+        "patch_version": "V101.35.8-aslr-shared-pelvic-anchor",
         "base_patch": "V101.28.4-aslr-thresholds-60-75",
         "exercise_library_mode": EXERCISE_LIBRARY_MODE,
         "exercise_library_path": EXERCISE_LIBRARY_PATH,
@@ -403,7 +403,7 @@ def health():
                 "green": ">75",
             },
             "source_orientation_requirement": "head_left_capture_protocol_internal_90_clockwise_inference",
-            "chain_strategy": "rotated_90_clockwise_fullbody_then_joint_bijective_leg_pairing",
+            "chain_strategy": "rotated_90_clockwise_fullbody_then_shared_pelvic_anchor_two_leg_pairing",
             "pose_passes": ["rotated_90_clockwise_fullbody_detection"],
             "aslr_inference_imgsz": 960,
             "measurement_anchor": "separate_anatomical_hip_origins_between_two_true_yolo_ankle_axes",
@@ -422,7 +422,7 @@ def health():
 @app.get("/library_status")
 def library_status():
     return {
-        "patch_version": "V101.35.7-aslr-bijective-two-leg-pairing",
+        "patch_version": "V101.35.8-aslr-shared-pelvic-anchor",
         "exercise_library_mode": EXERCISE_LIBRARY_MODE,
         "exercise_library_path": EXERCISE_LIBRARY_PATH,
         "exercise_library_count": len(EXERCISE_LIBRARY or []),
@@ -2727,7 +2727,7 @@ def run_yolo_analysis_from_bytes(img_bytes, test_type, capture_metadata=None):
             selected_pass_name = selected_pass["name"]
 
         analysis_pass = {
-            "mode": "aslr_rotated_fullbody_joint_bijective_leg_pairing",
+            "mode": "aslr_rotated_fullbody_shared_pelvic_anchor_pairing",
             "selected_pass": selected_pass_name,
             "source_orientation_required": False,
             "pose_passes": evaluated_passes,
@@ -2736,7 +2736,7 @@ def run_yolo_analysis_from_bytes(img_bytes, test_type, capture_metadata=None):
             "fallback_used": False,
             "visual_endpoint_allowed": False,
             "endpoint_policy": "true_yolo_ankle_indices_15_or_16_only",
-            "chain_policy": "joint_bijective_pairing_each_hip_knee_ankle_used_once",
+            "chain_policy": "shared_pelvic_anchor_each_knee_ankle_used_once",
             "body_reference_policy": "resting_leg_axis_selected_by_torso_alignment",
             "person_coverage": round(person_coverage, 4),
             "adaptive_crop_used": False,
