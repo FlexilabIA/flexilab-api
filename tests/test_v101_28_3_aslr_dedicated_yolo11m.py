@@ -12,13 +12,13 @@ VISION_SOURCE = (ROOT / "vision_qa.py").read_text(encoding="utf-8")
 
 class ASLRDedicatedYOLO11mTests(unittest.TestCase):
     def test_patch_and_model_contract(self):
-        self.assertIn('"patch_version": "V101.28.4-aslr-thresholds-60-75"', APP_SOURCE)
+        self.assertIn('"patch_version": "V101.29-production-efficiency"', APP_SOURCE)
         self.assertIn('"FLEXILAB_ASLR_POSE_MODEL", "yolo11m-pose.pt"', APP_SOURCE)
         self.assertIn('ASLR_POSE_MODEL_INFERENCE_LOCK = threading.RLock()', APP_SOURCE)
         self.assertIn('aslr_model = _load_aslr_pose_model()', APP_SOURCE)
         self.assertIn('def detect_aslr_pose_with_fallback', APP_SOURCE)
         self.assertIn('pose_detector = detect_aslr_pose_with_fallback if is_aslr else detect_pose_with_fallback', APP_SOURCE)
-        self.assertIn('rotated_prediction, rotated_threshold, rotated_imgsz = detect_aslr_pose_with_fallback', APP_SOURCE)
+        self.assertIn('first_pose_image = cv2.rotate(img, cv2.ROTATE_90_CLOCKWISE) if is_aslr else img', APP_SOURCE)
         self.assertIn('"general_model_fallback": False', APP_SOURCE)
 
     def test_aslr_model_is_reported_in_health_and_metrics(self):

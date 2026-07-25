@@ -50,9 +50,9 @@ def valid_pose():
 
 class ASLRDualOrientationTests(unittest.TestCase):
     def test_patch_contract(self):
-        self.assertIn('"patch_version": "V101.28.4-aslr-thresholds-60-75"', APP_SOURCE)
+        self.assertIn('"patch_version": "V101.29-production-efficiency"', APP_SOURCE)
         self.assertIn('cv2.ROTATE_90_CLOCKWISE', APP_SOURCE)
-        self.assertIn('"mode": "aslr_dual_orientation"', APP_SOURCE)
+        self.assertIn('"mode": "aslr_fast_path_with_fallback"', APP_SOURCE)
         self.assertIn('inference_imgsz=max(POSE_INFERENCE_IMGSZ, 960)', APP_SOURCE)
         self.assertIn('not is_aslr', APP_SOURCE)
         self.assertEqual(ASLR_ENGINE_VERSION, "aslr-dedicated-yolo11m-thresholds-60-75-v6")

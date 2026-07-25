@@ -9,9 +9,9 @@ class PatchContractTests(unittest.TestCase):
     def test_backend_contract(self):
         app = (ROOT / "app.py").read_text(encoding="utf-8")
         engine = (ROOT / "aslr_engine.py").read_text(encoding="utf-8")
-        self.assertIn("V101.28.4-aslr-thresholds-60-75", app)
+        self.assertIn("V101.29-production-efficiency", app)
         self.assertIn("cv2.ROTATE_90_CLOCKWISE", app)
-        self.assertIn("aslr_dual_orientation", app)
+        self.assertIn("aslr_fast_path_with_fallback", app)
         self.assertIn("vision_qa_requested", app)
         self.assertIn("_without_ephemeral_vision_qa", app)
         self.assertIn("single_pelvic_anchor", engine)
