@@ -1,16 +1,14 @@
-"""FlexiLab ASLR hybrid body-reference / true-ankle engine.
+"""FlexiLab ASLR rotated full-body hybrid-reference engine.
 
-V101.35.4 uses two pose views for different jobs:
+V101.35.10 rotates a private full-body copy 90 degrees clockwise for YOLO pose
+inference, inverse-maps the landmarks to the original horizontal photo, and
+measures the raised leg from a shared pelvic anchor. The raised endpoint must
+always be a true YOLO ankle keypoint. The resting reference is selected by a
+strict hierarchy: coherent resting ankle, coherent resting-knee direction, or
+shoulder-to-pelvis body-axis fallback.
 
-* the original normalized image supplies the subject reference axis from a
-  coherent ear -> shoulder -> hip chain;
-* a 90-degree-clockwise inference pass supplies a coherent raised
-  hip -> knee -> ankle chain, mapped back to original-image coordinates.
-
-The clinical line always ends at the YOLO ankle keypoint. The subject-reference
-line is translated through the selected raised hip so both measurement lines
-share one exact vertex. A skin contour, toe or highest-visible foot pixel is
-never accepted as the measurement endpoint.
+The displayed pink and yellow lines use the exact same vectors as the reported
+angle. A toe, skin contour, shoe edge, or invented foot endpoint is never used.
 """
 
 from __future__ import annotations
@@ -20,7 +18,7 @@ from typing import Any, Dict, Mapping, Sequence, Tuple
 
 import numpy as np
 
-ASLR_ENGINE_VERSION = "aslr-dedicated-yolo11m-postpair-resting-knee-advisory-v20"
+ASLR_ENGINE_VERSION = "aslr-dedicated-yolo11m-hybrid-resting-reference-v21"
 ASLR_THRESHOLD_EVIDENCE_STATUS = (
     "provisional_flexilab_reference_bands_not_diagnostic_cutoffs"
 )
@@ -914,7 +912,32 @@ def analyze_aslr_v2(
 
 
 
-def _shared_pelvic_anchor_leg_pairings(
+
+def _angle_between_vectors(
+    a: Tuple[float, float],
+    b: Tuple[float, float],
+) -> float:
+    """Directional angle in degrees from 0 to 180 without folding opposites."""
+    na = math.hypot(a[0], a[1])
+    nb = math.hypot(b[0], b[1])
+    if na <= 1e-6 or nb <= 1e-6:
+        return 180.0
+    cosine = (a[0] * b[0] + a[1] * b[1]) / (na * nb)
+    cosine = max(-1.0, min(1.0, cosine))
+    return math.degrees(math.acos(cosine))
+
+
+def _unit_vector(vector: Tuple[float, float]) -> Tuple[float, float]:
+    length = math.hypot(vector[0], vector[1])
+    if length <= 1e-6:
+        raise ASLRQualityError(
+            "reference_axis_uncertain",
+            "The body reference axis could not be identified reliably. Retake the photo.",
+        )
+    return (vector[0] / length, vector[1] / length)
+
+
+def _hybrid_leg_chain_candidates(
     xy: Sequence[Sequence[float]],
     conf: Sequence[float],
     pelvis: Tuple[float, float],
@@ -923,149 +946,267 @@ def _shared_pelvic_anchor_leg_pairings(
     *,
     keypoint_min_conf: float,
 ) -> list[Dict[str, Any]]:
-    """Pair the two knees and ankles from one side-view pelvic anchor.
-
-    In a strict side view the anatomical hips overlap, so requiring two
-    independently reliable hip origins is unsafe. The pelvis anchor is the
-    confidence-weighted midpoint when both hips are available, or the single
-    reliable hip when only one is available. Every knee and ankle is used once.
-    """
-    knee_assignments = ((13, 14), (14, 13))
-    ankle_assignments = ((15, 16), (16, 15))
-    assignments: list[Dict[str, Any]] = []
-
-    def build_chain(knee_idx: int, ankle_idx: int) -> Dict[str, Any] | None:
-        knee_conf = _confidence(conf, knee_idx)
-        ankle_conf = _confidence(conf, ankle_idx)
-        if ankle_conf < keypoint_min_conf:
-            return None
-        if knee_conf < max(0.10, keypoint_min_conf * 0.60):
-            return None
-        knee = _point(xy, knee_idx)
-        ankle = _point(xy, ankle_idx)
-        geometry = _projection_geometry(pelvis, knee, ankle)
-        leg_length = float(geometry["leg_length"])
-        if leg_length < 50.0:
-            return None
-        projection = float(geometry["projection"])
-        perpendicular_ratio = float(geometry["perpendicular_ratio"])
-        if projection < -0.12 or projection > 1.12:
-            return None
-        thigh_length = _distance(pelvis, knee)
-        shank_length = _distance(knee, ankle)
-        if thigh_length <= 2.0 or shank_length <= 2.0:
-            return None
-        knee_extension = _joint_angle(pelvis, knee, ankle)
-        segment_ratio = thigh_length / max(shank_length, 1e-6)
-        mean_confidence = (pelvis_confidence + knee_conf + ankle_conf) / 3.0
-        minimum_confidence = min(pelvis_confidence, knee_conf, ankle_conf)
-        straightness = _clamp((knee_extension - 112.0) / 68.0)
-        line_alignment = _clamp(1.0 - perpendicular_ratio / 0.25)
-        projection_quality = _clamp(1.0 - abs(projection - 0.50) / 0.58)
-        ratio_quality = _clamp(
-            1.0 - abs(math.log(max(segment_ratio, 1e-6))) / math.log(3.8)
-        )
-        chain_score = (
-            mean_confidence * 0.34
-            + straightness * 0.27
-            + line_alignment * 0.22
-            + projection_quality * 0.09
-            + ratio_quality * 0.08
-        )
-        available = (
-            knee_extension >= 122.0
-            and perpendicular_ratio <= 0.25
-            and -0.06 <= projection <= 1.06
-            and 0.25 <= segment_ratio <= 3.80
-        )
-        return {
-            "hip_idx": None,
-            "knee_idx": knee_idx,
-            "ankle_idx": ankle_idx,
-            "hip": pelvis,
-            "knee": knee,
-            "ankle": ankle,
-            "keypoint_confidence": {
-                "hip": pelvis_confidence,
-                "knee": knee_conf,
-                "ankle": ankle_conf,
-            },
-            "minimum_confidence": minimum_confidence,
-            "mean_confidence": mean_confidence,
-            "knee_extension_angle": knee_extension,
-            "thigh_length_px": thigh_length,
-            "shank_length_px": shank_length,
-            "thigh_to_shank_ratio": segment_ratio,
-            "projection": projection,
-            "perpendicular_ratio": perpendicular_ratio,
-            "chain_score": chain_score,
-            "unbiased_chain_score": chain_score,
-            "same_coco_side": False,
-            "available": available,
-            "source_label": f"PELVIS-K{knee_idx}-A{ankle_idx}",
-            "torso_alignment_angle": _acute_angle_between_vectors(
-                torso_vector, _vector(pelvis, ankle)
-            ),
-        }
-
-    for knee_indices in knee_assignments:
-        for ankle_indices in ankle_assignments:
-            chains = [
-                build_chain(knee_indices[0], ankle_indices[0]),
-                build_chain(knee_indices[1], ankle_indices[1]),
-            ]
-            if any(chain is None or not chain["available"] for chain in chains):
+    """Build plausible pelvis-knee-ankle chains without trusting COCO side labels."""
+    candidates: list[Dict[str, Any]] = []
+    for knee_idx in (13, 14):
+        for ankle_idx in (15, 16):
+            knee_conf = _confidence(conf, knee_idx)
+            ankle_conf = _confidence(conf, ankle_idx)
+            if ankle_conf < keypoint_min_conf:
                 continue
-            chain_a, chain_b = chains  # type: ignore[misc]
-            ordered = sorted(
-                [chain_a, chain_b], key=lambda item: item["torso_alignment_angle"]
+            if knee_conf < max(0.10, keypoint_min_conf * 0.60):
+                continue
+
+            knee = _point(xy, knee_idx)
+            ankle = _point(xy, ankle_idx)
+            geometry = _projection_geometry(pelvis, knee, ankle)
+            leg_length = float(geometry["leg_length"])
+            projection = float(geometry["projection"])
+            perpendicular_ratio = float(geometry["perpendicular_ratio"])
+            if leg_length < 50.0 or projection < -0.12 or projection > 1.12:
+                continue
+
+            thigh_length = _distance(pelvis, knee)
+            shank_length = _distance(knee, ankle)
+            if thigh_length <= 2.0 or shank_length <= 2.0:
+                continue
+
+            knee_extension = _joint_angle(pelvis, knee, ankle)
+            segment_ratio = thigh_length / max(shank_length, 1e-6)
+            mean_confidence = (pelvis_confidence + knee_conf + ankle_conf) / 3.0
+            minimum_confidence = min(pelvis_confidence, knee_conf, ankle_conf)
+            straightness = _clamp((knee_extension - 112.0) / 68.0)
+            line_alignment = _clamp(1.0 - perpendicular_ratio / 0.27)
+            projection_quality = _clamp(1.0 - abs(projection - 0.50) / 0.60)
+            ratio_quality = _clamp(
+                1.0 - abs(math.log(max(segment_ratio, 1e-6))) / math.log(4.2)
             )
-            resting, raised = ordered[0], ordered[1]
-            ankle_separation = _distance(resting["ankle"], raised["ankle"])
-            knee_separation = _distance(resting["knee"], raised["knee"])
-            body_scale = max(
-                80.0,
-                (_distance(pelvis, resting["ankle"]) + _distance(pelvis, raised["ankle"])) / 2.0,
+            chain_score = (
+                mean_confidence * 0.34
+                + straightness * 0.27
+                + line_alignment * 0.22
+                + projection_quality * 0.09
+                + ratio_quality * 0.08
             )
-            final_angle = _acute_angle_between_vectors(
-                _vector(pelvis, resting["ankle"]),
-                _vector(pelvis, raised["ankle"]),
+            available = (
+                knee_extension >= 120.0
+                and perpendicular_ratio <= 0.27
+                and -0.08 <= projection <= 1.08
+                and 0.22 <= segment_ratio <= 4.20
             )
-            resting_alignment_quality = _clamp(
-                1.0 - resting["torso_alignment_angle"] / 28.0
+            leg_vector = _vector(pelvis, ankle)
+            torso_separation = _acute_angle_between_vectors(torso_vector, leg_vector)
+            directional_torso_alignment = _angle_between_vectors(torso_vector, leg_vector)
+            raised_score = (
+                chain_score * 0.62
+                + _clamp((torso_separation - 10.0) / 75.0) * 0.38
             )
-            leg_separation_quality = _clamp(final_angle / 75.0)
-            ankle_distinct_quality = _clamp(
-                ankle_separation / max(30.0, body_scale * 0.35)
-            )
-            knee_distinct_quality = _clamp(
-                knee_separation / max(18.0, body_scale * 0.16)
-            )
-            mean_chain_score = (resting["chain_score"] + raised["chain_score"]) / 2.0
-            pair_score = (
-                mean_chain_score * 0.68
-                + resting_alignment_quality * 0.17
-                + leg_separation_quality * 0.07
-                + ankle_distinct_quality * 0.05
-                + knee_distinct_quality * 0.03
-            )
-            assignments.append({
-                "resting": resting,
-                "raised": raised,
-                "pair_score": float(pair_score),
-                "final_angle": float(final_angle),
-                "ankle_separation": float(ankle_separation),
-                "knee_separation": float(knee_separation),
-                "hip_separation": 0.0,
-                "body_scale": float(body_scale),
-                "source_indices": {
-                    "resting": {"hip": None, "knee": int(resting["knee_idx"]), "ankle": int(resting["ankle_idx"])},
-                    "raised": {"hip": None, "knee": int(raised["knee_idx"]), "ankle": int(raised["ankle_idx"])},
+            candidates.append({
+                "hip_idx": None,
+                "knee_idx": knee_idx,
+                "ankle_idx": ankle_idx,
+                "hip": pelvis,
+                "knee": knee,
+                "ankle": ankle,
+                "keypoint_confidence": {
+                    "hip": pelvis_confidence,
+                    "knee": knee_conf,
+                    "ankle": ankle_conf,
                 },
+                "minimum_confidence": minimum_confidence,
+                "mean_confidence": mean_confidence,
+                "knee_extension_angle": knee_extension,
+                "thigh_length_px": thigh_length,
+                "shank_length_px": shank_length,
+                "thigh_to_shank_ratio": segment_ratio,
+                "projection": projection,
+                "perpendicular_ratio": perpendicular_ratio,
+                "chain_score": chain_score,
+                "unbiased_chain_score": chain_score,
+                "same_coco_side": (
+                    (knee_idx, ankle_idx) == (13, 15)
+                    or (knee_idx, ankle_idx) == (14, 16)
+                ),
+                "available": available,
+                "source_label": f"PELVIS-K{knee_idx}-A{ankle_idx}",
+                "torso_separation_angle": torso_separation,
+                "torso_alignment_angle": directional_torso_alignment,
+                "raised_selection_score": raised_score,
             })
 
-    assignments.sort(key=lambda item: item["pair_score"], reverse=True)
-    return assignments
+    # Keep only the best knee reconstruction for each true YOLO ankle endpoint.
+    best_by_ankle: Dict[int, Dict[str, Any]] = {}
+    for candidate in candidates:
+        if not candidate["available"]:
+            continue
+        ankle_idx = int(candidate["ankle_idx"])
+        previous = best_by_ankle.get(ankle_idx)
+        if previous is None or candidate["raised_selection_score"] > previous["raised_selection_score"]:
+            best_by_ankle[ankle_idx] = candidate
+    return list(best_by_ankle.values())
+
+
+def _select_hybrid_resting_reference(
+    xy: Sequence[Sequence[float]],
+    conf: Sequence[float],
+    pelvis: Tuple[float, float],
+    pelvis_confidence: float,
+    shoulder_center: Tuple[float, float],
+    torso_vector: Tuple[float, float],
+    raised: Mapping[str, Any],
+    *,
+    keypoint_min_conf: float,
+) -> Dict[str, Any]:
+    """Select ankle, knee, then torso fallback for the resting reference axis."""
+    torso_unit = _unit_vector(torso_vector)
+    raised_ankle_idx = int(raised["ankle_idx"])
+    raised_knee_idx = int(raised["knee_idx"])
+    raised_length = max(80.0, _distance(pelvis, raised["ankle"]))
+
+    remaining_ankles = [idx for idx in (15, 16) if idx != raised_ankle_idx]
+    remaining_knees = [idx for idx in (13, 14) if idx != raised_knee_idx]
+
+    ankle_candidates: list[Dict[str, Any]] = []
+    for knee_idx in remaining_knees:
+        for ankle_idx in remaining_ankles:
+            knee_conf = _confidence(conf, knee_idx)
+            ankle_conf = _confidence(conf, ankle_idx)
+            if ankle_conf < keypoint_min_conf:
+                continue
+            if knee_conf < max(0.12, keypoint_min_conf * 0.70):
+                continue
+            knee = _point(xy, knee_idx)
+            ankle = _point(xy, ankle_idx)
+            geometry = _projection_geometry(pelvis, knee, ankle)
+            leg_length = float(geometry["leg_length"])
+            projection = float(geometry["projection"])
+            perpendicular_ratio = float(geometry["perpendicular_ratio"])
+            if leg_length < 50.0:
+                continue
+            knee_extension = _joint_angle(pelvis, knee, ankle)
+            alignment = _angle_between_vectors(torso_vector, _vector(pelvis, ankle))
+            thigh_length = _distance(pelvis, knee)
+            shank_length = _distance(knee, ankle)
+            segment_ratio = thigh_length / max(shank_length, 1e-6)
+            coherent = (
+                alignment <= 18.0
+                and knee_extension >= 130.0
+                and perpendicular_ratio <= 0.18
+                and 0.02 <= projection <= 1.06
+                and 0.25 <= segment_ratio <= 3.80
+            )
+            if not coherent:
+                continue
+            mean_confidence = (pelvis_confidence + knee_conf + ankle_conf) / 3.0
+            quality = (
+                mean_confidence * 0.45
+                + _clamp(1.0 - alignment / 18.0) * 0.25
+                + _clamp((knee_extension - 130.0) / 50.0) * 0.18
+                + _clamp(1.0 - perpendicular_ratio / 0.18) * 0.12
+            )
+            ankle_candidates.append({
+                "source": "resting_ankle",
+                "reference_vector": _vector(pelvis, ankle),
+                "line_start": pelvis,
+                "line_end": ankle,
+                "reference_point": ankle,
+                "reference_index": ankle_idx,
+                "reference_confidence": ankle_conf,
+                "knee": knee,
+                "knee_idx": knee_idx,
+                "knee_confidence": knee_conf,
+                "ankle": ankle,
+                "ankle_idx": ankle_idx,
+                "knee_extension_angle": knee_extension,
+                "perpendicular_ratio": perpendicular_ratio,
+                "projection": projection,
+                "alignment_angle": alignment,
+                "quality": quality,
+                "anchors_used": ["shared_pelvic_anchor", "resting_knee_validation", "resting_ankle"],
+            })
+    if ankle_candidates:
+        return max(ankle_candidates, key=lambda item: item["quality"])
+
+    knee_candidates: list[Dict[str, Any]] = []
+    for knee_idx in remaining_knees:
+        knee_conf = _confidence(conf, knee_idx)
+        if knee_conf < max(0.18, keypoint_min_conf * 0.85):
+            continue
+        knee = _point(xy, knee_idx)
+        knee_vector = _vector(pelvis, knee)
+        knee_length = math.hypot(*knee_vector)
+        if knee_length < 35.0:
+            continue
+        alignment = _angle_between_vectors(torso_vector, knee_vector)
+        if alignment > 22.0:
+            continue
+        direction = _unit_vector(knee_vector)
+        display_length = max(120.0, raised_length * 0.92, knee_length * 1.75)
+        line_end = (
+            pelvis[0] + direction[0] * display_length,
+            pelvis[1] + direction[1] * display_length,
+        )
+        quality = (
+            ((pelvis_confidence + knee_conf) / 2.0) * 0.62
+            + _clamp(1.0 - alignment / 22.0) * 0.38
+        )
+        knee_candidates.append({
+            "source": "resting_knee",
+            "reference_vector": knee_vector,
+            "line_start": pelvis,
+            "line_end": line_end,
+            "reference_point": knee,
+            "reference_index": knee_idx,
+            "reference_confidence": knee_conf,
+            "knee": knee,
+            "knee_idx": knee_idx,
+            "knee_confidence": knee_conf,
+            "ankle": None,
+            "ankle_idx": None,
+            "knee_extension_angle": None,
+            "perpendicular_ratio": None,
+            "projection": None,
+            "alignment_angle": alignment,
+            "quality": quality,
+            "anchors_used": ["shared_pelvic_anchor", "resting_knee_direction"],
+        })
+    if knee_candidates:
+        return max(knee_candidates, key=lambda item: item["quality"])
+
+    torso_length = math.hypot(*torso_vector)
+    display_length = max(120.0, raised_length * 0.92, torso_length * 1.55)
+    line_end = (
+        pelvis[0] + torso_unit[0] * display_length,
+        pelvis[1] + torso_unit[1] * display_length,
+    )
+    shoulder_conf_values = [
+        _confidence(conf, idx) for idx in (5, 6) if _confidence(conf, idx) >= 0.10
+    ]
+    shoulder_confidence = (
+        sum(shoulder_conf_values) / len(shoulder_conf_values)
+        if shoulder_conf_values
+        else 0.0
+    )
+    return {
+        "source": "torso_axis_fallback",
+        "reference_vector": torso_vector,
+        "line_start": pelvis,
+        "line_end": line_end,
+        "reference_point": shoulder_center,
+        "reference_index": None,
+        "reference_confidence": min(pelvis_confidence, shoulder_confidence),
+        "knee": None,
+        "knee_idx": None,
+        "knee_confidence": None,
+        "ankle": None,
+        "ankle_idx": None,
+        "knee_extension_angle": None,
+        "perpendicular_ratio": None,
+        "projection": None,
+        "alignment_angle": 0.0,
+        "quality": (pelvis_confidence + shoulder_confidence) / 2.0,
+        "anchors_used": ["shoulder_midpoint", "shared_pelvic_anchor", "body_axis_extension"],
+    }
 
 
 def analyze_aslr_rotated_fullbody(
@@ -1079,17 +1220,19 @@ def analyze_aslr_rotated_fullbody(
     resting_knee_extension_min: float = 145.0,
     **_: Any,
 ) -> Dict[str, Any]:
-    """ASLR from a clockwise-rotated full-body inference and joint leg pairing.
+    """ASLR using a raised ankle plus a three-level resting-reference hierarchy.
 
-    The caller rotates a private inference copy clockwise so the supine subject
-    appears upright to YOLO, then inverse-maps all keypoints to the original
-    horizontal image. This function jointly pairs both hips, knees and ankles
-    using one side-view pelvic anchor, so overlapping hips and COCO label swaps cannot decide the result.
+    The full image is rotated clockwise only for YOLO inference, then keypoints
+    are inverse-mapped to the original horizontal photo. The raised leg always
+    ends at a true YOLO ankle. The resting reference uses, in order: a coherent
+    resting ankle, a coherent resting knee direction, or the shoulder-to-pelvis
+    body axis. A missing or misplaced floor-side foot therefore cannot silently
+    distort the ASLR angle.
     """
     if len(xy) < 17 or len(conf) < 17:
         raise ASLRQualityError(
             "missing_pose",
-            "Keep the full body and both complete legs visible, then retake the photo.",
+            "Keep the shoulders, pelvis and complete raised leg visible, then retake the photo.",
         )
 
     requested_side = str(side or "RIGHT").upper()
@@ -1101,7 +1244,7 @@ def analyze_aslr_rotated_fullbody(
     if not shoulder_ids or not hip_ids:
         raise ASLRQualityError(
             "full_body_not_detected",
-            "The rotated full-body skeleton was incomplete. Keep the shoulders, pelvis and both complete legs visible, then retake the photo.",
+            "The rotated full-body skeleton was incomplete. Keep the shoulders, pelvis and raised leg visible, then retake the photo.",
         )
 
     shoulder_weight = sum(_confidence(conf, i) for i in shoulder_ids)
@@ -1116,10 +1259,10 @@ def analyze_aslr_rotated_fullbody(
     if math.hypot(*torso_vector) < 35.0:
         raise ASLRQualityError(
             "torso_axis_uncertain",
-            "The torso axis could not be identified reliably. Retake the photo with the full body visible.",
+            "The torso axis could not be identified reliably. Retake the photo with the shoulders and pelvis visible.",
         )
 
-    pairings = _shared_pelvic_anchor_leg_pairings(
+    raised_candidates = _hybrid_leg_chain_candidates(
         xy,
         conf,
         pelvis,
@@ -1127,105 +1270,79 @@ def analyze_aslr_rotated_fullbody(
         torso_vector,
         keypoint_min_conf=keypoint_min_conf,
     )
-    if not pairings:
+    if not raised_candidates:
         raise ASLRQualityError(
-            "two_complete_legs_not_detected",
-            "Two coherent and distinct pelvic-anchor–knee–ankle chains were not detected. Keep both complete legs and feet visible, then retake the photo.",
-            {"pairing_strategy": "shared_pelvic_anchor_knee_ankle_bijective_geometry"},
+            "raised_ankle_or_knee_not_detected",
+            "The raised ankle and knee were not identified reliably. Retake the photo with the complete raised foot visible.",
         )
 
-    selected_pair = pairings[0]
-    resting = selected_pair["resting"]
-    raised = selected_pair["raised"]
-    final_angle = float(selected_pair["final_angle"])
-    ankle_separation = float(selected_pair["ankle_separation"])
-    body_scale = float(selected_pair["body_scale"])
-
-    # Fail closed only when two similarly plausible assignments produce very
-    # different clinical angles. This is safer than silently selecting a label-
-    # dependent chain.
-    pairing_margin = None
-    if len(pairings) > 1:
-        pairing_margin = float(pairings[0]["pair_score"] - pairings[1]["pair_score"])
-        competing_angle_gap = abs(
-            float(pairings[0]["final_angle"]) - float(pairings[1]["final_angle"])
+    raised_candidates.sort(key=lambda item: item["raised_selection_score"], reverse=True)
+    raised = raised_candidates[0]
+    if float(raised["torso_separation_angle"]) < 15.0:
+        raise ASLRQualityError(
+            "raised_leg_not_separated",
+            "The raised leg was not separated clearly from the body axis. Retake the photo.",
         )
-        if pairing_margin < 0.018 and competing_angle_gap > 8.0:
+    if float(raised["knee_extension_angle"]) < max(125.0, raised_knee_extension_min - 20.0):
+        raise ASLRQualityError(
+            "raised_knee_geometry_uncertain",
+            "The raised pelvis, knee and ankle do not form a reliable leg chain. Straighten the knee and retake the photo.",
+            {"raised_knee_extension_angle": round(float(raised["knee_extension_angle"]), 2)},
+        )
+
+    raised_margin = None
+    if len(raised_candidates) > 1:
+        raised_margin = float(
+            raised_candidates[0]["raised_selection_score"]
+            - raised_candidates[1]["raised_selection_score"]
+        )
+        separation_gap = abs(
+            float(raised_candidates[0]["torso_separation_angle"])
+            - float(raised_candidates[1]["torso_separation_angle"])
+        )
+        if raised_margin < 0.012 and separation_gap < 6.0:
             raise ASLRQualityError(
-                "bilateral_chain_pairing_ambiguous",
-                "The model detected more than one plausible way to connect the two legs. Retake the photo with both knees and ankles clearly separated.",
+                "raised_chain_ambiguous",
+                "The model detected more than one plausible raised-leg chain. Retake the photo with the raised knee and ankle clearly visible.",
                 {
-                    "best_pair_score": round(float(pairings[0]["pair_score"]), 4),
-                    "second_pair_score": round(float(pairings[1]["pair_score"]), 4),
-                    "pairing_margin": round(pairing_margin, 4),
-                    "competing_angle_gap": round(competing_angle_gap, 2),
+                    "raised_chain_margin": round(raised_margin, 4),
+                    "separation_gap_deg": round(separation_gap, 2),
                 },
             )
 
-    if ankle_separation < max(24.0, body_scale * 0.12):
-        raise ASLRQualityError(
-            "ankles_not_distinct",
-            "The model could not separate the raised and resting ankles. Retake the photo with both feet clearly visible.",
-        )
-
-    # In a strict side view the two knees can overlap and YOLO may place the
-    # resting-knee keypoint slightly off the visible joint. The ASLR value is
-    # calculated from the two pelvis-to-ankle axes, so a mildly imperfect knee
-    # keypoint must not invalidate an otherwise coherent measurement. Treat the
-    # preferred extension threshold as advisory and reject only an unmistakably
-    # flexed resting leg with a high-confidence, geometrically coherent knee.
-    resting_knee_angle = float(resting["knee_extension_angle"])
-    resting_knee_conf = float(resting["keypoint_confidence"]["knee"])
-    resting_knee_perp = float(resting["perpendicular_ratio"])
-    resting_knee_projection = float(resting["projection"])
-    resting_knee_hard_reject = (
-        resting_knee_angle < 112.0
-        and resting_knee_conf >= 0.55
-        and resting_knee_perp >= 0.16
-        and 0.12 <= resting_knee_projection <= 0.88
+    reference = _select_hybrid_resting_reference(
+        xy,
+        conf,
+        pelvis,
+        pelvis_confidence,
+        shoulder_center,
+        torso_vector,
+        raised,
+        keypoint_min_conf=keypoint_min_conf,
     )
-    if resting_knee_hard_reject:
-        raise ASLRQualityError(
-            "resting_knee_clearly_bent",
-            "Keep the resting knee straight and retake the photo.",
-            {
-                "resting_knee_extension_angle": round(resting_knee_angle, 2),
-                "resting_knee_confidence": round(resting_knee_conf, 3),
-                "resting_knee_line_distance_ratio": round(resting_knee_perp, 4),
-                "validation_mode": "post_pairing_severe_flexion_only",
-            },
-        )
-    if raised["knee_extension_angle"] < max(
-        125.0, raised_knee_extension_min - 20.0
-    ):
-        raise ASLRQualityError(
-            "raised_knee_geometry_uncertain",
-            "The raised hip, knee and ankle do not form a reliable leg chain. Straighten the knee and retake the photo.",
-            {
-                "raised_knee_extension_angle": round(
-                    raised["knee_extension_angle"], 2
-                )
-            },
-        )
 
+    final_angle = _acute_angle_between_vectors(
+        reference["reference_vector"],
+        _vector(pelvis, raised["ankle"]),
+    )
     if final_angle < 15.0:
         raise ASLRQualityError(
             "raised_leg_not_separated",
-            "The raised leg was not separated clearly from the resting leg. Retake the photo.",
+            "The raised leg was not separated clearly from the resting reference. Retake the photo.",
         )
 
-    mean_conf = (resting["mean_confidence"] + raised["mean_confidence"]) / 2.0
+    raised_mean_conf = float(raised["mean_confidence"])
+    reference_conf = float(reference["reference_confidence"])
+    mean_conf = (raised_mean_conf + reference_conf) / 2.0
     if mean_conf < required_mean_conf:
         raise ASLRQualityError(
             "lower_body_low_confidence",
-            "The lower-body landmarks are not clear enough. Improve the lighting and retake the photo.",
+            "The raised-leg and body-reference landmarks are not clear enough. Improve the lighting and retake the photo.",
         )
 
-    # The clinical value and the overlay are built from these exact same four
-    # endpoints. Recompute once as an invariant before returning the result.
     overlay_angle = _acute_angle_between_vectors(
-        _vector(resting["hip"], resting["ankle"]),
-        _vector(raised["hip"], raised["ankle"]),
+        _vector(reference["line_start"], reference["line_end"]),
+        _vector(pelvis, raised["ankle"]),
     )
     consistency_error = abs(final_angle - overlay_angle)
     if consistency_error > 0.05:
@@ -1235,83 +1352,103 @@ def analyze_aslr_rotated_fullbody(
             {"consistency_error_deg": round(consistency_error, 3)},
         )
 
+    source_weight = {
+        "resting_ankle": 1.00,
+        "resting_knee": 0.88,
+        "torso_axis_fallback": 0.76,
+    }[str(reference["source"])]
     reliability = _clamp(
-        mean_conf * 0.40
-        + resting["unbiased_chain_score"] * 0.19
-        + raised["unbiased_chain_score"] * 0.23
-        + _clamp(1.0 - resting["torso_alignment_angle"] / 25.0) * 0.12
-        + _clamp(float(selected_pair["pair_score"])) * 0.06
+        raised_mean_conf * 0.37
+        + float(raised["unbiased_chain_score"]) * 0.27
+        + reference_conf * 0.18
+        + float(reference["quality"]) * 0.12
+        + source_weight * 0.06
     )
 
+    resting_knee_angle = reference.get("knee_extension_angle")
+    flags: list[str] = []
+    if reference["source"] == "resting_knee":
+        flags.append("resting_ankle_unreliable_resting_knee_reference_used")
+    elif reference["source"] == "torso_axis_fallback":
+        flags.append("resting_ankle_and_knee_unreliable_body_axis_fallback_used")
+    if resting_knee_angle is not None and float(resting_knee_angle) < resting_knee_extension_min:
+        flags.append("resting_knee_below_preferred_extension_advisory")
+    if float(raised["knee_extension_angle"]) < raised_knee_extension_min:
+        flags.append("raised_knee_below_preferred_extension")
+    if not bool(raised["same_coco_side"]):
+        flags.append("coco_left_right_labels_ignored_for_raised_chain")
+
     body_baseline_payload = {
-        "method": "rotated_fullbody_geometric_resting_leg_reference",
-        "side": "GEOMETRIC_RESTING_LEG",
+        "method": "hybrid_resting_reference_ankle_then_knee_then_torso_axis",
+        "side": "GEOMETRIC_RESTING_REFERENCE",
         "ear": None,
         "shoulder": _rounded_point(shoulder_center),
-        "pelvis": _rounded_point(resting["hip"]),
-        "reference_origin": _rounded_point(resting["hip"]),
-        "reference_origin_label": "resting hip",
-        "source_fit_line_start": _rounded_point(resting["hip"]),
-        "source_fit_line_end": _rounded_point(resting["ankle"]),
-        "line_start": _rounded_point(resting["hip"]),
-        "line_end": _rounded_point(resting["ankle"]),
-        "measurement_vertex": _rounded_point(raised["hip"]),
+        "pelvis": _rounded_point(pelvis),
+        "reference_origin": _rounded_point(pelvis),
+        "reference_origin_label": "pelvic anchor",
+        "source_fit_line_start": _rounded_point(reference["line_start"]),
+        "source_fit_line_end": _rounded_point(reference["reference_point"]),
+        "line_start": _rounded_point(reference["line_start"]),
+        "line_end": _rounded_point(reference["line_end"]),
+        "measurement_vertex": _rounded_point(pelvis),
         "common_vertex_policy": "single_shared_side_view_pelvic_anchor",
-        "distal_reference_point": _rounded_point(resting["ankle"]),
-        "distal_reference_index": int(resting["ankle_idx"]),
-        "distal_reference_confidence": round(
-            float(resting["keypoint_confidence"]["ankle"]), 3
-        ),
+        "reference_source": reference["source"],
+        "distal_reference_point": _rounded_point(reference["reference_point"]),
+        "distal_reference_index": reference["reference_index"],
+        "distal_reference_confidence": round(reference_conf, 3),
         "direction": {
-            "x": round(float(_vector(resting["hip"], resting["ankle"])[0]), 6),
-            "y": round(float(_vector(resting["hip"], resting["ankle"])[1]), 6),
+            "x": round(float(_unit_vector(reference["reference_vector"])[0]), 6),
+            "y": round(float(_unit_vector(reference["reference_vector"])[1]), 6),
         },
         "image_angle_deg": round(
-            float(
-                math.degrees(
-                    math.atan2(
-                        _vector(resting["hip"], resting["ankle"])[1],
-                        _vector(resting["hip"], resting["ankle"])[0],
-                    )
-                )
-            ),
+            float(math.degrees(math.atan2(
+                reference["reference_vector"][1],
+                reference["reference_vector"][0],
+            ))),
             2,
         ),
-        "confidence": round(float(resting["mean_confidence"]), 3),
+        "confidence": round(reference_conf, 3),
         "collinearity": round(
-            float(_clamp(1.0 - resting["perpendicular_ratio"] / 0.24)), 3
+            float(
+                _clamp(1.0 - float(reference.get("alignment_angle") or 0.0) / 25.0)
+            ),
+            3,
         ),
-        "anchors_used": [
-            "resting_hip",
-            "resting_knee_validation",
-            "resting_ankle",
-        ],
+        "anchors_used": list(reference["anchors_used"]),
         "source_indices": {
             "ear": None,
             "shoulder": None,
             "hip": None,
-            "knee": int(resting["knee_idx"]),
-            "ankle": int(resting["ankle_idx"]),
+            "knee": reference.get("knee_idx"),
+            "ankle": reference.get("ankle_idx"),
         },
     }
 
-    flags = []
-    if resting_knee_angle < resting_knee_extension_min:
-        flags.append("resting_knee_below_preferred_extension_advisory")
-    if raised["knee_extension_angle"] < raised_knee_extension_min:
-        flags.append("raised_knee_below_preferred_extension")
-    if not resting["same_coco_side"] or not raised["same_coco_side"]:
-        flags.append("coco_left_right_labels_ignored_shared_pelvic_anchor_pairing_used")
-
-    pairing_diagnostics = [
+    raised_diagnostics = [
         {
             "rank": rank + 1,
-            "pair_score": round(float(pair["pair_score"]), 4),
-            "angle": round(float(pair["final_angle"]), 2),
-            "source_indices": pair["source_indices"],
+            "selection_score": round(float(candidate["raised_selection_score"]), 4),
+            "torso_separation_angle": round(float(candidate["torso_separation_angle"]), 2),
+            "source_indices": {
+                "hip": None,
+                "knee": int(candidate["knee_idx"]),
+                "ankle": int(candidate["ankle_idx"]),
+            },
         }
-        for rank, pair in enumerate(pairings[:4])
+        for rank, candidate in enumerate(raised_candidates[:2])
     ]
+
+    detected_ankles = [idx for idx in (15, 16) if _confidence(conf, idx) >= keypoint_min_conf]
+    ankle_separation = None
+    if len(detected_ankles) == 2:
+        ankle_separation = _distance(_point(xy, detected_ankles[0]), _point(xy, detected_ankles[1]))
+
+    resting_points = {
+        "hip": _rounded_point(pelvis),
+        "knee": _rounded_point(reference.get("knee")),
+        "ankle": _rounded_point(reference.get("ankle")),
+        "reference_endpoint": _rounded_point(reference["line_end"]),
+    }
 
     return {
         "score": round(_score_from_reference_bands(final_angle), 1),
@@ -1321,19 +1458,22 @@ def analyze_aslr_rotated_fullbody(
             "requested_side": requested_side,
             "side": requested_side,
             "detected_coco_side": raised["source_label"],
-            "side_identity_method": "workflow_label_for_reporting_geometry_for_chain_selection",
+            "side_identity_method": "workflow_label_for_reporting_geometry_for_raised_chain_selection",
             "measurement_engine_version": ASLR_ENGINE_VERSION,
-            "angle_method": "angle_between_shared_pelvic_anchor_to_resting_and_raised_ankles",
+            "angle_method": "angle_between_hybrid_resting_reference_and_shared_pelvic_anchor_to_raised_ankle",
             "source_orientation_requirement": "full_image_rotated_90_clockwise_for_inference_then_landmarks_mapped_back",
             "display_orientation": "original_normal_horizontal_image",
             "display_rotation_applied": "90_degrees_anticlockwise_equivalent_via_coordinate_inverse_mapping",
-            "reference_axis": "shared_pelvic_anchor_to_geometrically_paired_resting_ankle",
-            "measurement_vertex_policy": "single_shared_pelvic_anchor_for_both_leg_vectors",
+            "reference_axis": "resting_ankle_else_resting_knee_else_shoulder_to_pelvis_body_axis",
+            "reference_source": reference["source"],
+            "resting_reference_fallback_used": reference["source"] != "resting_ankle",
+            "resting_leg_verified": reference["source"] in {"resting_ankle", "resting_knee"},
+            "measurement_vertex_policy": "single_shared_pelvic_anchor_for_reference_and_raised_leg_vectors",
             "body_baseline": body_baseline_payload,
-            "endpoint_source": "true_yolo_ankle_keypoints_for_both_legs",
-            "endpoint_policy": "ankle_indices_15_and_16_required_no_toe_no_skin_endpoint",
+            "endpoint_source": "true_yolo_raised_ankle_with_hybrid_resting_reference",
+            "endpoint_policy": "raised_ankle_index_15_or_16_required_resting_ankle_optional_no_toe_no_skin_endpoint",
             "heel_keypoint_available": False,
-            "chain_reconstruction_method": "shared_pelvic_anchor_with_bijective_knee_ankle_pairing",
+            "chain_reconstruction_method": "raised_ankle_first_cross_label_chain_plus_hybrid_resting_reference",
             "coco_side_labels_used_for_pairing": False,
             "requested_side_used_for_pairing": False,
             "measurement_reliability": round(reliability, 3),
@@ -1341,23 +1481,17 @@ def analyze_aslr_rotated_fullbody(
             "diagnostic_flags": flags,
             "selected_limb": "GEOMETRIC_RAISED_LEG",
             "selected_endpoint_type": "ankle",
-            "selected_endpoint_confidence": round(
-                float(raised["keypoint_confidence"]["ankle"]), 3
-            ),
+            "selected_endpoint_confidence": round(float(raised["keypoint_confidence"]["ankle"]), 3),
             "selected_chain_score": round(float(raised["unbiased_chain_score"]), 3),
-            "selected_limb_mean_confidence": round(float(raised["mean_confidence"]), 3),
+            "selected_limb_mean_confidence": round(raised_mean_conf, 3),
             "selected_limb_min_confidence": round(float(raised["minimum_confidence"]), 3),
             "selected_limb_points": {
                 "pelvis": _rounded_point(pelvis),
-                "hip": _rounded_point(raised["hip"]),
+                "hip": _rounded_point(pelvis),
                 "knee": _rounded_point(raised["knee"]),
                 "ankle": _rounded_point(raised["ankle"]),
             },
-            "resting_limb_points": {
-                "hip": _rounded_point(resting["hip"]),
-                "knee": _rounded_point(resting["knee"]),
-                "ankle": _rounded_point(resting["ankle"]),
-            },
+            "resting_limb_points": resting_points,
             "selected_source_indices": {
                 "hip": None,
                 "knee": int(raised["knee_idx"]),
@@ -1365,29 +1499,42 @@ def analyze_aslr_rotated_fullbody(
             },
             "resting_source_indices": {
                 "hip": None,
-                "knee": int(resting["knee_idx"]),
-                "ankle": int(resting["ankle_idx"]),
+                "knee": reference.get("knee_idx"),
+                "ankle": reference.get("ankle_idx"),
             },
             "raised_knee_extension_angle": round(float(raised["knee_extension_angle"]), 2),
-            "resting_knee_extension_angle": round(float(resting["knee_extension_angle"]), 2),
+            "resting_knee_extension_angle": (
+                round(float(resting_knee_angle), 2) if resting_knee_angle is not None else None
+            ),
             "raised_knee_line_distance_ratio": round(float(raised["perpendicular_ratio"]), 4),
-            "resting_knee_line_distance_ratio": round(float(resting["perpendicular_ratio"]), 4),
+            "resting_knee_line_distance_ratio": (
+                round(float(reference["perpendicular_ratio"]), 4)
+                if reference.get("perpendicular_ratio") is not None
+                else None
+            ),
             "pelvis_center": _rounded_point(pelvis),
             "pelvis_confidence": round(pelvis_confidence, 3),
-            "detected_ankle_endpoint_count": 2,
-            "ankle_endpoints_are_distinct": True,
-            "ankle_endpoint_separation_px": round(ankle_separation, 2),
+            "shoulder_center": _rounded_point(shoulder_center),
+            "detected_ankle_endpoint_count": len(detected_ankles),
+            "ankle_endpoints_are_distinct": (
+                bool(ankle_separation and ankle_separation >= 20.0)
+                if ankle_separation is not None
+                else None
+            ),
+            "ankle_endpoint_separation_px": round(ankle_separation, 2) if ankle_separation is not None else None,
             "skin_shape_endpoint": None,
-            "joint_pairing_score": round(float(selected_pair["pair_score"]), 4),
-            "joint_pairing_margin": round(pairing_margin, 4) if pairing_margin is not None else None,
-            "joint_pairing_candidates": pairing_diagnostics,
+            "raised_chain_selection_score": round(float(raised["raised_selection_score"]), 4),
+            "raised_chain_margin": round(raised_margin, 4) if raised_margin is not None else None,
+            "raised_chain_candidates": raised_diagnostics,
+            "reference_confidence": round(reference_conf, 3),
+            "reference_alignment_angle": round(float(reference["alignment_angle"]), 2),
             "angle_estimators": {
-                "between_two_leg_axes": round(final_angle, 2),
+                "hybrid_reference_to_raised_ankle": round(final_angle, 2),
                 "overlay_geometry": round(overlay_angle, 2),
                 "spread": round(consistency_error, 3),
             },
             "angle_estimators_deg": {
-                "between_two_leg_axes": round(final_angle, 2),
+                "hybrid_reference_to_raised_ankle": round(final_angle, 2),
                 "overlay_geometry": round(overlay_angle, 2),
             },
             "quality_gate_config": {
@@ -1395,10 +1542,15 @@ def analyze_aslr_rotated_fullbody(
                 "required_mean_conf": required_mean_conf,
                 "raised_knee_extension_min": raised_knee_extension_min,
                 "resting_knee_extension_min": resting_knee_extension_min,
-                "resting_knee_validation_mode": "advisory_below_preferred_hard_reject_only_below_112_with_high_confidence",
-                "both_true_ankles_required": True,
+                "raised_true_ankle_required": True,
+                "resting_true_ankle_required": False,
+                "resting_reference_hierarchy": [
+                    "coherent_resting_ankle",
+                    "coherent_resting_knee_direction",
+                    "shoulder_to_pelvis_body_axis_fallback",
+                ],
                 "full_body_rotated_inference_required": True,
-                "shared_pelvic_anchor_pairing_required": True,
+                "shared_pelvic_anchor_required": True,
                 "coco_side_labels_ignored": True,
                 "overlay_angle_consistency_max_error_deg": 0.05,
             },
