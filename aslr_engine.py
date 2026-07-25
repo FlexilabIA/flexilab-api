@@ -16,7 +16,7 @@ import math
 from typing import Any, Dict, Mapping, Sequence, Tuple
 
 
-ASLR_ENGINE_VERSION = "aslr-dedicated-yolo11m-dual-orientation-v5"
+ASLR_ENGINE_VERSION = "aslr-dedicated-yolo11m-thresholds-60-75-v6"
 ASLR_THRESHOLD_EVIDENCE_STATUS = (
     "provisional_flexilab_reference_bands_not_diagnostic_cutoffs"
 )
@@ -103,31 +103,54 @@ def _rounded_point(point: Tuple[float, float]) -> Dict[str, float]:
     return {"x": round(float(point[0]), 2), "y": round(float(point[1]), 2)}
 
 
-def _make_thresholds(value: float) -> Dict[str, Any]:
+ASLR_RED_MAX_DEG = 60.0
+ASLR_YELLOW_MAX_DEG = 75.0
+ASLR_SCALE_MAX_DEG = 90.0
+
+
+def make_aslr_thresholds(value: float) -> Dict[str, Any]:
+    """Return the current FlexiLab ASLR reference bands.
+
+    Boundary policy:
+    - red: angle < 60°
+    - yellow: 60° <= angle <= 75°
+    - green: angle > 75°
+
+    The three zones are intentionally rendered as equal visual thirds by the
+    frontend, even though their numeric spans differ.
+    """
+    value = max(0.0, min(ASLR_SCALE_MAX_DEG, float(value)))
     bands = [
-        {"label": "Red", "min": 0, "max": 45, "color": "red"},
-        {"label": "Yellow", "min": 45, "max": 70, "color": "yellow"},
-        {"label": "Green", "min": 70, "max": 90, "color": "green"},
+        {"label": "Red", "min": 0, "max": 60, "color": "red"},
+        {"label": "Yellow", "min": 60, "max": 75, "color": "yellow"},
+        {"label": "Green", "min": 75, "max": 90, "color": "green"},
     ]
-    rating = "red" if value < 45 else "yellow" if value < 70 else "green"
+    rating = "red" if value < ASLR_RED_MAX_DEG else "yellow" if value <= ASLR_YELLOW_MAX_DEG else "green"
     return {
         "unit": "deg",
         "scale_min": 0,
         "scale_max": 90,
         "bands": bands,
-        "pointer_value": round(float(value), 2),
+        "pointer_value": round(value, 2),
         "rating": rating,
+        "visual_band_layout": "equal_thirds",
+        "boundary_policy": {
+            "red": "<60",
+            "yellow": "60-75_inclusive",
+            "green": ">75",
+        },
     }
 
 
-def _score_from_existing_bands(angle: float) -> float:
-    """Preserve the deployed score mapping while measurement is validated."""
-    if angle < 45:
-        score = 40.0
-    elif angle < 70:
-        score = 60.0 + ((angle - 45.0) / 25.0) * 19.0
+def _score_from_reference_bands(angle: float) -> float:
+    """Map the updated red/yellow/green bands onto the existing score tiers."""
+    angle = max(0.0, min(ASLR_SCALE_MAX_DEG, float(angle)))
+    if angle < ASLR_RED_MAX_DEG:
+        score = 40.0 + (angle / ASLR_RED_MAX_DEG) * 19.0
+    elif angle <= ASLR_YELLOW_MAX_DEG:
+        score = 60.0 + ((angle - ASLR_RED_MAX_DEG) / (ASLR_YELLOW_MAX_DEG - ASLR_RED_MAX_DEG)) * 19.0
     else:
-        score = 85.0 + ((min(angle, 90.0) - 70.0) / 20.0) * 15.0
+        score = 85.0 + ((angle - ASLR_YELLOW_MAX_DEG) / (ASLR_SCALE_MAX_DEG - ASLR_YELLOW_MAX_DEG)) * 15.0
     return max(0.0, min(100.0, score))
 
 
@@ -613,7 +636,7 @@ def analyze_aslr_v2(
     confidence_out = _clamp(confidence_out)
 
     quality_label = "good" if confidence_out >= 0.65 and not flags else "moderate"
-    score = _score_from_existing_bands(raised_angle)
+    score = _score_from_reference_bands(raised_angle)
 
     baseline_public = {
         "method": final_baseline_method,
@@ -706,5 +729,5 @@ def analyze_aslr_v2(
             },
             "threshold_evidence_status": ASLR_THRESHOLD_EVIDENCE_STATUS,
         },
-        "thresholds": {"aslr_angle": _make_thresholds(raised_angle)},
+        "thresholds": {"aslr_angle": make_aslr_thresholds(raised_angle)},
     }
