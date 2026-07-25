@@ -1,7 +1,7 @@
 {
-  "library_version": "v3.0_filmed_demo_clinical_progression_2026_07",
+  "library_version": "v3.1_filmed_demo_explicit_progression_2026_07",
   "exercise_count": 78,
-  "description": "FlexiLab filmed-only clinical exercise library with enforceable dosage, loading, progression, repetition and engagement metadata.",
+  "description": "FlexiLab filmed-only clinical exercise library with aligned phase/stage metadata, separated clinical subjects and intervention roles, and explicit criteria-based progression chains.",
   "selection_policy": {
     "demo_ready_only": true,
     "video_ready_only": true,
@@ -83,6 +83,20 @@
       "engagement_tags_v3": [
         "mobility",
         "unloaded"
+      ],
+      "clinical_subject_v4": "hip_mobility",
+      "clinical_intervention_role_v4": "multi_planar_mobility",
+      "progression_criteria_v4": [
+        "pain_not_increased",
+        "prescribed_volume_completed_with_control",
+        "no_material_compensation",
+        "completed_in_at_least_2_sessions"
+      ],
+      "stop_criteria_v4": [
+        "sharp_pain",
+        "radiating_symptoms",
+        "dizziness_or_neurological_symptoms",
+        "loss_of_movement_control"
       ]
     },
     {
@@ -111,7 +125,7 @@
       "contraindications": "stop if pain increases or symptoms radiate",
       "coaching_cues": "Place the roller across the upper back, support the head, keep the ribs controlled, and extend through the thoracic spine.",
       "common_errors": "Arching mainly through the lower back, flaring the ribs, or pulling on the neck.",
-      "regression_id": "",
+      "regression_id": "DMTM004",
       "progression_id": "",
       "maintenance_rule": "repeat if comfortable and controlled",
       "min_week": 1,
@@ -159,6 +173,20 @@
       "engagement_tags_v3": [
         "mobility",
         "unloaded"
+      ],
+      "clinical_subject_v4": "thoracic_mobility",
+      "clinical_intervention_role_v4": "extension_mobility",
+      "progression_criteria_v4": [
+        "pain_not_increased",
+        "prescribed_volume_completed_with_control",
+        "no_material_compensation",
+        "completed_in_at_least_2_sessions"
+      ],
+      "stop_criteria_v4": [
+        "sharp_pain",
+        "radiating_symptoms",
+        "dizziness_or_neurological_symptoms",
+        "loss_of_movement_control"
       ]
     },
     {
@@ -187,8 +215,8 @@
       "contraindications": "stop if pain increases or symptoms radiate",
       "coaching_cues": "Keep the knees and pelvis stacked, rotate through the upper back, and let the shoulder blade glide around the rib cage.",
       "common_errors": "Rolling the pelvis backward, forcing the shoulder to the floor, or holding the breath.",
-      "regression_id": "",
-      "progression_id": "",
+      "regression_id": "DMTM009",
+      "progression_id": "DMTM003",
       "maintenance_rule": "repeat if comfortable and controlled",
       "min_week": 1,
       "recommended_week_level": 1,
@@ -235,6 +263,20 @@
       "engagement_tags_v3": [
         "mobility",
         "unloaded"
+      ],
+      "clinical_subject_v4": "thoracic_mobility",
+      "clinical_intervention_role_v4": "rotation_mobility",
+      "progression_criteria_v4": [
+        "pain_not_increased",
+        "prescribed_volume_completed_with_control",
+        "no_material_compensation",
+        "completed_in_at_least_2_sessions"
+      ],
+      "stop_criteria_v4": [
+        "sharp_pain",
+        "radiating_symptoms",
+        "dizziness_or_neurological_symptoms",
+        "loss_of_movement_control"
       ]
     },
     {
@@ -263,8 +305,8 @@
       "contraindications": "acute shoulder pain; unstable shoulder; painful overhead range",
       "coaching_cues": "Keep the ribs down and neck long, slide the arms upward while the shoulder blades rotate smoothly, and avoid shrugging.",
       "common_errors": "Arching the lower back, lifting the shoulders toward the ears, or forcing the hands against the wall.",
-      "regression_id": "",
-      "progression_id": "",
+      "regression_id": "DMSH010",
+      "progression_id": "DMSH003",
       "maintenance_rule": "repeat if comfortable and controlled",
       "min_week": 2,
       "recommended_week_level": 2,
@@ -295,7 +337,7 @@
       "tips_en": "Reach only as high as you can without losing rib and pelvic alignment.",
       "tips_fr": "Montez seulement jusqu’à la hauteur permettant de conserver l’alignement des côtes et du bassin.",
       "dosage_type": "dynamic_mobility_reps",
-      "intervention_role": "mobility",
+      "intervention_role": "activation",
       "default_sets_v3": 2,
       "min_sets_v3": 1,
       "max_sets_v3": 2,
@@ -311,6 +353,20 @@
       "engagement_tags_v3": [
         "mobility",
         "unloaded"
+      ],
+      "clinical_subject_v4": "shoulder_mobility",
+      "clinical_intervention_role_v4": "active_overhead_control",
+      "progression_criteria_v4": [
+        "pain_not_increased",
+        "prescribed_volume_completed_with_control",
+        "no_material_compensation",
+        "completed_in_at_least_2_sessions"
+      ],
+      "stop_criteria_v4": [
+        "sharp_pain",
+        "radiating_symptoms",
+        "dizziness_or_neurological_symptoms",
+        "loss_of_movement_control"
       ]
     },
     {
@@ -340,7 +396,7 @@
       "coaching_cues": "Keep the forehead supported, draw the shoulder blades gently down and back, and lift the arms without extending the lower back.",
       "common_errors": "Shrugging, lifting the chest excessively, or using momentum.",
       "regression_id": "",
-      "progression_id": "",
+      "progression_id": "DMSH007",
       "maintenance_rule": "repeat if comfortable and controlled",
       "min_week": 2,
       "recommended_week_level": 2,
@@ -371,7 +427,7 @@
       "tips_en": "Use a small, controlled lift and pause briefly in each W, T, and Y position.",
       "tips_fr": "Réalisez une petite élévation contrôlée avec une courte pause en W, T et Y.",
       "dosage_type": "dynamic_mobility_reps",
-      "intervention_role": "mobility",
+      "intervention_role": "activation",
       "default_sets_v3": 2,
       "min_sets_v3": 1,
       "max_sets_v3": 2,
@@ -387,6 +443,20 @@
       "engagement_tags_v3": [
         "mobility",
         "unloaded"
+      ],
+      "clinical_subject_v4": "scapular_control",
+      "clinical_intervention_role_v4": "scapular_endurance",
+      "progression_criteria_v4": [
+        "pain_not_increased",
+        "prescribed_volume_completed_with_control",
+        "no_material_compensation",
+        "completed_in_at_least_2_sessions"
+      ],
+      "stop_criteria_v4": [
+        "sharp_pain",
+        "radiating_symptoms",
+        "dizziness_or_neurological_symptoms",
+        "loss_of_movement_control"
       ]
     },
     {
@@ -415,8 +485,8 @@
       "contraindications": "acute shoulder pain; unstable shoulder; painful overhead range",
       "coaching_cues": "Keep the ribs down and neck long, slide the arms upward while the shoulder blades rotate smoothly, and avoid shrugging.",
       "common_errors": "Arching the lower back, lifting the shoulders toward the ears, or forcing the hands against the wall.",
-      "regression_id": "",
-      "progression_id": "",
+      "regression_id": "DMSH001",
+      "progression_id": "DMSH005",
       "maintenance_rule": "repeat if comfortable and controlled",
       "min_week": 2,
       "recommended_week_level": 2,
@@ -447,7 +517,7 @@
       "tips_en": "Reach only as high as you can without losing rib and pelvic alignment.",
       "tips_fr": "Montez seulement jusqu’à la hauteur permettant de conserver l’alignement des côtes et du bassin.",
       "dosage_type": "dynamic_mobility_reps",
-      "intervention_role": "mobility",
+      "intervention_role": "activation",
       "default_sets_v3": 2,
       "min_sets_v3": 1,
       "max_sets_v3": 2,
@@ -463,6 +533,20 @@
       "engagement_tags_v3": [
         "mobility",
         "unloaded"
+      ],
+      "clinical_subject_v4": "shoulder_mobility",
+      "clinical_intervention_role_v4": "active_overhead_control",
+      "progression_criteria_v4": [
+        "pain_not_increased",
+        "prescribed_volume_completed_with_control",
+        "no_material_compensation",
+        "completed_in_at_least_2_sessions"
+      ],
+      "stop_criteria_v4": [
+        "sharp_pain",
+        "radiating_symptoms",
+        "dizziness_or_neurological_symptoms",
+        "loss_of_movement_control"
       ]
     },
     {
@@ -491,8 +575,8 @@
       "contraindications": "stop if pain increases or symptoms radiate",
       "coaching_cues": "Keep the knees and pelvis stacked, rotate through the upper back, and let the shoulder blade glide around the rib cage.",
       "common_errors": "Rolling the pelvis backward, forcing the shoulder to the floor, or holding the breath.",
-      "regression_id": "",
-      "progression_id": "",
+      "regression_id": "DMTM002",
+      "progression_id": "DMTM008",
       "maintenance_rule": "repeat if comfortable and controlled",
       "min_week": 1,
       "recommended_week_level": 1,
@@ -539,6 +623,20 @@
       "engagement_tags_v3": [
         "mobility",
         "unloaded"
+      ],
+      "clinical_subject_v4": "thoracic_mobility",
+      "clinical_intervention_role_v4": "rotation_mobility",
+      "progression_criteria_v4": [
+        "pain_not_increased",
+        "prescribed_volume_completed_with_control",
+        "no_material_compensation",
+        "completed_in_at_least_2_sessions"
+      ],
+      "stop_criteria_v4": [
+        "sharp_pain",
+        "radiating_symptoms",
+        "dizziness_or_neurological_symptoms",
+        "loss_of_movement_control"
       ]
     },
     {
@@ -568,7 +666,7 @@
       "coaching_cues": "Set the shoulder slightly below ear level, keep it relaxed, and rotate the chest away without twisting the pelvis.",
       "common_errors": "Shrugging the shoulder, forcing the arm behind the body, or rotating through the lower back.",
       "regression_id": "",
-      "progression_id": "",
+      "progression_id": "DMSH011",
       "maintenance_rule": "repeat if comfortable and controlled",
       "min_week": 1,
       "recommended_week_level": 1,
@@ -615,6 +713,20 @@
       "engagement_tags_v3": [
         "mobility",
         "unloaded"
+      ],
+      "clinical_subject_v4": "shoulder_mobility",
+      "clinical_intervention_role_v4": "tissue_mobility",
+      "progression_criteria_v4": [
+        "pain_not_increased",
+        "prescribed_volume_completed_with_control",
+        "no_material_compensation",
+        "completed_in_at_least_2_sessions"
+      ],
+      "stop_criteria_v4": [
+        "sharp_pain",
+        "radiating_symptoms",
+        "dizziness_or_neurological_symptoms",
+        "loss_of_movement_control"
       ]
     },
     {
@@ -644,7 +756,7 @@
       "coaching_cues": "Lengthen the back of the neck and glide the chin straight backward without looking down.",
       "common_errors": "Nodding the head, pressing too hard, or tensing the jaw and shoulders.",
       "regression_id": "",
-      "progression_id": "",
+      "progression_id": "DMCC003",
       "maintenance_rule": "repeat if comfortable and controlled",
       "min_week": 1,
       "recommended_week_level": 1,
@@ -675,7 +787,7 @@
       "tips_en": "Use a gentle effort and keep breathing normally.",
       "tips_fr": "Utilisez un effort léger et respirez normalement.",
       "dosage_type": "recovery_hold",
-      "intervention_role": "recovery",
+      "intervention_role": "activation",
       "default_sets_v3": 1,
       "min_sets_v3": 1,
       "max_sets_v3": 1,
@@ -691,6 +803,20 @@
       "engagement_tags_v3": [
         "recovery",
         "unloaded"
+      ],
+      "clinical_subject_v4": "cervical_control",
+      "clinical_intervention_role_v4": "motor_control",
+      "progression_criteria_v4": [
+        "pain_not_increased",
+        "prescribed_volume_completed_with_control",
+        "no_material_compensation",
+        "completed_in_at_least_2_sessions"
+      ],
+      "stop_criteria_v4": [
+        "sharp_pain",
+        "radiating_symptoms",
+        "dizziness_or_neurological_symptoms",
+        "loss_of_movement_control"
       ]
     },
     {
@@ -719,7 +845,7 @@
       "contraindications": "acute shoulder pain; unstable shoulder; painful overhead range",
       "coaching_cues": "Keep the ribs down and neck long, slide the arms upward while the shoulder blades rotate smoothly, and avoid shrugging.",
       "common_errors": "Arching the lower back, lifting the shoulders toward the ears, or forcing the hands against the wall.",
-      "regression_id": "",
+      "regression_id": "DMSH003",
       "progression_id": "",
       "maintenance_rule": "repeat if comfortable and controlled",
       "min_week": 2,
@@ -751,7 +877,7 @@
       "tips_en": "Reach only as high as you can without losing rib and pelvic alignment.",
       "tips_fr": "Montez seulement jusqu’à la hauteur permettant de conserver l’alignement des côtes et du bassin.",
       "dosage_type": "dynamic_mobility_reps",
-      "intervention_role": "mobility",
+      "intervention_role": "activation",
       "default_sets_v3": 2,
       "min_sets_v3": 1,
       "max_sets_v3": 2,
@@ -767,6 +893,20 @@
       "engagement_tags_v3": [
         "mobility",
         "loaded"
+      ],
+      "clinical_subject_v4": "scapular_control",
+      "clinical_intervention_role_v4": "loaded_overhead_control",
+      "progression_criteria_v4": [
+        "pain_not_increased",
+        "prescribed_volume_completed_with_control",
+        "no_material_compensation",
+        "completed_in_at_least_2_sessions"
+      ],
+      "stop_criteria_v4": [
+        "sharp_pain",
+        "radiating_symptoms",
+        "dizziness_or_neurological_symptoms",
+        "loss_of_movement_control"
       ]
     },
     {
@@ -795,7 +935,7 @@
       "contraindications": "acute shoulder pain; unstable shoulder; painful overhead range",
       "coaching_cues": "Keep the elbows straight and ribs controlled, then reach the shoulder blades forward around the rib cage.",
       "common_errors": "Bending the elbows, shrugging, or collapsing through the chest.",
-      "regression_id": "",
+      "regression_id": "DMSH013",
       "progression_id": "",
       "maintenance_rule": "repeat if comfortable and controlled",
       "min_week": 3,
@@ -827,7 +967,7 @@
       "tips_en": "Move through the shoulder blades without rounding the lower back.",
       "tips_fr": "Bougez depuis les omoplates sans arrondir le bas du dos.",
       "dosage_type": "dynamic_mobility_reps",
-      "intervention_role": "mobility",
+      "intervention_role": "stability",
       "default_sets_v3": 2,
       "min_sets_v3": 1,
       "max_sets_v3": 2,
@@ -843,6 +983,20 @@
       "engagement_tags_v3": [
         "mobility",
         "unloaded"
+      ],
+      "clinical_subject_v4": "scapular_stability",
+      "clinical_intervention_role_v4": "closed_chain_stability",
+      "progression_criteria_v4": [
+        "pain_not_increased",
+        "prescribed_volume_completed_with_control",
+        "no_material_compensation",
+        "completed_in_at_least_2_sessions"
+      ],
+      "stop_criteria_v4": [
+        "sharp_pain",
+        "radiating_symptoms",
+        "dizziness_or_neurological_symptoms",
+        "loss_of_movement_control"
       ]
     },
     {
@@ -871,8 +1025,8 @@
       "contraindications": "acute shoulder pain; unstable shoulder; painful overhead range",
       "coaching_cues": "Keep the ribs down and elbows soft, pull the band apart by moving the shoulder blades without leaning backward.",
       "common_errors": "Shrugging, locking the elbows, or arching the lower back.",
-      "regression_id": "",
-      "progression_id": "",
+      "regression_id": "DMSH002",
+      "progression_id": "DMSH013",
       "maintenance_rule": "repeat if comfortable and controlled",
       "min_week": 2,
       "recommended_week_level": 2,
@@ -903,7 +1057,7 @@
       "tips_en": "Finish with the hands wide and the shoulders relaxed.",
       "tips_fr": "Terminez les mains écartées et les épaules relâchées.",
       "dosage_type": "dynamic_mobility_reps",
-      "intervention_role": "mobility",
+      "intervention_role": "activation",
       "default_sets_v3": 2,
       "min_sets_v3": 1,
       "max_sets_v3": 2,
@@ -919,6 +1073,20 @@
       "engagement_tags_v3": [
         "mobility",
         "loaded"
+      ],
+      "clinical_subject_v4": "scapular_control",
+      "clinical_intervention_role_v4": "posterior_shoulder_strength",
+      "progression_criteria_v4": [
+        "pain_not_increased",
+        "prescribed_volume_completed_with_control",
+        "no_material_compensation",
+        "completed_in_at_least_2_sessions"
+      ],
+      "stop_criteria_v4": [
+        "sharp_pain",
+        "radiating_symptoms",
+        "dizziness_or_neurological_symptoms",
+        "loss_of_movement_control"
       ]
     },
     {
@@ -948,7 +1116,7 @@
       "coaching_cues": "Position the tool on the target muscle, apply tolerable pressure, and roll slowly while keeping the surrounding joints relaxed.",
       "common_errors": "Rolling directly over bone or joints, using excessive pressure, or holding the breath.",
       "regression_id": "",
-      "progression_id": "",
+      "progression_id": "DMTM001",
       "maintenance_rule": "repeat if comfortable and controlled",
       "min_week": 1,
       "recommended_week_level": 1,
@@ -988,13 +1156,27 @@
       "default_hold_seconds_v3": null,
       "max_total_exposure_seconds_v3": 60,
       "load_level_v3": 0,
-      "progression_stage_v3": 1,
+      "progression_stage_v3": 0,
       "repeat_limit_per_week_v3": 1,
       "repeat_limit_program_v3": 3,
       "experience_requirement_v3": "all",
       "engagement_tags_v3": [
         "recovery",
         "unloaded"
+      ],
+      "clinical_subject_v4": "thoracic_mobility",
+      "clinical_intervention_role_v4": "soft_tissue_recovery",
+      "progression_criteria_v4": [
+        "pain_not_increased",
+        "prescribed_volume_completed_with_control",
+        "no_material_compensation",
+        "completed_in_at_least_2_sessions"
+      ],
+      "stop_criteria_v4": [
+        "sharp_pain",
+        "radiating_symptoms",
+        "dizziness_or_neurological_symptoms",
+        "loss_of_movement_control"
       ]
     },
     {
@@ -1064,13 +1246,27 @@
       "default_hold_seconds_v3": null,
       "max_total_exposure_seconds_v3": 60,
       "load_level_v3": 0,
-      "progression_stage_v3": 1,
+      "progression_stage_v3": 0,
       "repeat_limit_per_week_v3": 1,
       "repeat_limit_program_v3": 3,
       "experience_requirement_v3": "all",
       "engagement_tags_v3": [
         "recovery",
         "unloaded"
+      ],
+      "clinical_subject_v4": "thoracic_mobility",
+      "clinical_intervention_role_v4": "soft_tissue_recovery",
+      "progression_criteria_v4": [
+        "pain_not_increased",
+        "prescribed_volume_completed_with_control",
+        "no_material_compensation",
+        "completed_in_at_least_2_sessions"
+      ],
+      "stop_criteria_v4": [
+        "sharp_pain",
+        "radiating_symptoms",
+        "dizziness_or_neurological_symptoms",
+        "loss_of_movement_control"
       ]
     },
     {
@@ -1140,13 +1336,27 @@
       "default_hold_seconds_v3": null,
       "max_total_exposure_seconds_v3": 75,
       "load_level_v3": 0,
-      "progression_stage_v3": 1,
+      "progression_stage_v3": 0,
       "repeat_limit_per_week_v3": 1,
       "repeat_limit_program_v3": 3,
       "experience_requirement_v3": "all",
       "engagement_tags_v3": [
         "recovery",
         "unloaded"
+      ],
+      "clinical_subject_v4": "thoracic_mobility",
+      "clinical_intervention_role_v4": "breathing_recovery",
+      "progression_criteria_v4": [
+        "pain_not_increased",
+        "prescribed_volume_completed_with_control",
+        "no_material_compensation",
+        "completed_in_at_least_2_sessions"
+      ],
+      "stop_criteria_v4": [
+        "sharp_pain",
+        "radiating_symptoms",
+        "dizziness_or_neurological_symptoms",
+        "loss_of_movement_control"
       ]
     },
     {
@@ -1216,13 +1426,27 @@
       "default_hold_seconds_v3": null,
       "max_total_exposure_seconds_v3": 60,
       "load_level_v3": 0,
-      "progression_stage_v3": 1,
+      "progression_stage_v3": 0,
       "repeat_limit_per_week_v3": 1,
       "repeat_limit_program_v3": 3,
       "experience_requirement_v3": "all",
       "engagement_tags_v3": [
         "recovery",
         "unloaded"
+      ],
+      "clinical_subject_v4": "cervical_control",
+      "clinical_intervention_role_v4": "soft_tissue_recovery",
+      "progression_criteria_v4": [
+        "pain_not_increased",
+        "prescribed_volume_completed_with_control",
+        "no_material_compensation",
+        "completed_in_at_least_2_sessions"
+      ],
+      "stop_criteria_v4": [
+        "sharp_pain",
+        "radiating_symptoms",
+        "dizziness_or_neurological_symptoms",
+        "loss_of_movement_control"
       ]
     },
     {
@@ -1292,13 +1516,27 @@
       "default_hold_seconds_v3": null,
       "max_total_exposure_seconds_v3": 60,
       "load_level_v3": 0,
-      "progression_stage_v3": 1,
+      "progression_stage_v3": 0,
       "repeat_limit_per_week_v3": 1,
       "repeat_limit_program_v3": 3,
       "experience_requirement_v3": "all",
       "engagement_tags_v3": [
         "recovery",
         "unloaded"
+      ],
+      "clinical_subject_v4": "shoulder_mobility",
+      "clinical_intervention_role_v4": "soft_tissue_recovery",
+      "progression_criteria_v4": [
+        "pain_not_increased",
+        "prescribed_volume_completed_with_control",
+        "no_material_compensation",
+        "completed_in_at_least_2_sessions"
+      ],
+      "stop_criteria_v4": [
+        "sharp_pain",
+        "radiating_symptoms",
+        "dizziness_or_neurological_symptoms",
+        "loss_of_movement_control"
       ]
     },
     {
@@ -1368,13 +1606,27 @@
       "default_hold_seconds_v3": null,
       "max_total_exposure_seconds_v3": 60,
       "load_level_v3": 0,
-      "progression_stage_v3": 1,
+      "progression_stage_v3": 0,
       "repeat_limit_per_week_v3": 1,
       "repeat_limit_program_v3": 3,
       "experience_requirement_v3": "all",
       "engagement_tags_v3": [
         "recovery",
         "unloaded"
+      ],
+      "clinical_subject_v4": "scapular_control",
+      "clinical_intervention_role_v4": "soft_tissue_recovery",
+      "progression_criteria_v4": [
+        "pain_not_increased",
+        "prescribed_volume_completed_with_control",
+        "no_material_compensation",
+        "completed_in_at_least_2_sessions"
+      ],
+      "stop_criteria_v4": [
+        "sharp_pain",
+        "radiating_symptoms",
+        "dizziness_or_neurological_symptoms",
+        "loss_of_movement_control"
       ]
     },
     {
@@ -1451,6 +1703,20 @@
       "engagement_tags_v3": [
         "mobility",
         "unloaded"
+      ],
+      "clinical_subject_v4": "hip_mobility",
+      "clinical_intervention_role_v4": "rotation_mobility",
+      "progression_criteria_v4": [
+        "pain_not_increased",
+        "prescribed_volume_completed_with_control",
+        "no_material_compensation",
+        "completed_in_at_least_2_sessions"
+      ],
+      "stop_criteria_v4": [
+        "sharp_pain",
+        "radiating_symptoms",
+        "dizziness_or_neurological_symptoms",
+        "loss_of_movement_control"
       ]
     },
     {
@@ -1479,8 +1745,8 @@
       "contraindications": "sharp pain; acute strain; neurological symptoms; acute pain; uncontrolled movement; medical restriction; stop if pain increases",
       "coaching_cues": "Push the hips backward with a long spine, keep the load close, and stand by driving the floor away.",
       "common_errors": "Squatting instead of hinging, rounding the back, or letting the load drift forward.",
-      "regression_id": "",
-      "progression_id": "",
+      "regression_id": "DMHM011",
+      "progression_id": "DMFI006",
       "maintenance_rule": "repeat if comfortable and controlled",
       "min_week": 4,
       "recommended_week_level": 4,
@@ -1511,7 +1777,7 @@
       "tips_en": "Stop the descent when hamstring tension increases or spinal position begins to change.",
       "tips_fr": "Arrêtez la descente lorsque la tension des ischio-jambiers augmente ou que le dos commence à changer de position.",
       "dosage_type": "dynamic_mobility_reps",
-      "intervention_role": "mobility",
+      "intervention_role": "integration",
       "default_sets_v3": 2,
       "min_sets_v3": 1,
       "max_sets_v3": 2,
@@ -1527,6 +1793,20 @@
       "engagement_tags_v3": [
         "mobility",
         "loaded"
+      ],
+      "clinical_subject_v4": "hip_hinge_control",
+      "clinical_intervention_role_v4": "loaded_hinge_integration",
+      "progression_criteria_v4": [
+        "pain_not_increased",
+        "prescribed_volume_completed_with_control",
+        "no_material_compensation",
+        "completed_in_at_least_2_sessions"
+      ],
+      "stop_criteria_v4": [
+        "sharp_pain",
+        "radiating_symptoms",
+        "dizziness_or_neurological_symptoms",
+        "loss_of_movement_control"
       ]
     },
     {
@@ -1556,7 +1836,7 @@
       "coaching_cues": "Press through the feet, keep the ribs down, and lift the pelvis by squeezing the glutes rather than arching the back.",
       "common_errors": "Overextending the lower back, pushing through the toes, or letting the pelvis rotate.",
       "regression_id": "",
-      "progression_id": "",
+      "progression_id": "DMHM005",
       "maintenance_rule": "repeat if comfortable and controlled",
       "min_week": 2,
       "recommended_week_level": 2,
@@ -1587,7 +1867,7 @@
       "tips_en": "Finish with the hips level and a straight line from shoulders to knees.",
       "tips_fr": "Terminez avec le bassin horizontal et une ligne droite des épaules aux genoux.",
       "dosage_type": "dynamic_mobility_reps",
-      "intervention_role": "mobility",
+      "intervention_role": "activation",
       "default_sets_v3": 2,
       "min_sets_v3": 1,
       "max_sets_v3": 2,
@@ -1603,6 +1883,20 @@
       "engagement_tags_v3": [
         "mobility",
         "unloaded"
+      ],
+      "clinical_subject_v4": "hip_extension_control",
+      "clinical_intervention_role_v4": "glute_activation",
+      "progression_criteria_v4": [
+        "pain_not_increased",
+        "prescribed_volume_completed_with_control",
+        "no_material_compensation",
+        "completed_in_at_least_2_sessions"
+      ],
+      "stop_criteria_v4": [
+        "sharp_pain",
+        "radiating_symptoms",
+        "dizziness_or_neurological_symptoms",
+        "loss_of_movement_control"
       ]
     },
     {
@@ -1631,8 +1925,8 @@
       "contraindications": "painful lumbar extension or rotation; acute back pain; acute pain; uncontrolled movement; medical restriction; stop if pain increases",
       "coaching_cues": "Keep the lower ribs heavy, exhale as the limb moves away, and stop before the lower back lifts.",
       "common_errors": "Arching the back, moving too far, or holding the breath.",
-      "regression_id": "",
-      "progression_id": "",
+      "regression_id": "DMCS004",
+      "progression_id": "DMCS007",
       "maintenance_rule": "repeat if comfortable and controlled",
       "min_week": 3,
       "recommended_week_level": 3,
@@ -1679,6 +1973,20 @@
       "engagement_tags_v3": [
         "stability",
         "loaded"
+      ],
+      "clinical_subject_v4": "trunk_core_control",
+      "clinical_intervention_role_v4": "loaded_anti_extension",
+      "progression_criteria_v4": [
+        "pain_not_increased",
+        "prescribed_volume_completed_with_control",
+        "no_material_compensation",
+        "completed_in_at_least_2_sessions"
+      ],
+      "stop_criteria_v4": [
+        "sharp_pain",
+        "radiating_symptoms",
+        "dizziness_or_neurological_symptoms",
+        "loss_of_movement_control"
       ]
     },
     {
@@ -1708,7 +2016,7 @@
       "coaching_cues": "Stack the shoulders and hips, push the floor away, and keep the body in one long line.",
       "common_errors": "Dropping the pelvis, rotating the trunk, or collapsing into the supporting shoulder.",
       "regression_id": "",
-      "progression_id": "",
+      "progression_id": "DMCS005",
       "maintenance_rule": "repeat if comfortable and controlled",
       "min_week": 3,
       "recommended_week_level": 3,
@@ -1755,6 +2063,20 @@
       "engagement_tags_v3": [
         "mobility",
         "unloaded"
+      ],
+      "clinical_subject_v4": "trunk_core_control",
+      "clinical_intervention_role_v4": "lateral_stability",
+      "progression_criteria_v4": [
+        "pain_not_increased",
+        "prescribed_volume_completed_with_control",
+        "no_material_compensation",
+        "completed_in_at_least_2_sessions"
+      ],
+      "stop_criteria_v4": [
+        "sharp_pain",
+        "radiating_symptoms",
+        "dizziness_or_neurological_symptoms",
+        "loss_of_movement_control"
       ]
     },
     {
@@ -1770,7 +2092,7 @@
       "secondary_regions": "",
       "screening_domains_improved": "trunk_core_control",
       "difficulty_1_5": 5,
-      "phase": "3_stabilize",
+      "phase": "4_integrate",
       "equipment": "light_weight",
       "equipment_label_en": "dumbell",
       "equipment_label_fr": "dumbell",
@@ -1783,11 +2105,11 @@
       "contraindications": "painful lumbar extension or rotation; acute back pain; acute pain; uncontrolled movement; medical restriction; stop if pain increases",
       "coaching_cues": "Reach the opposite arm and leg long while keeping the pelvis square and the spine still.",
       "common_errors": "Rotating the pelvis, arching the back, or lifting the limbs too high.",
-      "regression_id": "",
+      "regression_id": "DMCS006",
       "progression_id": "",
       "maintenance_rule": "repeat if comfortable and controlled",
-      "min_week": 3,
-      "recommended_week_level": 3,
+      "min_week": 4,
+      "recommended_week_level": 4,
       "block": "stability",
       "video_url": "https://player.vimeo.com/video/1206801070",
       "vimeo_url": "https://vimeo.com/1206801070?share=copy&fl=sv&fe=ci",
@@ -1824,13 +2146,27 @@
       "default_hold_seconds_v3": null,
       "max_total_exposure_seconds_v3": null,
       "load_level_v3": 5,
-      "progression_stage_v3": 3,
+      "progression_stage_v3": 4,
       "repeat_limit_per_week_v3": 2,
       "repeat_limit_program_v3": 5,
       "experience_requirement_v3": "intermediate",
       "engagement_tags_v3": [
         "stability",
         "loaded"
+      ],
+      "clinical_subject_v4": "trunk_core_control",
+      "clinical_intervention_role_v4": "loaded_cross_body_stability",
+      "progression_criteria_v4": [
+        "pain_not_increased",
+        "prescribed_volume_completed_with_control",
+        "no_material_compensation",
+        "completed_in_at_least_2_sessions"
+      ],
+      "stop_criteria_v4": [
+        "sharp_pain",
+        "radiating_symptoms",
+        "dizziness_or_neurological_symptoms",
+        "loss_of_movement_control"
       ]
     },
     {
@@ -1859,8 +2195,8 @@
       "contraindications": "sharp pain; acute strain; neurological symptoms",
       "coaching_cues": "Press through the feet, keep the ribs down, and lift the pelvis by squeezing the glutes rather than arching the back.",
       "common_errors": "Overextending the lower back, pushing through the toes, or letting the pelvis rotate.",
-      "regression_id": "",
-      "progression_id": "",
+      "regression_id": "DMHM004",
+      "progression_id": "DMHM011",
       "maintenance_rule": "repeat if comfortable and controlled",
       "min_week": 3,
       "recommended_week_level": 3,
@@ -1891,7 +2227,7 @@
       "tips_en": "Finish with the hips level and a straight line from shoulders to knees.",
       "tips_fr": "Terminez avec le bassin horizontal et une ligne droite des épaules aux genoux.",
       "dosage_type": "dynamic_mobility_reps",
-      "intervention_role": "mobility",
+      "intervention_role": "stability",
       "default_sets_v3": 2,
       "min_sets_v3": 1,
       "max_sets_v3": 2,
@@ -1907,6 +2243,20 @@
       "engagement_tags_v3": [
         "mobility",
         "unloaded"
+      ],
+      "clinical_subject_v4": "hip_extension_control",
+      "clinical_intervention_role_v4": "single_leg_pelvic_control",
+      "progression_criteria_v4": [
+        "pain_not_increased",
+        "prescribed_volume_completed_with_control",
+        "no_material_compensation",
+        "completed_in_at_least_2_sessions"
+      ],
+      "stop_criteria_v4": [
+        "sharp_pain",
+        "radiating_symptoms",
+        "dizziness_or_neurological_symptoms",
+        "loss_of_movement_control"
       ]
     },
     {
@@ -1983,6 +2333,20 @@
       "engagement_tags_v3": [
         "integration",
         "loaded"
+      ],
+      "clinical_subject_v4": "squat_pattern",
+      "clinical_intervention_role_v4": "loaded_squat_integration",
+      "progression_criteria_v4": [
+        "pain_not_increased",
+        "prescribed_volume_completed_with_control",
+        "no_material_compensation",
+        "completed_in_at_least_2_sessions"
+      ],
+      "stop_criteria_v4": [
+        "sharp_pain",
+        "radiating_symptoms",
+        "dizziness_or_neurological_symptoms",
+        "loss_of_movement_control"
       ]
     },
     {
@@ -2011,7 +2375,7 @@
       "contraindications": "acute pain; uncontrolled movement; medical restriction; stop if pain increases",
       "coaching_cues": "Keep the front foot grounded, lower the back knee vertically, and keep the pelvis facing forward.",
       "common_errors": "Front knee collapsing inward, pushing only from the back leg, or leaning excessively.",
-      "regression_id": "",
+      "regression_id": "DMFI015",
       "progression_id": "",
       "maintenance_rule": "repeat if comfortable and controlled",
       "min_week": 4,
@@ -2059,6 +2423,20 @@
       "engagement_tags_v3": [
         "integration",
         "loaded"
+      ],
+      "clinical_subject_v4": "lunge_pattern",
+      "clinical_intervention_role_v4": "multi_planar_lunge_integration",
+      "progression_criteria_v4": [
+        "pain_not_increased",
+        "prescribed_volume_completed_with_control",
+        "no_material_compensation",
+        "completed_in_at_least_2_sessions"
+      ],
+      "stop_criteria_v4": [
+        "sharp_pain",
+        "radiating_symptoms",
+        "dizziness_or_neurological_symptoms",
+        "loss_of_movement_control"
       ]
     },
     {
@@ -2087,7 +2465,7 @@
       "contraindications": "acute pain; uncontrolled movement; medical restriction; stop if pain increases; lower-back pain; poor hinge control; no pain-only",
       "coaching_cues": "Keep the whole foot grounded, track the knees over the toes, and maintain the trunk position throughout the repetition.",
       "common_errors": "Heels lifting, knees collapsing inward, or losing trunk control.",
-      "regression_id": "",
+      "regression_id": "DMFI006",
       "progression_id": "",
       "maintenance_rule": "repeat if comfortable and controlled",
       "min_week": 4,
@@ -2135,6 +2513,20 @@
       "engagement_tags_v3": [
         "integration",
         "loaded"
+      ],
+      "clinical_subject_v4": "hinge_squat_integration",
+      "clinical_intervention_role_v4": "power_control",
+      "progression_criteria_v4": [
+        "pain_not_increased",
+        "prescribed_volume_completed_with_control",
+        "no_material_compensation",
+        "completed_in_at_least_2_sessions"
+      ],
+      "stop_criteria_v4": [
+        "sharp_pain",
+        "radiating_symptoms",
+        "dizziness_or_neurological_symptoms",
+        "loss_of_movement_control"
       ]
     },
     {
@@ -2164,7 +2556,7 @@
       "coaching_cues": "Keep the whole foot grounded, track the knees over the toes, and maintain the trunk position throughout the repetition.",
       "common_errors": "Heels lifting, knees collapsing inward, or losing trunk control.",
       "regression_id": "",
-      "progression_id": "",
+      "progression_id": "DMFI015",
       "maintenance_rule": "repeat if comfortable and controlled",
       "min_week": 2,
       "recommended_week_level": 2,
@@ -2211,6 +2603,20 @@
       "engagement_tags_v3": [
         "integration",
         "unloaded"
+      ],
+      "clinical_subject_v4": "squat_pattern",
+      "clinical_intervention_role_v4": "single_leg_squat_control",
+      "progression_criteria_v4": [
+        "pain_not_increased",
+        "prescribed_volume_completed_with_control",
+        "no_material_compensation",
+        "completed_in_at_least_2_sessions"
+      ],
+      "stop_criteria_v4": [
+        "sharp_pain",
+        "radiating_symptoms",
+        "dizziness_or_neurological_symptoms",
+        "loss_of_movement_control"
       ]
     },
     {
@@ -2239,7 +2645,7 @@
       "contraindications": "acute pain; uncontrolled movement; medical restriction; stop if pain increases",
       "coaching_cues": "Push the hips backward with a long spine, keep the load close, and stand by driving the floor away.",
       "common_errors": "Squatting instead of hinging, rounding the back, or letting the load drift forward.",
-      "regression_id": "",
+      "regression_id": "DMFI015",
       "progression_id": "",
       "maintenance_rule": "repeat if comfortable and controlled",
       "min_week": 4,
@@ -2287,6 +2693,20 @@
       "engagement_tags_v3": [
         "integration",
         "loaded"
+      ],
+      "clinical_subject_v4": "single_leg_hinge",
+      "clinical_intervention_role_v4": "loaded_single_leg_integration",
+      "progression_criteria_v4": [
+        "pain_not_increased",
+        "prescribed_volume_completed_with_control",
+        "no_material_compensation",
+        "completed_in_at_least_2_sessions"
+      ],
+      "stop_criteria_v4": [
+        "sharp_pain",
+        "radiating_symptoms",
+        "dizziness_or_neurological_symptoms",
+        "loss_of_movement_control"
       ]
     },
     {
@@ -2315,8 +2735,8 @@
       "contraindications": "acute pain; uncontrolled movement; medical restriction; stop if pain increases",
       "coaching_cues": "Push the hips backward with a long spine, keep the load close, and stand by driving the floor away.",
       "common_errors": "Squatting instead of hinging, rounding the back, or letting the load drift forward.",
-      "regression_id": "",
-      "progression_id": "",
+      "regression_id": "DMHM003",
+      "progression_id": "DMFI003",
       "maintenance_rule": "repeat if comfortable and controlled",
       "min_week": 4,
       "recommended_week_level": 4,
@@ -2363,6 +2783,20 @@
       "engagement_tags_v3": [
         "integration",
         "loaded"
+      ],
+      "clinical_subject_v4": "hinge_pattern",
+      "clinical_intervention_role_v4": "loaded_hinge_pull_integration",
+      "progression_criteria_v4": [
+        "pain_not_increased",
+        "prescribed_volume_completed_with_control",
+        "no_material_compensation",
+        "completed_in_at_least_2_sessions"
+      ],
+      "stop_criteria_v4": [
+        "sharp_pain",
+        "radiating_symptoms",
+        "dizziness_or_neurological_symptoms",
+        "loss_of_movement_control"
       ]
     },
     {
@@ -2391,7 +2825,7 @@
       "contraindications": "acute pain; uncontrolled movement; medical restriction; stop if pain increases",
       "coaching_cues": "Keep the ribs down and move the load smoothly around the head while the neck stays relaxed.",
       "common_errors": "Arching the back, moving the head around the weight, or using a load that is too heavy.",
-      "regression_id": "",
+      "regression_id": "DMFI010",
       "progression_id": "",
       "maintenance_rule": "repeat if comfortable and controlled",
       "min_week": 4,
@@ -2439,6 +2873,20 @@
       "engagement_tags_v3": [
         "integration",
         "loaded"
+      ],
+      "clinical_subject_v4": "shoulder_trunk_integration",
+      "clinical_intervention_role_v4": "loaded_overhead_integration",
+      "progression_criteria_v4": [
+        "pain_not_increased",
+        "prescribed_volume_completed_with_control",
+        "no_material_compensation",
+        "completed_in_at_least_2_sessions"
+      ],
+      "stop_criteria_v4": [
+        "sharp_pain",
+        "radiating_symptoms",
+        "dizziness_or_neurological_symptoms",
+        "loss_of_movement_control"
       ]
     },
     {
@@ -2453,8 +2901,8 @@
       "primary_region_fr": "tronc et gainage",
       "secondary_regions": "",
       "screening_domains_improved": "trunk_core_control",
-      "difficulty_1_5": 3,
-      "phase": "3_stabilize",
+      "difficulty_1_5": 2,
+      "phase": "2_control",
       "equipment": "light_weight",
       "equipment_label_en": "Kettlebell",
       "equipment_label_fr": "Kettlebell",
@@ -2467,11 +2915,11 @@
       "contraindications": "painful lumbar extension or rotation; acute back pain; acute pain; uncontrolled movement; medical restriction; stop if pain increases",
       "coaching_cues": "Keep the lower ribs heavy, exhale as the limb moves away, and stop before the lower back lifts.",
       "common_errors": "Arching the back, moving too far, or holding the breath.",
-      "regression_id": "",
-      "progression_id": "",
+      "regression_id": "DMCS009",
+      "progression_id": "DMCS001",
       "maintenance_rule": "repeat if comfortable and controlled",
-      "min_week": 3,
-      "recommended_week_level": 3,
+      "min_week": 2,
+      "recommended_week_level": 2,
       "block": "stability",
       "video_url": "https://player.vimeo.com/video/1206948291",
       "vimeo_url": "https://vimeo.com/1206948291?share=copy&fl=sv&fe=ci",
@@ -2508,13 +2956,27 @@
       "default_hold_seconds_v3": null,
       "max_total_exposure_seconds_v3": null,
       "load_level_v3": 5,
-      "progression_stage_v3": 3,
+      "progression_stage_v3": 2,
       "repeat_limit_per_week_v3": 2,
       "repeat_limit_program_v3": 5,
       "experience_requirement_v3": "intermediate",
       "engagement_tags_v3": [
         "stability",
         "loaded"
+      ],
+      "clinical_subject_v4": "trunk_core_control",
+      "clinical_intervention_role_v4": "anti_extension_control",
+      "progression_criteria_v4": [
+        "pain_not_increased",
+        "prescribed_volume_completed_with_control",
+        "no_material_compensation",
+        "completed_in_at_least_2_sessions"
+      ],
+      "stop_criteria_v4": [
+        "sharp_pain",
+        "radiating_symptoms",
+        "dizziness_or_neurological_symptoms",
+        "loss_of_movement_control"
       ]
     },
     {
@@ -2544,7 +3006,7 @@
       "coaching_cues": "Make the largest pain-free arm circle possible while keeping the ribs, trunk, and neck still.",
       "common_errors": "Rotating the torso, shrugging, bending the elbow, or moving quickly through restricted range.",
       "regression_id": "",
-      "progression_id": "",
+      "progression_id": "DMSH001",
       "maintenance_rule": "repeat if comfortable and controlled",
       "min_week": 2,
       "recommended_week_level": 2,
@@ -2575,7 +3037,7 @@
       "tips_en": "Move slowly enough to identify and control the tightest part of the circle.",
       "tips_fr": "Bougez assez lentement pour contrôler la partie la plus limitée du cercle.",
       "dosage_type": "dynamic_mobility_reps",
-      "intervention_role": "mobility",
+      "intervention_role": "activation",
       "default_sets_v3": 2,
       "min_sets_v3": 1,
       "max_sets_v3": 2,
@@ -2591,6 +3053,20 @@
       "engagement_tags_v3": [
         "mobility",
         "unloaded"
+      ],
+      "clinical_subject_v4": "shoulder_mobility",
+      "clinical_intervention_role_v4": "active_mobility",
+      "progression_criteria_v4": [
+        "pain_not_increased",
+        "prescribed_volume_completed_with_control",
+        "no_material_compensation",
+        "completed_in_at_least_2_sessions"
+      ],
+      "stop_criteria_v4": [
+        "sharp_pain",
+        "radiating_symptoms",
+        "dizziness_or_neurological_symptoms",
+        "loss_of_movement_control"
       ]
     },
     {
@@ -2606,7 +3082,7 @@
       "secondary_regions": "",
       "screening_domains_improved": "trunk_core_control",
       "difficulty_1_5": 5,
-      "phase": "3_stabilize",
+      "phase": "4_integrate",
       "equipment": "light_weight",
       "equipment_label_en": "dumbell",
       "equipment_label_fr": "dumbell",
@@ -2619,11 +3095,11 @@
       "contraindications": "painful lumbar extension or rotation; acute back pain; acute pain; uncontrolled movement; medical restriction; stop if pain increases",
       "coaching_cues": "Stack the shoulders and hips, push the floor away, and keep the body in one long line.",
       "common_errors": "Dropping the pelvis, rotating the trunk, or collapsing into the supporting shoulder.",
-      "regression_id": "",
+      "regression_id": "DMCS002",
       "progression_id": "",
       "maintenance_rule": "repeat if comfortable and controlled",
-      "min_week": 3,
-      "recommended_week_level": 3,
+      "min_week": 4,
+      "recommended_week_level": 4,
       "block": "stability",
       "video_url": "https://player.vimeo.com/video/1206948268",
       "vimeo_url": "https://vimeo.com/1206948268?share=copy&fl=sv&fe=ci",
@@ -2660,13 +3136,27 @@
       "default_hold_seconds_v3": null,
       "max_total_exposure_seconds_v3": null,
       "load_level_v3": 5,
-      "progression_stage_v3": 3,
+      "progression_stage_v3": 4,
       "repeat_limit_per_week_v3": 2,
       "repeat_limit_program_v3": 5,
       "experience_requirement_v3": "intermediate",
       "engagement_tags_v3": [
         "stability",
         "loaded"
+      ],
+      "clinical_subject_v4": "trunk_core_control",
+      "clinical_intervention_role_v4": "loaded_lateral_stability",
+      "progression_criteria_v4": [
+        "pain_not_increased",
+        "prescribed_volume_completed_with_control",
+        "no_material_compensation",
+        "completed_in_at_least_2_sessions"
+      ],
+      "stop_criteria_v4": [
+        "sharp_pain",
+        "radiating_symptoms",
+        "dizziness_or_neurological_symptoms",
+        "loss_of_movement_control"
       ]
     },
     {
@@ -2681,8 +3171,8 @@
       "primary_region_fr": "tronc et gainage",
       "secondary_regions": "",
       "screening_domains_improved": "trunk_core_control",
-      "difficulty_1_5": 3,
-      "phase": "3_stabilize",
+      "difficulty_1_5": 2,
+      "phase": "2_control",
       "equipment": "none",
       "equipment_label_en": "Body weight",
       "equipment_label_fr": "Poids du corps",
@@ -2696,10 +3186,10 @@
       "coaching_cues": "Reach the opposite arm and leg long while keeping the pelvis square and the spine still.",
       "common_errors": "Rotating the pelvis, arching the back, or lifting the limbs too high.",
       "regression_id": "",
-      "progression_id": "",
+      "progression_id": "DMCS003",
       "maintenance_rule": "repeat if comfortable and controlled",
-      "min_week": 3,
-      "recommended_week_level": 3,
+      "min_week": 2,
+      "recommended_week_level": 2,
       "block": "stability",
       "video_url": "https://player.vimeo.com/video/1206948245",
       "vimeo_url": "https://vimeo.com/1206948245?share=copy&fl=sv&fe=ci",
@@ -2736,13 +3226,27 @@
       "default_hold_seconds_v3": null,
       "max_total_exposure_seconds_v3": null,
       "load_level_v3": 0,
-      "progression_stage_v3": 3,
+      "progression_stage_v3": 2,
       "repeat_limit_per_week_v3": 2,
       "repeat_limit_program_v3": 5,
       "experience_requirement_v3": "all",
       "engagement_tags_v3": [
         "stability",
         "unloaded"
+      ],
+      "clinical_subject_v4": "trunk_core_control",
+      "clinical_intervention_role_v4": "cross_body_control",
+      "progression_criteria_v4": [
+        "pain_not_increased",
+        "prescribed_volume_completed_with_control",
+        "no_material_compensation",
+        "completed_in_at_least_2_sessions"
+      ],
+      "stop_criteria_v4": [
+        "sharp_pain",
+        "radiating_symptoms",
+        "dizziness_or_neurological_symptoms",
+        "loss_of_movement_control"
       ]
     },
     {
@@ -2758,7 +3262,7 @@
       "secondary_regions": "",
       "screening_domains_improved": "trunk_core_control",
       "difficulty_1_5": 5,
-      "phase": "3_stabilize",
+      "phase": "4_integrate",
       "equipment": "light_weight",
       "equipment_label_en": "dumbell",
       "equipment_label_fr": "dumbell",
@@ -2771,11 +3275,11 @@
       "contraindications": "painful lumbar extension or rotation; acute back pain; acute pain; uncontrolled movement; medical restriction; stop if pain increases",
       "coaching_cues": "Keep the trunk and core aligned, move through a comfortable range, and control the return phase.",
       "common_errors": "Using momentum, losing alignment through the trunk and core, or forcing the final range.",
-      "regression_id": "",
+      "regression_id": "DMCS001",
       "progression_id": "",
       "maintenance_rule": "repeat if comfortable and controlled",
-      "min_week": 3,
-      "recommended_week_level": 3,
+      "min_week": 4,
+      "recommended_week_level": 4,
       "block": "stability",
       "video_url": "https://player.vimeo.com/video/1206948201",
       "vimeo_url": "https://vimeo.com/1206948201?share=copy&fl=sv&fe=ci",
@@ -2812,13 +3316,27 @@
       "default_hold_seconds_v3": null,
       "max_total_exposure_seconds_v3": null,
       "load_level_v3": 5,
-      "progression_stage_v3": 3,
+      "progression_stage_v3": 4,
       "repeat_limit_per_week_v3": 2,
       "repeat_limit_program_v3": 5,
       "experience_requirement_v3": "intermediate",
       "engagement_tags_v3": [
         "stability",
         "loaded"
+      ],
+      "clinical_subject_v4": "trunk_core_control",
+      "clinical_intervention_role_v4": "loaded_anti_rotation",
+      "progression_criteria_v4": [
+        "pain_not_increased",
+        "prescribed_volume_completed_with_control",
+        "no_material_compensation",
+        "completed_in_at_least_2_sessions"
+      ],
+      "stop_criteria_v4": [
+        "sharp_pain",
+        "radiating_symptoms",
+        "dizziness_or_neurological_symptoms",
+        "loss_of_movement_control"
       ]
     },
     {
@@ -2895,6 +3413,20 @@
       "engagement_tags_v3": [
         "stability",
         "loaded"
+      ],
+      "clinical_subject_v4": "trunk_core_control",
+      "clinical_intervention_role_v4": "rotation_integration",
+      "progression_criteria_v4": [
+        "pain_not_increased",
+        "prescribed_volume_completed_with_control",
+        "no_material_compensation",
+        "completed_in_at_least_2_sessions"
+      ],
+      "stop_criteria_v4": [
+        "sharp_pain",
+        "radiating_symptoms",
+        "dizziness_or_neurological_symptoms",
+        "loss_of_movement_control"
       ]
     },
     {
@@ -2923,8 +3455,8 @@
       "contraindications": "acute pain; uncontrolled movement; medical restriction; stop if pain increases",
       "coaching_cues": "Keep the full body movement integration aligned, move through a comfortable range, and control the return phase.",
       "common_errors": "Using momentum, losing alignment through the full body movement integration, or forcing the final range.",
-      "regression_id": "",
-      "progression_id": "",
+      "regression_id": "DMFI013",
+      "progression_id": "DMFI012",
       "maintenance_rule": "repeat if comfortable and controlled",
       "min_week": 4,
       "recommended_week_level": 4,
@@ -2971,6 +3503,20 @@
       "engagement_tags_v3": [
         "integration",
         "loaded"
+      ],
+      "clinical_subject_v4": "posterior_shoulder_strength",
+      "clinical_intervention_role_v4": "loaded_hinge_upper_body",
+      "progression_criteria_v4": [
+        "pain_not_increased",
+        "prescribed_volume_completed_with_control",
+        "no_material_compensation",
+        "completed_in_at_least_2_sessions"
+      ],
+      "stop_criteria_v4": [
+        "sharp_pain",
+        "radiating_symptoms",
+        "dizziness_or_neurological_symptoms",
+        "loss_of_movement_control"
       ]
     },
     {
@@ -2999,7 +3545,7 @@
       "contraindications": "acute pain; uncontrolled movement; medical restriction; stop if pain increases",
       "coaching_cues": "Keep the full body movement integration aligned, move through a comfortable range, and control the return phase.",
       "common_errors": "Using momentum, losing alignment through the full body movement integration, or forcing the final range.",
-      "regression_id": "",
+      "regression_id": "DMFI011",
       "progression_id": "",
       "maintenance_rule": "repeat if comfortable and controlled",
       "min_week": 4,
@@ -3047,6 +3593,20 @@
       "engagement_tags_v3": [
         "integration",
         "loaded"
+      ],
+      "clinical_subject_v4": "overhead_trunk_integration",
+      "clinical_intervention_role_v4": "loaded_kneeling_integration",
+      "progression_criteria_v4": [
+        "pain_not_increased",
+        "prescribed_volume_completed_with_control",
+        "no_material_compensation",
+        "completed_in_at_least_2_sessions"
+      ],
+      "stop_criteria_v4": [
+        "sharp_pain",
+        "radiating_symptoms",
+        "dizziness_or_neurological_symptoms",
+        "loss_of_movement_control"
       ]
     },
     {
@@ -3076,7 +3636,7 @@
       "coaching_cues": "Keep the full body movement integration aligned, move through a comfortable range, and control the return phase.",
       "common_errors": "Using momentum, losing alignment through the full body movement integration, or forcing the final range.",
       "regression_id": "",
-      "progression_id": "",
+      "progression_id": "DMFI007",
       "maintenance_rule": "repeat if comfortable and controlled",
       "min_week": 4,
       "recommended_week_level": 4,
@@ -3123,6 +3683,20 @@
       "engagement_tags_v3": [
         "integration",
         "loaded"
+      ],
+      "clinical_subject_v4": "shoulder_trunk_integration",
+      "clinical_intervention_role_v4": "loaded_press_stability",
+      "progression_criteria_v4": [
+        "pain_not_increased",
+        "prescribed_volume_completed_with_control",
+        "no_material_compensation",
+        "completed_in_at_least_2_sessions"
+      ],
+      "stop_criteria_v4": [
+        "sharp_pain",
+        "radiating_symptoms",
+        "dizziness_or_neurological_symptoms",
+        "loss_of_movement_control"
       ]
     },
     {
@@ -3152,7 +3726,7 @@
       "coaching_cues": "Keep the full body movement integration aligned, move through a comfortable range, and control the return phase.",
       "common_errors": "Using momentum, losing alignment through the full body movement integration, or forcing the final range.",
       "regression_id": "",
-      "progression_id": "",
+      "progression_id": "DMFI009",
       "maintenance_rule": "repeat if comfortable and controlled",
       "min_week": 4,
       "recommended_week_level": 4,
@@ -3199,6 +3773,20 @@
       "engagement_tags_v3": [
         "integration",
         "loaded"
+      ],
+      "clinical_subject_v4": "overhead_trunk_integration",
+      "clinical_intervention_role_v4": "kneeling_press_control",
+      "progression_criteria_v4": [
+        "pain_not_increased",
+        "prescribed_volume_completed_with_control",
+        "no_material_compensation",
+        "completed_in_at_least_2_sessions"
+      ],
+      "stop_criteria_v4": [
+        "sharp_pain",
+        "radiating_symptoms",
+        "dizziness_or_neurological_symptoms",
+        "loss_of_movement_control"
       ]
     },
     {
@@ -3227,7 +3815,7 @@
       "contraindications": "acute pain; uncontrolled movement; medical restriction; stop if pain increases",
       "coaching_cues": "Keep the full body movement integration aligned, move through a comfortable range, and control the return phase.",
       "common_errors": "Using momentum, losing alignment through the full body movement integration, or forcing the final range.",
-      "regression_id": "",
+      "regression_id": "DMFI008",
       "progression_id": "",
       "maintenance_rule": "repeat if comfortable and controlled",
       "min_week": 4,
@@ -3275,6 +3863,20 @@
       "engagement_tags_v3": [
         "integration",
         "loaded"
+      ],
+      "clinical_subject_v4": "posterior_chain_integration",
+      "clinical_intervention_role_v4": "loaded_row_hinge",
+      "progression_criteria_v4": [
+        "pain_not_increased",
+        "prescribed_volume_completed_with_control",
+        "no_material_compensation",
+        "completed_in_at_least_2_sessions"
+      ],
+      "stop_criteria_v4": [
+        "sharp_pain",
+        "radiating_symptoms",
+        "dizziness_or_neurological_symptoms",
+        "loss_of_movement_control"
       ]
     },
     {
@@ -3304,7 +3906,7 @@
       "coaching_cues": "Keep the full body movement integration aligned, move through a comfortable range, and control the return phase.",
       "common_errors": "Using momentum, losing alignment through the full body movement integration, or forcing the final range.",
       "regression_id": "",
-      "progression_id": "",
+      "progression_id": "DMFI008",
       "maintenance_rule": "repeat if comfortable and controlled",
       "min_week": 4,
       "recommended_week_level": 4,
@@ -3351,6 +3953,20 @@
       "engagement_tags_v3": [
         "integration",
         "loaded"
+      ],
+      "clinical_subject_v4": "posterior_chain_integration",
+      "clinical_intervention_role_v4": "trunk_extension_control",
+      "progression_criteria_v4": [
+        "pain_not_increased",
+        "prescribed_volume_completed_with_control",
+        "no_material_compensation",
+        "completed_in_at_least_2_sessions"
+      ],
+      "stop_criteria_v4": [
+        "sharp_pain",
+        "radiating_symptoms",
+        "dizziness_or_neurological_symptoms",
+        "loss_of_movement_control"
       ]
     },
     {
@@ -3427,6 +4043,20 @@
       "engagement_tags_v3": [
         "mobility",
         "unloaded"
+      ],
+      "clinical_subject_v4": "thoracic_mobility",
+      "clinical_intervention_role_v4": "segmental_mobility",
+      "progression_criteria_v4": [
+        "pain_not_increased",
+        "prescribed_volume_completed_with_control",
+        "no_material_compensation",
+        "completed_in_at_least_2_sessions"
+      ],
+      "stop_criteria_v4": [
+        "sharp_pain",
+        "radiating_symptoms",
+        "dizziness_or_neurological_symptoms",
+        "loss_of_movement_control"
       ]
     },
     {
@@ -3455,8 +4085,8 @@
       "contraindications": "stop if pain increases or symptoms radiate",
       "coaching_cues": "Keep the knees and pelvis stacked, rotate through the upper back, and let the shoulder blade glide around the rib cage.",
       "common_errors": "Rolling the pelvis backward, forcing the shoulder to the floor, or holding the breath.",
-      "regression_id": "",
-      "progression_id": "",
+      "regression_id": "DMTM003",
+      "progression_id": "DMTM010",
       "maintenance_rule": "repeat if comfortable and controlled",
       "min_week": 1,
       "recommended_week_level": 1,
@@ -3503,6 +4133,20 @@
       "engagement_tags_v3": [
         "mobility",
         "unloaded"
+      ],
+      "clinical_subject_v4": "thoracic_mobility",
+      "clinical_intervention_role_v4": "rotation_mobility",
+      "progression_criteria_v4": [
+        "pain_not_increased",
+        "prescribed_volume_completed_with_control",
+        "no_material_compensation",
+        "completed_in_at_least_2_sessions"
+      ],
+      "stop_criteria_v4": [
+        "sharp_pain",
+        "radiating_symptoms",
+        "dizziness_or_neurological_symptoms",
+        "loss_of_movement_control"
       ]
     },
     {
@@ -3532,7 +4176,7 @@
       "coaching_cues": "Keep the knee straight but not locked, hinge from the hip, and maintain a long spine.",
       "common_errors": "Rounding aggressively, bouncing, or forcing the range through the knee or lower back.",
       "regression_id": "",
-      "progression_id": "",
+      "progression_id": "DMHS002",
       "maintenance_rule": "repeat if comfortable and controlled",
       "min_week": 1,
       "recommended_week_level": 1,
@@ -3579,6 +4223,20 @@
       "engagement_tags_v3": [
         "mobility",
         "unloaded"
+      ],
+      "clinical_subject_v4": "hamstring_aslr",
+      "clinical_intervention_role_v4": "passive_mobility",
+      "progression_criteria_v4": [
+        "pain_not_increased",
+        "prescribed_volume_completed_with_control",
+        "no_material_compensation",
+        "completed_in_at_least_2_sessions"
+      ],
+      "stop_criteria_v4": [
+        "sharp_pain",
+        "radiating_symptoms",
+        "dizziness_or_neurological_symptoms",
+        "loss_of_movement_control"
       ]
     },
     {
@@ -3608,7 +4266,7 @@
       "coaching_cues": "Keep the pelvis level and gently move into the stretch without arching or twisting the lower back.",
       "common_errors": "Forcing the joint, rotating the pelvis, or using lumbar extension to create range.",
       "regression_id": "",
-      "progression_id": "",
+      "progression_id": "DMHM008",
       "maintenance_rule": "repeat if comfortable and controlled",
       "min_week": 1,
       "recommended_week_level": 1,
@@ -3655,6 +4313,20 @@
       "engagement_tags_v3": [
         "mobility",
         "unloaded"
+      ],
+      "clinical_subject_v4": "hip_mobility",
+      "clinical_intervention_role_v4": "hip_flexor_mobility",
+      "progression_criteria_v4": [
+        "pain_not_increased",
+        "prescribed_volume_completed_with_control",
+        "no_material_compensation",
+        "completed_in_at_least_2_sessions"
+      ],
+      "stop_criteria_v4": [
+        "sharp_pain",
+        "radiating_symptoms",
+        "dizziness_or_neurological_symptoms",
+        "loss_of_movement_control"
       ]
     },
     {
@@ -3684,7 +4356,7 @@
       "coaching_cues": "Keep the pelvis level and gently move into the stretch without arching or twisting the lower back.",
       "common_errors": "Forcing the joint, rotating the pelvis, or using lumbar extension to create range.",
       "regression_id": "",
-      "progression_id": "",
+      "progression_id": "DMHM010",
       "maintenance_rule": "repeat if comfortable and controlled",
       "min_week": 1,
       "recommended_week_level": 1,
@@ -3731,6 +4403,20 @@
       "engagement_tags_v3": [
         "mobility",
         "unloaded"
+      ],
+      "clinical_subject_v4": "hip_mobility",
+      "clinical_intervention_role_v4": "posterior_hip_mobility",
+      "progression_criteria_v4": [
+        "pain_not_increased",
+        "prescribed_volume_completed_with_control",
+        "no_material_compensation",
+        "completed_in_at_least_2_sessions"
+      ],
+      "stop_criteria_v4": [
+        "sharp_pain",
+        "radiating_symptoms",
+        "dizziness_or_neurological_symptoms",
+        "loss_of_movement_control"
       ]
     },
     {
@@ -3800,13 +4486,27 @@
       "default_hold_seconds_v3": null,
       "max_total_exposure_seconds_v3": 75,
       "load_level_v3": 0,
-      "progression_stage_v3": 1,
+      "progression_stage_v3": 0,
       "repeat_limit_per_week_v3": 1,
       "repeat_limit_program_v3": 3,
       "experience_requirement_v3": "all",
       "engagement_tags_v3": [
         "recovery",
         "unloaded"
+      ],
+      "clinical_subject_v4": "recovery_breathing",
+      "clinical_intervention_role_v4": "breathing_mobility_reset",
+      "progression_criteria_v4": [
+        "pain_not_increased",
+        "prescribed_volume_completed_with_control",
+        "no_material_compensation",
+        "completed_in_at_least_2_sessions"
+      ],
+      "stop_criteria_v4": [
+        "sharp_pain",
+        "radiating_symptoms",
+        "dizziness_or_neurological_symptoms",
+        "loss_of_movement_control"
       ]
     },
     {
@@ -3835,8 +4535,8 @@
       "contraindications": "acute shoulder pain; unstable shoulder; painful overhead range",
       "coaching_cues": "Set the shoulder slightly below ear level, keep it relaxed, and rotate the chest away without twisting the pelvis.",
       "common_errors": "Shrugging the shoulder, forcing the arm behind the body, or rotating through the lower back.",
-      "regression_id": "",
-      "progression_id": "",
+      "regression_id": "DMSH004",
+      "progression_id": "DMSH012",
       "maintenance_rule": "repeat if comfortable and controlled",
       "min_week": 1,
       "recommended_week_level": 1,
@@ -3883,6 +4583,20 @@
       "engagement_tags_v3": [
         "mobility",
         "unloaded"
+      ],
+      "clinical_subject_v4": "shoulder_mobility",
+      "clinical_intervention_role_v4": "tissue_mobility",
+      "progression_criteria_v4": [
+        "pain_not_increased",
+        "prescribed_volume_completed_with_control",
+        "no_material_compensation",
+        "completed_in_at_least_2_sessions"
+      ],
+      "stop_criteria_v4": [
+        "sharp_pain",
+        "radiating_symptoms",
+        "dizziness_or_neurological_symptoms",
+        "loss_of_movement_control"
       ]
     },
     {
@@ -3912,7 +4626,7 @@
       "coaching_cues": "Settle into a comfortable stretch, keep the breath slow, and avoid forcing the neck, shoulder, or lower back.",
       "common_errors": "Pushing into pain, holding the breath, or twisting from a sensitive joint.",
       "regression_id": "",
-      "progression_id": "",
+      "progression_id": "DMTM002",
       "maintenance_rule": "repeat if comfortable and controlled",
       "min_week": 1,
       "recommended_week_level": 1,
@@ -3959,6 +4673,20 @@
       "engagement_tags_v3": [
         "mobility",
         "unloaded"
+      ],
+      "clinical_subject_v4": "thoracic_mobility",
+      "clinical_intervention_role_v4": "rotation_mobility",
+      "progression_criteria_v4": [
+        "pain_not_increased",
+        "prescribed_volume_completed_with_control",
+        "no_material_compensation",
+        "completed_in_at_least_2_sessions"
+      ],
+      "stop_criteria_v4": [
+        "sharp_pain",
+        "radiating_symptoms",
+        "dizziness_or_neurological_symptoms",
+        "loss_of_movement_control"
       ]
     },
     {
@@ -3987,8 +4715,8 @@
       "contraindications": "sharp pain; acute strain; neurological symptoms",
       "coaching_cues": "Keep the pelvis level and gently move into the stretch without arching or twisting the lower back.",
       "common_errors": "Forcing the joint, rotating the pelvis, or using lumbar extension to create range.",
-      "regression_id": "",
-      "progression_id": "",
+      "regression_id": "DMHM006",
+      "progression_id": "DMHM009",
       "maintenance_rule": "repeat if comfortable and controlled",
       "min_week": 1,
       "recommended_week_level": 1,
@@ -4035,6 +4763,20 @@
       "engagement_tags_v3": [
         "mobility",
         "unloaded"
+      ],
+      "clinical_subject_v4": "hip_mobility",
+      "clinical_intervention_role_v4": "dynamic_hip_flexor_mobility",
+      "progression_criteria_v4": [
+        "pain_not_increased",
+        "prescribed_volume_completed_with_control",
+        "no_material_compensation",
+        "completed_in_at_least_2_sessions"
+      ],
+      "stop_criteria_v4": [
+        "sharp_pain",
+        "radiating_symptoms",
+        "dizziness_or_neurological_symptoms",
+        "loss_of_movement_control"
       ]
     },
     {
@@ -4063,8 +4805,8 @@
       "contraindications": "sharp pain; acute strain; neurological symptoms",
       "coaching_cues": "Keep the knee straight but not locked, hinge from the hip, and maintain a long spine.",
       "common_errors": "Rounding aggressively, bouncing, or forcing the range through the knee or lower back.",
-      "regression_id": "",
-      "progression_id": "",
+      "regression_id": "DMHS001",
+      "progression_id": "DMHS003",
       "maintenance_rule": "repeat if comfortable and controlled",
       "min_week": 1,
       "recommended_week_level": 1,
@@ -4111,6 +4853,20 @@
       "engagement_tags_v3": [
         "mobility",
         "unloaded"
+      ],
+      "clinical_subject_v4": "hamstring_aslr",
+      "clinical_intervention_role_v4": "dynamic_mobility",
+      "progression_criteria_v4": [
+        "pain_not_increased",
+        "prescribed_volume_completed_with_control",
+        "no_material_compensation",
+        "completed_in_at_least_2_sessions"
+      ],
+      "stop_criteria_v4": [
+        "sharp_pain",
+        "radiating_symptoms",
+        "dizziness_or_neurological_symptoms",
+        "loss_of_movement_control"
       ]
     },
     {
@@ -4139,7 +4895,7 @@
       "contraindications": "sharp pain; acute strain; neurological symptoms",
       "coaching_cues": "Keep the knee straight but not locked, hinge from the hip, and maintain a long spine.",
       "common_errors": "Rounding aggressively, bouncing, or forcing the range through the knee or lower back.",
-      "regression_id": "",
+      "regression_id": "DMHS002",
       "progression_id": "",
       "maintenance_rule": "repeat if comfortable and controlled",
       "min_week": 2,
@@ -4171,7 +4927,7 @@
       "tips_en": "Stop at a moderate hamstring stretch without nerve-like pulling.",
       "tips_fr": "Arrêtez-vous sur un étirement modéré sans sensation nerveuse ou irradiante.",
       "dosage_type": "dynamic_mobility_reps",
-      "intervention_role": "mobility",
+      "intervention_role": "activation",
       "default_sets_v3": 2,
       "min_sets_v3": 1,
       "max_sets_v3": 2,
@@ -4187,6 +4943,20 @@
       "engagement_tags_v3": [
         "mobility",
         "loaded"
+      ],
+      "clinical_subject_v4": "hamstring_aslr",
+      "clinical_intervention_role_v4": "active_straight_leg_control",
+      "progression_criteria_v4": [
+        "pain_not_increased",
+        "prescribed_volume_completed_with_control",
+        "no_material_compensation",
+        "completed_in_at_least_2_sessions"
+      ],
+      "stop_criteria_v4": [
+        "sharp_pain",
+        "radiating_symptoms",
+        "dizziness_or_neurological_symptoms",
+        "loss_of_movement_control"
       ]
     },
     {
@@ -4215,7 +4985,7 @@
       "contraindications": "sharp pain; acute strain; neurological symptoms",
       "coaching_cues": "Keep the pelvis level and gently move into the stretch without arching or twisting the lower back.",
       "common_errors": "Forcing the joint, rotating the pelvis, or using lumbar extension to create range.",
-      "regression_id": "",
+      "regression_id": "DMHM008",
       "progression_id": "",
       "maintenance_rule": "repeat if comfortable and controlled",
       "min_week": 1,
@@ -4263,6 +5033,20 @@
       "engagement_tags_v3": [
         "mobility",
         "unloaded"
+      ],
+      "clinical_subject_v4": "hip_mobility",
+      "clinical_intervention_role_v4": "multi_planar_hip_flexor_mobility",
+      "progression_criteria_v4": [
+        "pain_not_increased",
+        "prescribed_volume_completed_with_control",
+        "no_material_compensation",
+        "completed_in_at_least_2_sessions"
+      ],
+      "stop_criteria_v4": [
+        "sharp_pain",
+        "radiating_symptoms",
+        "dizziness_or_neurological_symptoms",
+        "loss_of_movement_control"
       ]
     },
     {
@@ -4291,7 +5075,7 @@
       "contraindications": "sharp pain; acute strain; neurological symptoms",
       "coaching_cues": "Keep the pelvis level and gently move into the stretch without arching or twisting the lower back.",
       "common_errors": "Forcing the joint, rotating the pelvis, or using lumbar extension to create range.",
-      "regression_id": "",
+      "regression_id": "DMHM007",
       "progression_id": "",
       "maintenance_rule": "repeat if comfortable and controlled",
       "min_week": 1,
@@ -4339,6 +5123,20 @@
       "engagement_tags_v3": [
         "mobility",
         "unloaded"
+      ],
+      "clinical_subject_v4": "hip_mobility",
+      "clinical_intervention_role_v4": "active_posterior_hip_mobility",
+      "progression_criteria_v4": [
+        "pain_not_increased",
+        "prescribed_volume_completed_with_control",
+        "no_material_compensation",
+        "completed_in_at_least_2_sessions"
+      ],
+      "stop_criteria_v4": [
+        "sharp_pain",
+        "radiating_symptoms",
+        "dizziness_or_neurological_symptoms",
+        "loss_of_movement_control"
       ]
     },
     {
@@ -4367,8 +5165,8 @@
       "contraindications": "sharp pain; acute strain; neurological symptoms",
       "coaching_cues": "Press through the feet, keep the ribs down, and lift the pelvis by squeezing the glutes rather than arching the back.",
       "common_errors": "Overextending the lower back, pushing through the toes, or letting the pelvis rotate.",
-      "regression_id": "",
-      "progression_id": "",
+      "regression_id": "DMHM005",
+      "progression_id": "DMHM003",
       "maintenance_rule": "repeat if comfortable and controlled",
       "min_week": 3,
       "recommended_week_level": 3,
@@ -4399,7 +5197,7 @@
       "tips_en": "Finish with the hips level and a straight line from shoulders to knees.",
       "tips_fr": "Terminez avec le bassin horizontal et une ligne droite des épaules aux genoux.",
       "dosage_type": "dynamic_mobility_reps",
-      "intervention_role": "mobility",
+      "intervention_role": "stability",
       "default_sets_v3": 2,
       "min_sets_v3": 1,
       "max_sets_v3": 2,
@@ -4415,6 +5213,20 @@
       "engagement_tags_v3": [
         "mobility",
         "unloaded"
+      ],
+      "clinical_subject_v4": "hip_extension_control",
+      "clinical_intervention_role_v4": "unilateral_bridge_stability",
+      "progression_criteria_v4": [
+        "pain_not_increased",
+        "prescribed_volume_completed_with_control",
+        "no_material_compensation",
+        "completed_in_at_least_2_sessions"
+      ],
+      "stop_criteria_v4": [
+        "sharp_pain",
+        "radiating_symptoms",
+        "dizziness_or_neurological_symptoms",
+        "loss_of_movement_control"
       ]
     },
     {
@@ -4443,8 +5255,8 @@
       "contraindications": "sharp pain; acute strain; neurological symptoms",
       "coaching_cues": "Keep the heel down and foot facing forward, then guide the knee over the toes without the arch collapsing.",
       "common_errors": "Heel lifting, foot turning out, or knee collapsing inward.",
-      "regression_id": "",
-      "progression_id": "",
+      "regression_id": "DMAM004",
+      "progression_id": "DMAM003",
       "maintenance_rule": "repeat if comfortable and controlled",
       "min_week": 1,
       "recommended_week_level": 1,
@@ -4491,6 +5303,20 @@
       "engagement_tags_v3": [
         "mobility",
         "unloaded"
+      ],
+      "clinical_subject_v4": "ankle_mobility",
+      "clinical_intervention_role_v4": "dorsiflexion_control",
+      "progression_criteria_v4": [
+        "pain_not_increased",
+        "prescribed_volume_completed_with_control",
+        "no_material_compensation",
+        "completed_in_at_least_2_sessions"
+      ],
+      "stop_criteria_v4": [
+        "sharp_pain",
+        "radiating_symptoms",
+        "dizziness_or_neurological_symptoms",
+        "loss_of_movement_control"
       ]
     },
     {
@@ -4519,7 +5345,7 @@
       "contraindications": "sharp pain; acute strain; neurological symptoms",
       "coaching_cues": "Keep the heel down and foot facing forward, then guide the knee over the toes without the arch collapsing.",
       "common_errors": "Heel lifting, foot turning out, or knee collapsing inward.",
-      "regression_id": "",
+      "regression_id": "DMAM003",
       "progression_id": "",
       "maintenance_rule": "repeat if comfortable and controlled",
       "min_week": 1,
@@ -4567,6 +5393,20 @@
       "engagement_tags_v3": [
         "mobility",
         "unloaded"
+      ],
+      "clinical_subject_v4": "ankle_mobility",
+      "clinical_intervention_role_v4": "dynamic_calf_mobility",
+      "progression_criteria_v4": [
+        "pain_not_increased",
+        "prescribed_volume_completed_with_control",
+        "no_material_compensation",
+        "completed_in_at_least_2_sessions"
+      ],
+      "stop_criteria_v4": [
+        "sharp_pain",
+        "radiating_symptoms",
+        "dizziness_or_neurological_symptoms",
+        "loss_of_movement_control"
       ]
     },
     {
@@ -4636,13 +5476,27 @@
       "default_hold_seconds_v3": null,
       "max_total_exposure_seconds_v3": 75,
       "load_level_v3": 0,
-      "progression_stage_v3": 1,
+      "progression_stage_v3": 0,
       "repeat_limit_per_week_v3": 1,
       "repeat_limit_program_v3": 3,
       "experience_requirement_v3": "all",
       "engagement_tags_v3": [
         "recovery",
         "unloaded"
+      ],
+      "clinical_subject_v4": "recovery_breathing",
+      "clinical_intervention_role_v4": "lumbar_rotation_reset",
+      "progression_criteria_v4": [
+        "pain_not_increased",
+        "prescribed_volume_completed_with_control",
+        "no_material_compensation",
+        "completed_in_at_least_2_sessions"
+      ],
+      "stop_criteria_v4": [
+        "sharp_pain",
+        "radiating_symptoms",
+        "dizziness_or_neurological_symptoms",
+        "loss_of_movement_control"
       ]
     },
     {
@@ -4712,13 +5566,27 @@
       "default_hold_seconds_v3": null,
       "max_total_exposure_seconds_v3": 60,
       "load_level_v3": 0,
-      "progression_stage_v3": 1,
+      "progression_stage_v3": 0,
       "repeat_limit_per_week_v3": 1,
       "repeat_limit_program_v3": 3,
       "experience_requirement_v3": "all",
       "engagement_tags_v3": [
         "recovery",
         "unloaded"
+      ],
+      "clinical_subject_v4": "recovery_breathing",
+      "clinical_intervention_role_v4": "soft_tissue_recovery",
+      "progression_criteria_v4": [
+        "pain_not_increased",
+        "prescribed_volume_completed_with_control",
+        "no_material_compensation",
+        "completed_in_at_least_2_sessions"
+      ],
+      "stop_criteria_v4": [
+        "sharp_pain",
+        "radiating_symptoms",
+        "dizziness_or_neurological_symptoms",
+        "loss_of_movement_control"
       ]
     },
     {
@@ -4788,13 +5656,27 @@
       "default_hold_seconds_v3": null,
       "max_total_exposure_seconds_v3": 60,
       "load_level_v3": 0,
-      "progression_stage_v3": 1,
+      "progression_stage_v3": 0,
       "repeat_limit_per_week_v3": 1,
       "repeat_limit_program_v3": 3,
       "experience_requirement_v3": "all",
       "engagement_tags_v3": [
         "recovery",
         "unloaded"
+      ],
+      "clinical_subject_v4": "recovery_breathing",
+      "clinical_intervention_role_v4": "soft_tissue_recovery",
+      "progression_criteria_v4": [
+        "pain_not_increased",
+        "prescribed_volume_completed_with_control",
+        "no_material_compensation",
+        "completed_in_at_least_2_sessions"
+      ],
+      "stop_criteria_v4": [
+        "sharp_pain",
+        "radiating_symptoms",
+        "dizziness_or_neurological_symptoms",
+        "loss_of_movement_control"
       ]
     },
     {
@@ -4864,13 +5746,27 @@
       "default_hold_seconds_v3": null,
       "max_total_exposure_seconds_v3": 60,
       "load_level_v3": 0,
-      "progression_stage_v3": 1,
+      "progression_stage_v3": 0,
       "repeat_limit_per_week_v3": 1,
       "repeat_limit_program_v3": 3,
       "experience_requirement_v3": "all",
       "engagement_tags_v3": [
         "recovery",
         "unloaded"
+      ],
+      "clinical_subject_v4": "recovery_breathing",
+      "clinical_intervention_role_v4": "soft_tissue_recovery",
+      "progression_criteria_v4": [
+        "pain_not_increased",
+        "prescribed_volume_completed_with_control",
+        "no_material_compensation",
+        "completed_in_at_least_2_sessions"
+      ],
+      "stop_criteria_v4": [
+        "sharp_pain",
+        "radiating_symptoms",
+        "dizziness_or_neurological_symptoms",
+        "loss_of_movement_control"
       ]
     },
     {
@@ -4940,13 +5836,27 @@
       "default_hold_seconds_v3": null,
       "max_total_exposure_seconds_v3": 60,
       "load_level_v3": 0,
-      "progression_stage_v3": 1,
+      "progression_stage_v3": 0,
       "repeat_limit_per_week_v3": 1,
       "repeat_limit_program_v3": 3,
       "experience_requirement_v3": "all",
       "engagement_tags_v3": [
         "recovery",
         "unloaded"
+      ],
+      "clinical_subject_v4": "recovery_breathing",
+      "clinical_intervention_role_v4": "soft_tissue_recovery",
+      "progression_criteria_v4": [
+        "pain_not_increased",
+        "prescribed_volume_completed_with_control",
+        "no_material_compensation",
+        "completed_in_at_least_2_sessions"
+      ],
+      "stop_criteria_v4": [
+        "sharp_pain",
+        "radiating_symptoms",
+        "dizziness_or_neurological_symptoms",
+        "loss_of_movement_control"
       ]
     },
     {
@@ -5016,13 +5926,27 @@
       "default_hold_seconds_v3": null,
       "max_total_exposure_seconds_v3": 60,
       "load_level_v3": 0,
-      "progression_stage_v3": 1,
+      "progression_stage_v3": 0,
       "repeat_limit_per_week_v3": 1,
       "repeat_limit_program_v3": 3,
       "experience_requirement_v3": "all",
       "engagement_tags_v3": [
         "recovery",
         "unloaded"
+      ],
+      "clinical_subject_v4": "recovery_breathing",
+      "clinical_intervention_role_v4": "soft_tissue_recovery",
+      "progression_criteria_v4": [
+        "pain_not_increased",
+        "prescribed_volume_completed_with_control",
+        "no_material_compensation",
+        "completed_in_at_least_2_sessions"
+      ],
+      "stop_criteria_v4": [
+        "sharp_pain",
+        "radiating_symptoms",
+        "dizziness_or_neurological_symptoms",
+        "loss_of_movement_control"
       ]
     },
     {
@@ -5092,13 +6016,27 @@
       "default_hold_seconds_v3": null,
       "max_total_exposure_seconds_v3": 60,
       "load_level_v3": 0,
-      "progression_stage_v3": 1,
+      "progression_stage_v3": 0,
       "repeat_limit_per_week_v3": 1,
       "repeat_limit_program_v3": 3,
       "experience_requirement_v3": "all",
       "engagement_tags_v3": [
         "recovery",
         "unloaded"
+      ],
+      "clinical_subject_v4": "recovery_breathing",
+      "clinical_intervention_role_v4": "soft_tissue_recovery",
+      "progression_criteria_v4": [
+        "pain_not_increased",
+        "prescribed_volume_completed_with_control",
+        "no_material_compensation",
+        "completed_in_at_least_2_sessions"
+      ],
+      "stop_criteria_v4": [
+        "sharp_pain",
+        "radiating_symptoms",
+        "dizziness_or_neurological_symptoms",
+        "loss_of_movement_control"
       ]
     },
     {
@@ -5128,7 +6066,7 @@
       "coaching_cues": "Move the pelvis gently while keeping the shoulders relaxed and the motion small and controlled.",
       "common_errors": "Using momentum, lifting the hips, or forcing the lower back.",
       "regression_id": "",
-      "progression_id": "",
+      "progression_id": "DMCS004",
       "maintenance_rule": "repeat if comfortable and controlled",
       "min_week": 1,
       "recommended_week_level": 1,
@@ -5159,7 +6097,7 @@
       "tips_en": "Coordinate the movement with a slow exhale and return to neutral.",
       "tips_fr": "Coordonnez le mouvement avec une expiration lente puis revenez au neutre.",
       "dosage_type": "strength_reps",
-      "intervention_role": "stability",
+      "intervention_role": "activation",
       "default_sets_v3": 2,
       "min_sets_v3": 2,
       "max_sets_v3": 3,
@@ -5175,6 +6113,20 @@
       "engagement_tags_v3": [
         "stability",
         "unloaded"
+      ],
+      "clinical_subject_v4": "trunk_core_control",
+      "clinical_intervention_role_v4": "pelvic_control",
+      "progression_criteria_v4": [
+        "pain_not_increased",
+        "prescribed_volume_completed_with_control",
+        "no_material_compensation",
+        "completed_in_at_least_2_sessions"
+      ],
+      "stop_criteria_v4": [
+        "sharp_pain",
+        "radiating_symptoms",
+        "dizziness_or_neurological_symptoms",
+        "loss_of_movement_control"
       ]
     },
     {
@@ -5203,7 +6155,7 @@
       "contraindications": "stop if pain increases or symptoms radiate",
       "coaching_cues": "Keep the knees and pelvis stacked, rotate through the upper back, and let the shoulder blade glide around the rib cage.",
       "common_errors": "Rolling the pelvis backward, forcing the shoulder to the floor, or holding the breath.",
-      "regression_id": "",
+      "regression_id": "DMTM008",
       "progression_id": "",
       "maintenance_rule": "repeat if comfortable and controlled",
       "min_week": 1,
@@ -5251,6 +6203,20 @@
       "engagement_tags_v3": [
         "mobility",
         "unloaded"
+      ],
+      "clinical_subject_v4": "thoracic_mobility",
+      "clinical_intervention_role_v4": "rotation_mobility",
+      "progression_criteria_v4": [
+        "pain_not_increased",
+        "prescribed_volume_completed_with_control",
+        "no_material_compensation",
+        "completed_in_at_least_2_sessions"
+      ],
+      "stop_criteria_v4": [
+        "sharp_pain",
+        "radiating_symptoms",
+        "dizziness_or_neurological_symptoms",
+        "loss_of_movement_control"
       ]
     },
     {
@@ -5279,7 +6245,7 @@
       "contraindications": "acute shoulder pain; unstable shoulder; painful overhead range",
       "coaching_cues": "Settle into a comfortable stretch, keep the breath slow, and avoid forcing the neck, shoulder, or lower back.",
       "common_errors": "Pushing into pain, holding the breath, or twisting from a sensitive joint.",
-      "regression_id": "",
+      "regression_id": "DMSH011",
       "progression_id": "",
       "maintenance_rule": "repeat if comfortable and controlled",
       "min_week": 1,
@@ -5327,6 +6293,20 @@
       "engagement_tags_v3": [
         "mobility",
         "unloaded"
+      ],
+      "clinical_subject_v4": "shoulder_mobility",
+      "clinical_intervention_role_v4": "tissue_mobility",
+      "progression_criteria_v4": [
+        "pain_not_increased",
+        "prescribed_volume_completed_with_control",
+        "no_material_compensation",
+        "completed_in_at_least_2_sessions"
+      ],
+      "stop_criteria_v4": [
+        "sharp_pain",
+        "radiating_symptoms",
+        "dizziness_or_neurological_symptoms",
+        "loss_of_movement_control"
       ]
     },
     {
@@ -5355,8 +6335,8 @@
       "contraindications": "acute shoulder pain; unstable shoulder; painful overhead range",
       "coaching_cues": "Keep the elbows straight and ribs controlled, then reach the shoulder blades forward around the rib cage.",
       "common_errors": "Bending the elbows, shrugging, or collapsing through the chest.",
-      "regression_id": "",
-      "progression_id": "",
+      "regression_id": "DMSH007",
+      "progression_id": "DMSH006",
       "maintenance_rule": "repeat if comfortable and controlled",
       "min_week": 3,
       "recommended_week_level": 3,
@@ -5387,7 +6367,7 @@
       "tips_en": "Move through the shoulder blades without rounding the lower back.",
       "tips_fr": "Bougez depuis les omoplates sans arrondir le bas du dos.",
       "dosage_type": "dynamic_mobility_reps",
-      "intervention_role": "mobility",
+      "intervention_role": "stability",
       "default_sets_v3": 2,
       "min_sets_v3": 1,
       "max_sets_v3": 2,
@@ -5403,6 +6383,20 @@
       "engagement_tags_v3": [
         "mobility",
         "unloaded"
+      ],
+      "clinical_subject_v4": "scapular_stability",
+      "clinical_intervention_role_v4": "serratus_control",
+      "progression_criteria_v4": [
+        "pain_not_increased",
+        "prescribed_volume_completed_with_control",
+        "no_material_compensation",
+        "completed_in_at_least_2_sessions"
+      ],
+      "stop_criteria_v4": [
+        "sharp_pain",
+        "radiating_symptoms",
+        "dizziness_or_neurological_symptoms",
+        "loss_of_movement_control"
       ]
     },
     {
@@ -5431,8 +6425,8 @@
       "contraindications": "sharp pain; acute strain; neurological symptoms",
       "coaching_cues": "Keep the heel down and foot facing forward, then guide the knee over the toes without the arch collapsing.",
       "common_errors": "Heel lifting, foot turning out, or knee collapsing inward.",
-      "regression_id": "",
-      "progression_id": "",
+      "regression_id": "DMAM001",
+      "progression_id": "DMAM002",
       "maintenance_rule": "repeat if comfortable and controlled",
       "min_week": 1,
       "recommended_week_level": 1,
@@ -5479,6 +6473,20 @@
       "engagement_tags_v3": [
         "mobility",
         "unloaded"
+      ],
+      "clinical_subject_v4": "ankle_mobility",
+      "clinical_intervention_role_v4": "closed_chain_dorsiflexion",
+      "progression_criteria_v4": [
+        "pain_not_increased",
+        "prescribed_volume_completed_with_control",
+        "no_material_compensation",
+        "completed_in_at_least_2_sessions"
+      ],
+      "stop_criteria_v4": [
+        "sharp_pain",
+        "radiating_symptoms",
+        "dizziness_or_neurological_symptoms",
+        "loss_of_movement_control"
       ]
     },
     {
@@ -5539,7 +6547,7 @@
       "tips_en": "Use a smaller range and steady breathing to keep the sensation muscular.",
       "tips_fr": "Réduisez l’amplitude et respirez régulièrement pour garder une sensation musculaire.",
       "dosage_type": "dynamic_mobility_reps",
-      "intervention_role": "mobility",
+      "intervention_role": "activation",
       "default_sets_v3": 2,
       "min_sets_v3": 1,
       "max_sets_v3": 2,
@@ -5555,6 +6563,20 @@
       "engagement_tags_v3": [
         "mobility",
         "unloaded"
+      ],
+      "clinical_subject_v4": "hip_mobility",
+      "clinical_intervention_role_v4": "adductor_mobility_control",
+      "progression_criteria_v4": [
+        "pain_not_increased",
+        "prescribed_volume_completed_with_control",
+        "no_material_compensation",
+        "completed_in_at_least_2_sessions"
+      ],
+      "stop_criteria_v4": [
+        "sharp_pain",
+        "radiating_symptoms",
+        "dizziness_or_neurological_symptoms",
+        "loss_of_movement_control"
       ]
     },
     {
@@ -5583,8 +6605,8 @@
       "contraindications": "acute pain; uncontrolled movement; medical restriction; stop if pain increases",
       "coaching_cues": "Keep the whole foot grounded, track the knees over the toes, and maintain the trunk position throughout the repetition.",
       "common_errors": "Heels lifting, knees collapsing inward, or losing trunk control.",
-      "regression_id": "",
-      "progression_id": "",
+      "regression_id": "DMFI004",
+      "progression_id": "DMFI005",
       "maintenance_rule": "repeat if comfortable and controlled",
       "min_week": 4,
       "recommended_week_level": 4,
@@ -5631,6 +6653,20 @@
       "engagement_tags_v3": [
         "integration",
         "unloaded"
+      ],
+      "clinical_subject_v4": "lunge_pattern",
+      "clinical_intervention_role_v4": "split_squat_control",
+      "progression_criteria_v4": [
+        "pain_not_increased",
+        "prescribed_volume_completed_with_control",
+        "no_material_compensation",
+        "completed_in_at_least_2_sessions"
+      ],
+      "stop_criteria_v4": [
+        "sharp_pain",
+        "radiating_symptoms",
+        "dizziness_or_neurological_symptoms",
+        "loss_of_movement_control"
       ]
     },
     {
@@ -5660,7 +6696,7 @@
       "coaching_cues": "Keep the heel down and foot facing forward, then guide the knee over the toes without the arch collapsing.",
       "common_errors": "Heel lifting, foot turning out, or knee collapsing inward.",
       "regression_id": "",
-      "progression_id": "",
+      "progression_id": "DMAM001",
       "maintenance_rule": "repeat if comfortable and controlled",
       "min_week": 1,
       "recommended_week_level": 1,
@@ -5707,6 +6743,20 @@
       "engagement_tags_v3": [
         "mobility",
         "unloaded"
+      ],
+      "clinical_subject_v4": "ankle_mobility",
+      "clinical_intervention_role_v4": "calf_tissue_mobility",
+      "progression_criteria_v4": [
+        "pain_not_increased",
+        "prescribed_volume_completed_with_control",
+        "no_material_compensation",
+        "completed_in_at_least_2_sessions"
+      ],
+      "stop_criteria_v4": [
+        "sharp_pain",
+        "radiating_symptoms",
+        "dizziness_or_neurological_symptoms",
+        "loss_of_movement_control"
       ]
     },
     {
@@ -5721,8 +6771,8 @@
       "primary_region_fr": "rachis cervical",
       "secondary_regions": "",
       "screening_domains_improved": "cervical_control",
-      "difficulty_1_5": 1,
-      "phase": "1_restore",
+      "difficulty_1_5": 2,
+      "phase": "2_control",
       "equipment": "none",
       "equipment_label_en": "Body weight",
       "equipment_label_fr": "Poids du corps",
@@ -5735,11 +6785,11 @@
       "contraindications": "acute neck trauma; dizziness; neurological symptoms",
       "coaching_cues": "Lengthen the back of the neck and glide the chin straight backward without looking down.",
       "common_errors": "Nodding the head, pressing too hard, or tensing the jaw and shoulders.",
-      "regression_id": "",
+      "regression_id": "DMCC001",
       "progression_id": "",
       "maintenance_rule": "repeat if comfortable and controlled",
-      "min_week": 1,
-      "recommended_week_level": 1,
+      "min_week": 2,
+      "recommended_week_level": 2,
       "block": "reset",
       "video_url": "https://player.vimeo.com/video/1207818167",
       "vimeo_url": "https://vimeo.com/1207818167?share=copy&fl=sv&fe=ci",
@@ -5767,7 +6817,7 @@
       "tips_en": "Use a gentle effort and keep breathing normally.",
       "tips_fr": "Utilisez un effort léger et respirez normalement.",
       "dosage_type": "recovery_hold",
-      "intervention_role": "recovery",
+      "intervention_role": "activation",
       "default_sets_v3": 1,
       "min_sets_v3": 1,
       "max_sets_v3": 1,
@@ -5776,13 +6826,27 @@
       "default_hold_seconds_v3": null,
       "max_total_exposure_seconds_v3": 75,
       "load_level_v3": 0,
-      "progression_stage_v3": 1,
+      "progression_stage_v3": 2,
       "repeat_limit_per_week_v3": 1,
       "repeat_limit_program_v3": 3,
       "experience_requirement_v3": "all",
       "engagement_tags_v3": [
         "recovery",
         "unloaded"
+      ],
+      "clinical_subject_v4": "cervical_control",
+      "clinical_intervention_role_v4": "isometric_endurance",
+      "progression_criteria_v4": [
+        "pain_not_increased",
+        "prescribed_volume_completed_with_control",
+        "no_material_compensation",
+        "completed_in_at_least_2_sessions"
+      ],
+      "stop_criteria_v4": [
+        "sharp_pain",
+        "radiating_symptoms",
+        "dizziness_or_neurological_symptoms",
+        "loss_of_movement_control"
       ]
     },
     {
@@ -5843,7 +6907,7 @@
       "tips_en": "Use a supported position and remain below the threshold of pain or tingling.",
       "tips_fr": "Utilisez une position soutenue et restez sous le seuil de douleur ou de fourmillement.",
       "dosage_type": "recovery_hold",
-      "intervention_role": "recovery",
+      "intervention_role": "mobility",
       "default_sets_v3": 1,
       "min_sets_v3": 1,
       "max_sets_v3": 1,
@@ -5859,6 +6923,20 @@
       "engagement_tags_v3": [
         "recovery",
         "unloaded"
+      ],
+      "clinical_subject_v4": "cervical_control",
+      "clinical_intervention_role_v4": "tissue_mobility",
+      "progression_criteria_v4": [
+        "pain_not_increased",
+        "prescribed_volume_completed_with_control",
+        "no_material_compensation",
+        "completed_in_at_least_2_sessions"
+      ],
+      "stop_criteria_v4": [
+        "sharp_pain",
+        "radiating_symptoms",
+        "dizziness_or_neurological_symptoms",
+        "loss_of_movement_control"
       ]
     },
     {
@@ -5919,7 +6997,7 @@
       "tips_en": "Use a supported position and remain below the threshold of pain or tingling.",
       "tips_fr": "Utilisez une position soutenue et restez sous le seuil de douleur ou de fourmillement.",
       "dosage_type": "recovery_hold",
-      "intervention_role": "recovery",
+      "intervention_role": "mobility",
       "default_sets_v3": 1,
       "min_sets_v3": 1,
       "max_sets_v3": 1,
@@ -5935,6 +7013,20 @@
       "engagement_tags_v3": [
         "recovery",
         "unloaded"
+      ],
+      "clinical_subject_v4": "cervical_control",
+      "clinical_intervention_role_v4": "tissue_mobility",
+      "progression_criteria_v4": [
+        "pain_not_increased",
+        "prescribed_volume_completed_with_control",
+        "no_material_compensation",
+        "completed_in_at_least_2_sessions"
+      ],
+      "stop_criteria_v4": [
+        "sharp_pain",
+        "radiating_symptoms",
+        "dizziness_or_neurological_symptoms",
+        "loss_of_movement_control"
       ]
     }
   ],
@@ -5943,5 +7035,14 @@
     "generic_set_override_forbidden": true,
     "timed_recovery_default_one_set": true,
     "loaded_progression_allowed_when_readiness_allows": true
+  },
+  "prescription_metadata_version": "v4.0",
+  "progression_policy": {
+    "model": "criteria_based_restore_control_stabilize_integrate",
+    "week_is_not_sufficient_alone": true,
+    "requires_pain_not_increased": true,
+    "requires_controlled_completion": true,
+    "explicit_links_only_when_clinically_coherent": true,
+    "standalone_recovery_tools_may_have_no_link": true
   }
 }
