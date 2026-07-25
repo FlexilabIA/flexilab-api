@@ -14,7 +14,7 @@ import cv2
 import numpy as np
 
 
-VISION_QA_VERSION = "vision-qa-overlay-v2.0-aslr-shared-pelvic-anchor"
+VISION_QA_VERSION = "vision-qa-overlay-v2.1-aslr-postpair-knee-validation"
 
 COCO_NAMES = [
     "nose",
