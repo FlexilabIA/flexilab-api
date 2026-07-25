@@ -161,6 +161,7 @@ def create_trainer_router(supabase_client) -> APIRouter:
                 .select("id,created_at,status,composite_score,trainer_client_link_id,user_id")
                 .eq("trainer_id", trainer_id)
                 .in_("trainer_client_link_id", link_ids)
+                .eq("status", "completed")
                 .order("created_at", desc=True)
                 .execute()
             ),
@@ -187,6 +188,7 @@ def create_trainer_router(supabase_client) -> APIRouter:
                     .select("id,created_at,status,composite_score,user_id")
                     .eq("trainer_id", trainer_id)
                     .in_("user_id", list(user_to_link))
+                    .eq("status", "completed")
                     .order("created_at", desc=True)
                     .execute()
                 ),
@@ -521,7 +523,7 @@ def create_trainer_router(supabase_client) -> APIRouter:
             # Full history is requested only when the Tokens page is opened.
             "token_history": {"cycles": [], "referral_rewards": []},
             "loaded_at": _iso_now(),
-            "bootstrap_version": "trainer-bootstrap-v2-recent-five",
+            "bootstrap_version": "trainer-bootstrap-v3-completed-client-history",
         }
         logger.info(
             "PERF path=/trainer/bootstrap duration_ms=%d recent_clients=%d",
@@ -604,6 +606,7 @@ def create_trainer_router(supabase_client) -> APIRouter:
             supabase_client.table("sessions")
             .select("id,created_at,status,composite_score,user_id,user_email")
             .eq("trainer_client_link_id", link_id)
+            .eq("status", "completed")
             .order("created_at", desc=True)
             .execute()
         )
