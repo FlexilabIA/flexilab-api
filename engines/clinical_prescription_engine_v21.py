@@ -5,16 +5,22 @@ from datetime import datetime, timezone
 from collections import Counter, defaultdict
 import json, math, re
 
-ENGINE_VERSION = "FlexiLab Clinical Prescription Engine v3.0"
+ENGINE_VERSION = "FlexiLab Clinical Prescription Engine v3.1-explicit-progression"
 
 DOMAIN_TO_CATS = {
-    "cervical_control": ["CC", "TM", "SH"],
+    "cervical_control": ["CC", "SH"],
     "thoracic_mobility": ["TM", "SH", "CC"],
-    "shoulder_mobility": ["SH", "TM", "CS"],
+    # Thoracic work is no longer treated as a universal shoulder correction.
+    # It is selected when thoracic mobility is itself measured as a priority.
+    "shoulder_mobility": ["SH", "CS"],
+    "scapular_control": ["SH", "CS"],
     "core_stability": ["CS", "FI", "CC"],
+    "trunk_core_control": ["CS", "FI", "HM"],
     "hip_mobility": ["HM", "HS", "CS"],
     "hamstring_mobility": ["HS", "HM", "CS"],
+    "aslr": ["HS", "CS", "HM"],
     "ankle_mobility": ["AM", "FI", "HM"],
+    "squat_pattern": ["FI", "HM", "AM", "CS"],
     "functional_integration": ["FI", "CS", "BP"],
     "balance_proprioception": ["BP", "FI", "AM"],
 }
@@ -173,6 +179,24 @@ def _score_ex(ex, week, day, priorities, qcats, pain, experience, equipment,
         if c in DOMAIN_TO_CATS.get(p["id"],[]): score += deficit * [0.8,.6,.4,.25,.15][rank]
 
     if c in qcats: score += 12
+
+    # Prefer exercises whose phase/stage fits the current week instead of merely
+    # allowing every earlier-stage exercise forever.
+    stage = int(_num(ex.get("progression_stage_v3", 1), 1))
+    if stage == week:
+        score += 24
+    elif stage == week - 1:
+        score += 10
+    elif stage < week - 1:
+        score -= 10 * (week - stage - 1)
+
+    # Criteria-based chain continuity: reward the named next exercise when its
+    # regression was used in the previous week. This does not force progression;
+    # pain, load, equipment and movement-priority filters still take precedence.
+    regression_id = str(ex.get("regression_id") or "")
+    if regression_id and regression_id in previous_week_ids:
+        score += 38
+
     if role == "recovery": score -= 18
     if day == 2 and int(_num(ex.get("load_level_v3"),0)) >= 3: score += 24 if week >= 2 else -30
     if day == 3 and role == "integration": score += 26
@@ -232,6 +256,12 @@ def _loc(ex, week, day, priorities, pain, experience, lang):
         "name":name, "name_en":ex.get("name_en"), "name_fr":ex.get("name_fr"),
         "category_code":ex.get("category_code"), "target":ex.get("category_en") if lang=="en" else ex.get("category_fr"),
         "primary_objective":ex.get("primary_objective"), "intervention_role":role,
+        "clinical_subject":ex.get("clinical_subject_v4") or ex.get("category_en"),
+        "clinical_intervention_role":ex.get("clinical_intervention_role_v4") or role,
+        "progression_id":ex.get("progression_id") or None,
+        "regression_id":ex.get("regression_id") or None,
+        "progression_criteria":ex.get("progression_criteria_v4") or [],
+        "stop_criteria":ex.get("stop_criteria_v4") or [],
         "difficulty":ex.get("difficulty_1_5"), "phase":ex.get("phase"),
         "equipment":ex.get("equipment","none"),
         "equipment_label":ex.get("equipment_label_en") if lang=="en" else ex.get("equipment_label_fr"),
@@ -324,13 +354,15 @@ def generate_clinical_prescription_v21(screening_payload, exercise_library, rule
                     selected.append(_loc(ex,week,day,priorities,pain,experience,lang))
                     eid=ex.get("exercise_id"); used.add(eid); week_counts[eid]+=1; program_counts[eid]+=1; week_ids.add(eid)
 
-            # Remove excessive recovery.
-            if sum(1 for e in selected if e["intervention_role"]=="recovery") > 1:
-                kept=[]; seen_recovery=False
+            # Recovery exposure adapts to the reported pain state instead of
+            # occupying corrective slots indiscriminately.
+            recovery_cap = {"no_pain": 1, "discomfort": 2, "pain": 3}[pain]
+            if sum(1 for e in selected if e["intervention_role"]=="recovery") > recovery_cap:
+                kept=[]; recovery_seen=0
                 for e in selected:
                     if e["intervention_role"]=="recovery":
-                        if seen_recovery: continue
-                        seen_recovery=True
+                        recovery_seen += 1
+                        if recovery_seen > recovery_cap: continue
                     kept.append(e)
                 selected=kept
 
@@ -340,7 +372,8 @@ def generate_clinical_prescription_v21(screening_payload, exercise_library, rule
                 fallback=[]
                 for ex in exercise_library:
                     role = ex.get("intervention_role") or "mobility"
-                    if role == "recovery" and any(e.get("intervention_role")=="recovery" for e in selected):
+                    recovery_cap = {"no_pain": 1, "discomfort": 2, "pain": 3}[pain]
+                    if role == "recovery" and sum(1 for e in selected if e.get("intervention_role")=="recovery") >= recovery_cap:
                         continue
                     if category_counts.get(ex.get("category_code"), 0) >= 2:
                         continue
@@ -402,11 +435,14 @@ def generate_clinical_prescription_v21(screening_payload, exercise_library, rule
         "selection_strategy":{
             "principles":[
                 "stable clinical targets",
+                "anatomical subject separated from intervention role",
+                "explicit regression and progression links where clinically coherent",
+                "criteria-based progression rather than week number alone",
                 "exercise variation without randomness",
-                "visible weekly progression",
                 "questionnaire-driven loading and safety",
                 "exercise-specific dosage",
             ],
+            "progression_model":"restore_control_stabilize_integrate_v4",
             "available_equipment":sorted(equipment),
             "reported_category_preferences":qcats,
         },
