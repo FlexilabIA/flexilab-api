@@ -42,12 +42,12 @@ class FlexiLabV10127ASLRIntegrityTests(unittest.TestCase):
         self.assertIn("coco_side_differs_from_workflow_side", result["metrics"]["diagnostic_flags"])
         self.assertGreater(result["metrics"]["aslr_angle"], 70)
 
-    def test_visual_thresholds_are_preserved(self):
+    def test_visual_thresholds_use_60_75_policy(self):
         xy, conf = self.make_valid_pose()
         result = analyze_aslr_v2(xy, conf, side="LEFT")
         threshold = result["thresholds"]["aslr_angle"]
         bands = threshold["bands"]
-        self.assertEqual([(b["min"], b["max"]) for b in bands], [(0, 45), (45, 70), (70, 90)])
+        self.assertEqual([(b["min"], b["max"]) for b in bands], [(0, 60), (60, 75), (75, 90)])
         self.assertIn("pointer_value", threshold)
         self.assertNotIn("value", threshold)
 
@@ -82,7 +82,7 @@ class FlexiLabV10127ASLRIntegrityTests(unittest.TestCase):
 
     def test_patch_version_and_health_configuration(self):
         source = (ROOT / "app.py").read_text(encoding="utf-8")
-        self.assertIn('"patch_version": "V101.28.3-aslr-dedicated-yolo11m"', source)
+        self.assertIn('"patch_version": "V101.28.4-aslr-thresholds-60-75"', source)
         self.assertIn('"visual_thresholds_preserved": True', source)
         self.assertIn("ASLR_ENGINE_VERSION", source)
 

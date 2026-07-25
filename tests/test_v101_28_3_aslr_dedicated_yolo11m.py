@@ -12,7 +12,7 @@ VISION_SOURCE = (ROOT / "vision_qa.py").read_text(encoding="utf-8")
 
 class ASLRDedicatedYOLO11mTests(unittest.TestCase):
     def test_patch_and_model_contract(self):
-        self.assertIn('"patch_version": "V101.28.3-aslr-dedicated-yolo11m"', APP_SOURCE)
+        self.assertIn('"patch_version": "V101.28.4-aslr-thresholds-60-75"', APP_SOURCE)
         self.assertIn('"FLEXILAB_ASLR_POSE_MODEL", "yolo11m-pose.pt"', APP_SOURCE)
         self.assertIn('ASLR_POSE_MODEL_INFERENCE_LOCK = threading.RLock()', APP_SOURCE)
         self.assertIn('aslr_model = _load_aslr_pose_model()', APP_SOURCE)
@@ -33,7 +33,7 @@ class ASLRDedicatedYOLO11mTests(unittest.TestCase):
         self.assertIn('ASLR_POSE_MODEL_NAME if is_aslr else POSE_MODEL_NAME', APP_SOURCE)
 
     def test_engine_version(self):
-        self.assertIn('ASLR_ENGINE_VERSION = "aslr-dedicated-yolo11m-dual-orientation-v5"', ENGINE_SOURCE)
+        self.assertIn('ASLR_ENGINE_VERSION = "aslr-dedicated-yolo11m-thresholds-60-75-v6"', ENGINE_SOURCE)
 
     def test_vision_qa_labels_dedicated_model(self):
         self.assertIn('VISION_QA_VERSION = "vision-qa-overlay-v1.2-aslr-model-label"', VISION_SOURCE)
