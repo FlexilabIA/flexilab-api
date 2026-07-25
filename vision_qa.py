@@ -14,7 +14,7 @@ import cv2
 import numpy as np
 
 
-VISION_QA_VERSION = "vision-qa-overlay-v2.3-aslr-body-axis-primary"
+VISION_QA_VERSION = "vision-qa-overlay-v2.4-aslr-image-horizontal-primary"
 
 COCO_NAMES = [
     "nose",
@@ -210,11 +210,11 @@ def _draw_squat_measurement(image: np.ndarray, metrics: Mapping[str, Any]) -> No
 
 
 def _draw_aslr_measurement(image: np.ndarray, metrics: Mapping[str, Any]) -> None:
-    """Draw the invariant body-axis reference and the raised leg.
+    """Draw the deterministic image-horizontal reference and raised leg.
 
-    Pink: shoulder-midpoint-to-pelvis body axis extended through the shared
-    pelvic anchor. Yellow: the same pelvic anchor to the true raised YOLO ankle.
-    Floor-leg landmarks, when coherent, are optional validation markers only.
+    Pink: original-image horizontal through the shared pelvic anchor.
+    Yellow: the same pelvic anchor to the true raised YOLO ankle.
+    Shoulder and floor-leg landmarks are excluded from the angle.
     """
     selected_points = metrics.get("selected_limb_points") or {}
     resting_points = metrics.get("resting_limb_points") or {}
@@ -245,9 +245,10 @@ def _draw_aslr_measurement(image: np.ndarray, metrics: Mapping[str, Any]) -> Non
     reference_source = str(metrics.get("reference_source") or baseline.get("reference_source") or "unknown")
 
     reference_labels = {
-        "body_axis_primary": "Body-axis reference (primary)",
+        "image_horizontal_primary": "Image-horizontal reference",
+        "body_axis_primary": "Body-axis reference (legacy)",
     }
-    reference_label = reference_labels.get(reference_source, "Body-axis reference")
+    reference_label = reference_labels.get(reference_source, "ASLR reference")
 
     if reference_start is not None and reference_end is not None:
         cv2.line(image, reference_start, reference_end, (230, 100, 240), 6, cv2.LINE_AA)
@@ -283,7 +284,7 @@ def _draw_aslr_measurement(image: np.ndarray, metrics: Mapping[str, Any]) -> Non
     reference_text = reference_source.replace("_", " ")
     _put_label(
         image,
-        f"ASLR {metrics.get('requested_side', '')}: {float(metrics.get('aslr_angle', 0)):.1f} deg | ref body axis primary | knee {knee_text} deg | pass {selected_pass} | model {model_name}",
+        f"ASLR {metrics.get('requested_side', '')}: {float(metrics.get('aslr_angle', 0)):.1f} deg | ref image horizontal | knee {knee_text} deg | pass {selected_pass} | model {model_name}",
         (18, 34),
         0.52,
     )

@@ -372,7 +372,7 @@ async def request_timing_middleware(request, call_next):
 def health():
     return {
         "ok": True,
-        "patch_version": "V101.35.11-aslr-body-axis-primary",
+        "patch_version": "V101.35.12-aslr-image-horizontal-primary",
         "base_patch": "V101.28.4-aslr-thresholds-60-75",
         "exercise_library_mode": EXERCISE_LIBRARY_MODE,
         "exercise_library_path": EXERCISE_LIBRARY_PATH,
@@ -403,7 +403,7 @@ def health():
                 "green": ">75",
             },
             "source_orientation_requirement": "head_left_capture_protocol_internal_90_clockwise_inference",
-            "chain_strategy": "rotated_90_clockwise_fullbody_then_body_axis_primary",
+            "chain_strategy": "rotated_90_clockwise_fullbody_then_image_horizontal_primary",
             "pose_passes": ["rotated_90_clockwise_fullbody_detection"],
             "aslr_inference_imgsz": 960,
             "measurement_anchor": "single_shared_pelvic_anchor_body_axis_to_true_raised_ankle",
@@ -422,7 +422,7 @@ def health():
 @app.get("/library_status")
 def library_status():
     return {
-        "patch_version": "V101.35.11-aslr-body-axis-primary",
+        "patch_version": "V101.35.12-aslr-image-horizontal-primary",
         "exercise_library_mode": EXERCISE_LIBRARY_MODE,
         "exercise_library_path": EXERCISE_LIBRARY_PATH,
         "exercise_library_count": len(EXERCISE_LIBRARY or []),
@@ -2589,13 +2589,15 @@ def run_yolo_analysis_from_bytes(img_bytes, test_type, capture_metadata=None):
     if is_aslr:
         requested_side = "RIGHT" if test_type == "aslr_right" else "LEFT"
 
-        # The original-photo pose is always the camera-tilt/body reference.
+        # The private rotated pass supplies the pelvis, raised knee and true YOLO
+        # ankle. After inverse mapping, the final ASLR reference is the original
+        # image horizontal through the pelvis. Shoulder and floor-leg landmarks
+        # are excluded from the final angle.
         body_reference_xy = np.array(final_xy, dtype=float, copy=True)
         body_reference_conf = np.array(final_conf, dtype=float, copy=True)
 
-        # Restore the stable V101.28 dual-orientation detection behaviour. Both
-        # passes are eligible to provide the true YOLO ankle/knee/hip landmarks;
-        # neither pass may substitute a toe, shoe contour or skin endpoint.
+        # A true YOLO ankle is mandatory. Toe, shoe-contour and skin endpoints
+        # are never permitted.
         limb_pose_passes = []
 
         rotated_failure = None
@@ -2727,7 +2729,7 @@ def run_yolo_analysis_from_bytes(img_bytes, test_type, capture_metadata=None):
             selected_pass_name = selected_pass["name"]
 
         analysis_pass = {
-            "mode": "aslr_rotated_fullbody_body_axis_primary",
+            "mode": "aslr_rotated_fullbody_image_horizontal_primary",
             "selected_pass": selected_pass_name,
             "source_orientation_required": False,
             "pose_passes": evaluated_passes,
@@ -2736,8 +2738,8 @@ def run_yolo_analysis_from_bytes(img_bytes, test_type, capture_metadata=None):
             "fallback_used": False,
             "visual_endpoint_allowed": False,
             "endpoint_policy": "raised_true_yolo_ankle_required_floor_leg_optional_validation_only",
-            "chain_policy": "raised_ankle_first_then_invariant_shoulder_to_pelvis_body_axis",
-            "body_reference_policy": "shoulder_midpoint_to_pelvis_axis_always_primary_floor_leg_optional_validation_only",
+            "chain_policy": "raised_ankle_first_then_original_image_horizontal",
+            "body_reference_policy": "original_image_horizontal_through_pelvis_always_primary_shoulders_and_floor_leg_excluded",
             "person_coverage": round(person_coverage, 4),
             "adaptive_crop_used": False,
         }
