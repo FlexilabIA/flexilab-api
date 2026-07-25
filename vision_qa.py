@@ -14,7 +14,7 @@ import cv2
 import numpy as np
 
 
-VISION_QA_VERSION = "vision-qa-overlay-v1.5-aslr-ankle-first-two-line"
+VISION_QA_VERSION = "vision-qa-overlay-v1.6-aslr-common-hip-two-line"
 
 COCO_NAMES = [
     "nose",
@@ -210,47 +210,52 @@ def _draw_squat_measurement(image: np.ndarray, metrics: Mapping[str, Any]) -> No
 
 
 def _draw_aslr_measurement(image: np.ndarray, metrics: Mapping[str, Any]) -> None:
-    """Draw exactly two ASLR measurement lines.
+    """Draw a common-vertex ASLR construction with exactly two lines.
 
-    One straight body-reference line and one straight raised-hip-to-YOLO-ankle
-    measurement line. The knee is shown as a validation point only.
+    Pink: subject reference direction, translated through the selected raised
+    hip and extended from the head side toward the resting-foot side.
+    Yellow: the same selected raised hip to the genuine YOLO ankle.
+    The knee is a validation marker only and never creates a triangle.
     """
     selected_points = metrics.get("selected_limb_points") or {}
     if not isinstance(selected_points, Mapping):
         selected_points = {}
 
-    pelvis_value = selected_points.get("pelvis") or metrics.get("pelvis_center")
     hip_value = selected_points.get("hip")
     ankle_value = selected_points.get("ankle")
     knee_value = selected_points.get("knee")
-    pelvis = _point(pelvis_value) if pelvis_value else None
-    hip = _point(hip_value) if hip_value else pelvis
+    hip = _point(hip_value) if hip_value else None
     ankle = _point(ankle_value) if ankle_value else None
     knee = _point(knee_value) if knee_value else None
 
     baseline = metrics.get("body_baseline") or {}
+    body_start = None
+    body_end = None
     if isinstance(baseline, Mapping):
-        start_value = baseline.get("line_start") or baseline.get("ear") or baseline.get("shoulder")
-        end_value = baseline.get("line_end") or baseline.get("pelvis") or pelvis_value
+        start_value = baseline.get("line_start")
+        end_value = baseline.get("line_end")
+        vertex_value = baseline.get("measurement_vertex")
+        if hip is None and vertex_value:
+            hip = _point(vertex_value)
         if start_value and end_value:
             body_start = _point(start_value)
             body_end = _point(end_value)
-            cv2.line(image, body_start, body_end, (230, 100, 240), 6, cv2.LINE_AA)
-            cv2.circle(image, body_start, 8, (230, 100, 240), -1, cv2.LINE_AA)
-            _put_label(image, "Body reference", (body_start[0] + 10, body_start[1] - 10), 0.45)
 
-    if pelvis is not None:
-        cv2.circle(image, pelvis, 10, (230, 100, 240), -1, cv2.LINE_AA)
-        _put_label(image, "Pelvic anchor", (pelvis[0] + 10, pelvis[1] - 10), 0.45)
-
-    if hip is not None:
-        cv2.circle(image, hip, 9, (70, 245, 245), -1, cv2.LINE_AA)
-        _put_label(image, "Raised hip", (hip[0] + 10, hip[1] - 10), 0.42)
+    if body_start is not None and body_end is not None:
+        cv2.line(image, body_start, body_end, (230, 100, 240), 6, cv2.LINE_AA)
+        _put_label(image, "Body reference", (body_start[0] + 10, body_start[1] - 10), 0.45)
 
     if hip is not None and ankle is not None:
-        cv2.line(image, hip, ankle, (70, 245, 245), 7, cv2.LINE_AA)
-        cv2.circle(image, ankle, 10, (70, 245, 245), -1, cv2.LINE_AA)
+        cv2.line(image, hip, ankle, (40, 235, 250), 7, cv2.LINE_AA)
+        cv2.circle(image, ankle, 10, (40, 235, 250), -1, cv2.LINE_AA)
         _put_label(image, "Raised ankle (YOLO)", (ankle[0] + 10, ankle[1] - 10), 0.45)
+
+    # Draw one shared vertex after both lines, so the overlay visibly confirms
+    # that the pink and yellow calculations start from exactly the same point.
+    if hip is not None:
+        cv2.circle(image, hip, 12, (245, 245, 245), -1, cv2.LINE_AA)
+        cv2.circle(image, hip, 8, (230, 100, 240), -1, cv2.LINE_AA)
+        _put_label(image, "Common hip vertex", (hip[0] + 10, hip[1] - 10), 0.45)
 
     if knee is not None:
         cv2.circle(image, knee, 9, (85, 225, 125), -1, cv2.LINE_AA)
