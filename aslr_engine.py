@@ -16,7 +16,7 @@ import math
 from typing import Any, Dict, Mapping, Sequence, Tuple
 
 
-ASLR_ENGINE_VERSION = "aslr-dedicated-yolo11m-robust-geometry-v7"
+ASLR_ENGINE_VERSION = "aslr-dedicated-yolo11m-geometry-side-agnostic-v8"
 ASLR_THRESHOLD_EVIDENCE_STATUS = (
     "provisional_flexilab_reference_bands_not_diagnostic_cutoffs"
 )
@@ -428,10 +428,17 @@ def analyze_aslr_v2(
         baseline_confidence = 0.0
         flags.append("body_axis_unavailable_image_horizontal_used")
 
+    # Raised ankles are sometimes assigned lower confidence than the resting
+    # ankle in strict side-view images, particularly after a COCO left/right
+    # label swap. Use a relaxed endpoint threshold, then require the complete
+    # reconstructed chain to satisfy the normal mean-confidence and geometry
+    # gates. This prevents a valid raised leg from disappearing before chain
+    # reconstruction while still rejecting isolated noisy ankle points.
+    endpoint_min_conf = max(0.08, keypoint_min_conf * 0.45)
     endpoints = []
     for ankle_idx, coco_label in ((15, "COCO_LEFT_ANKLE"), (16, "COCO_RIGHT_ANKLE")):
         ankle_confidence = _confidence(conf, ankle_idx)
-        if ankle_confidence < keypoint_min_conf:
+        if ankle_confidence < endpoint_min_conf:
             continue
         ankle = _point(xy, ankle_idx)
         vector = _vector(pelvis_center, ankle)
@@ -443,7 +450,7 @@ def analyze_aslr_v2(
             conf,
             ankle_idx,
             pelvis_center,
-            keypoint_min_conf=keypoint_min_conf,
+            keypoint_min_conf=endpoint_min_conf,
         )
         endpoints.append(
             {
@@ -708,10 +715,11 @@ def analyze_aslr_v2(
             "requested_side": requested_side,
             "side": requested_side,
             "detected_coco_side": detected_coco_side,
-            "side_identity_method": "workflow_side_with_endpoint_first_chain_reconstruction",
+            "side_identity_method": "workflow_label_with_geometry_selected_raised_chain",
             "measurement_engine_version": ASLR_ENGINE_VERSION,
             "angle_method": "robust_body_axis_consensus_with_verified_resting_chain_only",
             "chain_reconstruction_method": "raised_ankle_first_then_best_knee_and_hip_combination",
+            "endpoint_min_confidence": round(endpoint_min_conf, 3),
             "pelvic_anchor_method": "confidence_weighted_visible_hip_region",
             "source_orientation_requirement": "none",
             "body_baseline": baseline_public,
