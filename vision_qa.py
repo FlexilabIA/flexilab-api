@@ -14,7 +14,7 @@ import cv2
 import numpy as np
 
 
-VISION_QA_VERSION = "vision-qa-overlay-v1.3-aslr-two-line-axis"
+VISION_QA_VERSION = "vision-qa-overlay-v1.5-aslr-ankle-first-two-line"
 
 COCO_NAMES = [
     "nose",
@@ -212,7 +212,7 @@ def _draw_squat_measurement(image: np.ndarray, metrics: Mapping[str, Any]) -> No
 def _draw_aslr_measurement(image: np.ndarray, metrics: Mapping[str, Any]) -> None:
     """Draw exactly two ASLR measurement lines.
 
-    One straight body-reference line and one straight pelvis-to-raised-ankle
+    One straight body-reference line and one straight raised-hip-to-YOLO-ankle
     measurement line. The knee is shown as a validation point only.
     """
     selected_points = metrics.get("selected_limb_points") or {}
@@ -220,9 +220,11 @@ def _draw_aslr_measurement(image: np.ndarray, metrics: Mapping[str, Any]) -> Non
         selected_points = {}
 
     pelvis_value = selected_points.get("pelvis") or metrics.get("pelvis_center")
+    hip_value = selected_points.get("hip")
     ankle_value = selected_points.get("ankle")
     knee_value = selected_points.get("knee")
     pelvis = _point(pelvis_value) if pelvis_value else None
+    hip = _point(hip_value) if hip_value else pelvis
     ankle = _point(ankle_value) if ankle_value else None
     knee = _point(knee_value) if knee_value else None
 
@@ -241,14 +243,18 @@ def _draw_aslr_measurement(image: np.ndarray, metrics: Mapping[str, Any]) -> Non
         cv2.circle(image, pelvis, 10, (230, 100, 240), -1, cv2.LINE_AA)
         _put_label(image, "Pelvic anchor", (pelvis[0] + 10, pelvis[1] - 10), 0.45)
 
-    if pelvis is not None and ankle is not None:
-        cv2.line(image, pelvis, ankle, (70, 245, 245), 7, cv2.LINE_AA)
+    if hip is not None:
+        cv2.circle(image, hip, 9, (70, 245, 245), -1, cv2.LINE_AA)
+        _put_label(image, "Raised hip", (hip[0] + 10, hip[1] - 10), 0.42)
+
+    if hip is not None and ankle is not None:
+        cv2.line(image, hip, ankle, (70, 245, 245), 7, cv2.LINE_AA)
         cv2.circle(image, ankle, 10, (70, 245, 245), -1, cv2.LINE_AA)
-        _put_label(image, "Raised ankle", (ankle[0] + 10, ankle[1] - 10), 0.45)
+        _put_label(image, "Raised ankle (YOLO)", (ankle[0] + 10, ankle[1] - 10), 0.45)
 
     if knee is not None:
         cv2.circle(image, knee, 9, (85, 225, 125), -1, cv2.LINE_AA)
-        _put_label(image, "Knee check", (knee[0] + 10, knee[1] - 10), 0.40)
+        _put_label(image, "Raised knee check", (knee[0] + 10, knee[1] - 10), 0.40)
 
     analysis_pass = metrics.get("analysis_pass") or {}
     selected_pass = analysis_pass.get("selected_pass") or analysis_pass.get("mode") or "unknown"
@@ -258,7 +264,7 @@ def _draw_aslr_measurement(image: np.ndarray, metrics: Mapping[str, Any]) -> Non
     knee_text = f"{float(knee_angle):.1f}" if knee_angle is not None else "n/a"
     _put_label(
         image,
-        f"ASLR {metrics.get('requested_side', '')}: {float(metrics.get('aslr_angle', 0)):.1f} deg | knee {knee_text} deg | pass {selected_pass} | model {model_name}",
+        f"ASLR {metrics.get('requested_side', '')}: {float(metrics.get('aslr_angle', 0)):.1f} deg | body {float((metrics.get('body_baseline') or {}).get('image_angle_deg') or 0):.1f} deg | knee {knee_text} deg | pass {selected_pass} | model {model_name}",
         (18, 34),
         0.55,
     )
