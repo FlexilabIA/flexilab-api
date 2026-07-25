@@ -14,7 +14,7 @@ import cv2
 import numpy as np
 
 
-VISION_QA_VERSION = "vision-qa-overlay-v2.2-aslr-hybrid-resting-reference"
+VISION_QA_VERSION = "vision-qa-overlay-v2.3-aslr-body-axis-primary"
 
 COCO_NAMES = [
     "nose",
@@ -210,11 +210,11 @@ def _draw_squat_measurement(image: np.ndarray, metrics: Mapping[str, Any]) -> No
 
 
 def _draw_aslr_measurement(image: np.ndarray, metrics: Mapping[str, Any]) -> None:
-    """Draw the raised leg and the selected hybrid resting reference.
+    """Draw the invariant body-axis reference and the raised leg.
 
-    Pink: shared pelvic anchor to either the reliable resting ankle, an extended
-    resting-knee direction, or an extended shoulder-to-pelvis body axis.
-    Yellow: the same pelvic anchor to the true raised YOLO ankle.
+    Pink: shoulder-midpoint-to-pelvis body axis extended through the shared
+    pelvic anchor. Yellow: the same pelvic anchor to the true raised YOLO ankle.
+    Floor-leg landmarks, when coherent, are optional validation markers only.
     """
     selected_points = metrics.get("selected_limb_points") or {}
     resting_points = metrics.get("resting_limb_points") or {}
@@ -245,11 +245,9 @@ def _draw_aslr_measurement(image: np.ndarray, metrics: Mapping[str, Any]) -> Non
     reference_source = str(metrics.get("reference_source") or baseline.get("reference_source") or "unknown")
 
     reference_labels = {
-        "resting_ankle": "Resting ankle reference (YOLO)",
-        "resting_knee": "Resting knee direction (extended)",
-        "torso_axis_fallback": "Body-axis fallback",
+        "body_axis_primary": "Body-axis reference (primary)",
     }
-    reference_label = reference_labels.get(reference_source, "Resting reference")
+    reference_label = reference_labels.get(reference_source, "Body-axis reference")
 
     if reference_start is not None and reference_end is not None:
         cv2.line(image, reference_start, reference_end, (230, 100, 240), 6, cv2.LINE_AA)
@@ -266,10 +264,11 @@ def _draw_aslr_measurement(image: np.ndarray, metrics: Mapping[str, Any]) -> Non
         _put_label(image, "Raised ankle (YOLO)", (raised_ankle[0] + 10, raised_ankle[1] - 10), 0.45)
 
     if resting_knee is not None:
-        cv2.circle(image, resting_knee, 8, (215, 125, 235), -1, cv2.LINE_AA)
-        _put_label(image, "Resting knee", (resting_knee[0] + 10, resting_knee[1] - 10), 0.38)
-    if resting_ankle is not None and reference_source == "resting_ankle":
-        cv2.circle(image, resting_ankle, 8, (215, 125, 235), -1, cv2.LINE_AA)
+        cv2.circle(image, resting_knee, 7, (180, 145, 220), -1, cv2.LINE_AA)
+        _put_label(image, "Resting knee check (optional)", (resting_knee[0] + 10, resting_knee[1] - 10), 0.34)
+    if resting_ankle is not None:
+        cv2.circle(image, resting_ankle, 7, (180, 145, 220), -1, cv2.LINE_AA)
+        _put_label(image, "Resting ankle check (optional)", (resting_ankle[0] + 10, resting_ankle[1] - 10), 0.34)
 
     if raised_knee is not None:
         cv2.circle(image, raised_knee, 9, (85, 225, 125), -1, cv2.LINE_AA)
@@ -284,7 +283,7 @@ def _draw_aslr_measurement(image: np.ndarray, metrics: Mapping[str, Any]) -> Non
     reference_text = reference_source.replace("_", " ")
     _put_label(
         image,
-        f"ASLR {metrics.get('requested_side', '')}: {float(metrics.get('aslr_angle', 0)):.1f} deg | ref {reference_text} | knee {knee_text} deg | pass {selected_pass} | model {model_name}",
+        f"ASLR {metrics.get('requested_side', '')}: {float(metrics.get('aslr_angle', 0)):.1f} deg | ref body axis primary | knee {knee_text} deg | pass {selected_pass} | model {model_name}",
         (18, 34),
         0.52,
     )
