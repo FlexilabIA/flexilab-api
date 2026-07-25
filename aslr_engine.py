@@ -20,7 +20,7 @@ from typing import Any, Dict, Mapping, Sequence, Tuple
 
 import numpy as np
 
-ASLR_ENGINE_VERSION = "aslr-dedicated-yolo11m-shared-pelvic-anchor-two-leg-v19"
+ASLR_ENGINE_VERSION = "aslr-dedicated-yolo11m-postpair-resting-knee-advisory-v20"
 ASLR_THRESHOLD_EVIDENCE_STATUS = (
     "provisional_flexilab_reference_bands_not_diagnostic_cutoffs"
 )
@@ -1168,14 +1168,31 @@ def analyze_aslr_rotated_fullbody(
             "The model could not separate the raised and resting ankles. Retake the photo with both feet clearly visible.",
         )
 
-    if resting["knee_extension_angle"] < resting_knee_extension_min:
+    # In a strict side view the two knees can overlap and YOLO may place the
+    # resting-knee keypoint slightly off the visible joint. The ASLR value is
+    # calculated from the two pelvis-to-ankle axes, so a mildly imperfect knee
+    # keypoint must not invalidate an otherwise coherent measurement. Treat the
+    # preferred extension threshold as advisory and reject only an unmistakably
+    # flexed resting leg with a high-confidence, geometrically coherent knee.
+    resting_knee_angle = float(resting["knee_extension_angle"])
+    resting_knee_conf = float(resting["keypoint_confidence"]["knee"])
+    resting_knee_perp = float(resting["perpendicular_ratio"])
+    resting_knee_projection = float(resting["projection"])
+    resting_knee_hard_reject = (
+        resting_knee_angle < 112.0
+        and resting_knee_conf >= 0.55
+        and resting_knee_perp >= 0.16
+        and 0.12 <= resting_knee_projection <= 0.88
+    )
+    if resting_knee_hard_reject:
         raise ASLRQualityError(
-            "resting_knee_too_bent",
+            "resting_knee_clearly_bent",
             "Keep the resting knee straight and retake the photo.",
             {
-                "resting_knee_extension_angle": round(
-                    resting["knee_extension_angle"], 2
-                )
+                "resting_knee_extension_angle": round(resting_knee_angle, 2),
+                "resting_knee_confidence": round(resting_knee_conf, 3),
+                "resting_knee_line_distance_ratio": round(resting_knee_perp, 4),
+                "validation_mode": "post_pairing_severe_flexion_only",
             },
         )
     if raised["knee_extension_angle"] < max(
@@ -1279,6 +1296,8 @@ def analyze_aslr_rotated_fullbody(
     }
 
     flags = []
+    if resting_knee_angle < resting_knee_extension_min:
+        flags.append("resting_knee_below_preferred_extension_advisory")
     if raised["knee_extension_angle"] < raised_knee_extension_min:
         flags.append("raised_knee_below_preferred_extension")
     if not resting["same_coco_side"] or not raised["same_coco_side"]:
@@ -1376,6 +1395,7 @@ def analyze_aslr_rotated_fullbody(
                 "required_mean_conf": required_mean_conf,
                 "raised_knee_extension_min": raised_knee_extension_min,
                 "resting_knee_extension_min": resting_knee_extension_min,
+                "resting_knee_validation_mode": "advisory_below_preferred_hard_reject_only_below_112_with_high_confidence",
                 "both_true_ankles_required": True,
                 "full_body_rotated_inference_required": True,
                 "shared_pelvic_anchor_pairing_required": True,
