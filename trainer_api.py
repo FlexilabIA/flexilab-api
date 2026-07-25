@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+import logging
 import os
+import time
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel, Field
 
+
+logger = logging.getLogger("flexilab.trainer")
 
 FRONTEND_URL = os.environ.get(
     "FRONTEND_URL",
@@ -128,36 +132,76 @@ def create_trainer_router(supabase_client) -> APIRouter:
             raise HTTPException(status_code=404, detail="Client not found.")
         return response.data[0]
 
-    def latest_client_session(
-        link_id: str,
-        client_user_id: Optional[str],
-        trainer_id: str,
-    ) -> Optional[dict[str, Any]]:
-        query = (
-            supabase_client.table("sessions")
-            .select("id,created_at,status,composite_score")
-            .eq("trainer_id", trainer_id)
-            .eq("trainer_client_link_id", link_id)
-            .order("created_at", desc=True)
-            .limit(1)
-        )
-        response = query.execute()
-        if response.data:
-            return response.data[0]
+    def _read_with_retry(operation, label: str):
+        """Retry one transient read without repeating writes or user actions."""
+        last_error = None
+        for attempt in range(2):
+            try:
+                return operation()
+            except Exception as exc:
+                last_error = exc
+                if attempt == 0:
+                    time.sleep(0.12)
+                    continue
+                logger.warning("trainer_read_failed label=%s error=%s", label, exc)
+        raise last_error
 
-        # Compatibility for old active-client sessions created before link IDs were stored.
-        if client_user_id:
-            fallback = (
+    def latest_client_sessions_bulk(
+        rows: list[dict[str, Any]],
+        trainer_id: str,
+    ) -> dict[str, dict[str, Any]]:
+        """Return one latest session per client link without N+1 queries."""
+        link_ids = [str(row.get("id") or "") for row in rows if row.get("id")]
+        if not link_ids:
+            return {}
+
+        response = _read_with_retry(
+            lambda: (
                 supabase_client.table("sessions")
-                .select("id,created_at,status,composite_score")
+                .select("id,created_at,status,composite_score,trainer_client_link_id,user_id")
                 .eq("trainer_id", trainer_id)
-                .eq("user_id", client_user_id)
+                .in_("trainer_client_link_id", link_ids)
                 .order("created_at", desc=True)
-                .limit(1)
                 .execute()
+            ),
+            "latest_client_sessions",
+        )
+        latest: dict[str, dict[str, Any]] = {}
+        for session in response.data or []:
+            link_id = str(session.get("trainer_client_link_id") or "")
+            if link_id and link_id not in latest:
+                latest[link_id] = session
+
+        # Legacy compatibility in one bulk query for links created before the
+        # trainer_client_link_id field was persisted on sessions.
+        missing_rows = [row for row in rows if str(row.get("id") or "") not in latest]
+        user_to_link = {
+            str(row.get("client_user_id")): str(row.get("id"))
+            for row in missing_rows
+            if row.get("client_user_id") and row.get("id")
+        }
+        if user_to_link:
+            fallback = _read_with_retry(
+                lambda: (
+                    supabase_client.table("sessions")
+                    .select("id,created_at,status,composite_score,user_id")
+                    .eq("trainer_id", trainer_id)
+                    .in_("user_id", list(user_to_link))
+                    .order("created_at", desc=True)
+                    .execute()
+                ),
+                "legacy_latest_client_sessions",
             )
-            return fallback.data[0] if fallback.data else None
-        return None
+            seen_users: set[str] = set()
+            for session in fallback.data or []:
+                user_id = str(session.get("user_id") or "")
+                if not user_id or user_id in seen_users:
+                    continue
+                link_id = user_to_link.get(user_id)
+                if link_id:
+                    latest[link_id] = session
+                    seen_users.add(user_id)
+        return latest
 
     @router.post("/trainer/register")
     def register_trainer(
@@ -326,13 +370,15 @@ def create_trainer_router(supabase_client) -> APIRouter:
     @router.get("/trainer/clients")
     def list_clients(
         page: int = Query(default=1, ge=1),
-        page_size: int = Query(default=50, ge=1, le=100),
+        page_size: int = Query(default=20, ge=1, le=20),
         q: Optional[str] = None,
         user: dict[str, str] = Depends(require_user),
     ):
         require_trainer(user)
+        started = time.perf_counter()
         safe_page = max(1, int(page))
-        safe_size = max(1, min(int(page_size), 100))
+        search = str(q or "").strip().replace(",", " ")[:120]
+        safe_size = 20 if search else min(max(1, int(page_size)), 5)
         start = (safe_page - 1) * safe_size
         query = (
             supabase_client.table("trainer_clients")
@@ -340,24 +386,31 @@ def create_trainer_router(supabase_client) -> APIRouter:
             .eq("trainer_id", user["id"])
             .neq("status", "archived")
         )
-        search = str(q or "").strip().replace(",", " ")[:120]
         if search:
             query = query.or_(
                 f"client_name.ilike.%{search}%,invited_email.ilike.%{search}%"
             )
-        response = (
-            query.order("created_at", desc=True)
-            .range(start, start + safe_size - 1)
-            .execute()
+        response = _read_with_retry(
+            lambda: (
+                query.order("updated_at", desc=True)
+                .order("created_at", desc=True)
+                .range(start, start + safe_size - 1)
+                .execute()
+            ),
+            "trainer_clients",
         )
-        result = []
-        for row in response.data or []:
-            latest = latest_client_session(
-                str(row.get("id") or ""),
-                row.get("client_user_id"),
-                user["id"],
-            )
-            result.append({**row, "latest_screening": latest})
+        rows = response.data or []
+        latest_by_link = latest_client_sessions_bulk(rows, user["id"])
+        result = [
+            {**row, "latest_screening": latest_by_link.get(str(row.get("id") or ""))}
+            for row in rows
+        ]
+        logger.info(
+            "PERF path=/trainer/clients duration_ms=%d rows=%d search=%s",
+            round((time.perf_counter() - started) * 1000),
+            len(result),
+            bool(search),
+        )
         return {
             "clients": result,
             "page": safe_page,
@@ -368,39 +421,114 @@ def create_trainer_router(supabase_client) -> APIRouter:
 
     @router.get("/trainer/bootstrap")
     def trainer_bootstrap(user: dict[str, str] = Depends(require_user)):
-        """
-        Return the complete initial Trainer workspace in one authoritative response.
+        """Return one compact, authoritative Trainer workspace snapshot."""
+        started = time.perf_counter()
+        profile = require_trainer(user)
 
-        The frontend must not render default zero balances or empty client/history
-        states when only part of the workspace has loaded. If any required query
-        fails, the whole request fails and the frontend keeps its loading/retry
-        screen visible.
-        """
-        require_trainer(user)
-
-        overview_payload = overview(user=user)
-        clients_payload = list_clients(
-            page=1,
-            page_size=100,
-            q=None,
-            user=user,
-        )
-        self_payload = self_screenings(user=user)
-        token_history_payload = token_history(user=user)
-
-        return {
-            "overview": overview_payload,
-            "clients": clients_payload.get("clients", []),
-            "clients_page": clients_payload.get("page", 1),
-            "clients_page_size": clients_payload.get("page_size", 100),
-            "clients_total": clients_payload.get(
-                "total",
-                len(clients_payload.get("clients", [])),
+        clients_response = _read_with_retry(
+            lambda: (
+                supabase_client.table("trainer_clients")
+                .select("*", count="exact")
+                .eq("trainer_id", user["id"])
+                .neq("status", "archived")
+                .order("updated_at", desc=True)
+                .order("created_at", desc=True)
+                .limit(20)
+                .execute()
             ),
-            "self_screenings": self_payload.get("screenings", []),
-            "token_history": token_history_payload,
-            "loaded_at": _iso_now(),
+            "bootstrap_recent_clients",
+        )
+        recent_rows = clients_response.data or []
+        latest_by_link = latest_client_sessions_bulk(recent_rows, user["id"])
+        recent_clients = [
+            {**row, "latest_screening": latest_by_link.get(str(row.get("id") or ""))}
+            for row in recent_rows
+        ]
+        recent_clients.sort(
+            key=lambda row: str(
+                (row.get("latest_screening") or {}).get("created_at")
+                or row.get("updated_at")
+                or row.get("created_at")
+                or ""
+            ),
+            reverse=True,
+        )
+
+        client_counts = _read_with_retry(
+            lambda: (
+                supabase_client.table("trainer_clients")
+                .select("id,status")
+                .eq("trainer_id", user["id"])
+                .neq("status", "archived")
+                .execute()
+            ),
+            "bootstrap_client_counts",
+        )
+        completed = _read_with_retry(
+            lambda: (
+                supabase_client.table("sessions")
+                .select("id")
+                .eq("performed_by_user_id", user["id"])
+                .eq("status", "completed")
+                .execute()
+            ),
+            "bootstrap_completed_screenings",
+        )
+        rewards = _read_with_retry(
+            lambda: (
+                supabase_client.table("trainer_referral_rewards")
+                .select("tokens_granted")
+                .eq("trainer_id", user["id"])
+                .execute()
+            ),
+            "bootstrap_referral_rewards",
+        )
+        personal = _read_with_retry(
+            lambda: (
+                supabase_client.table("sessions")
+                .select("id,created_at,status,composite_score,user_id,user_email")
+                .eq("user_id", user["id"])
+                .eq("performed_by_user_id", user["id"])
+                .is_("trainer_client_link_id", "null")
+                .in_("status", ["in_progress", "completed"])
+                .order("created_at", desc=True)
+                .limit(6)
+                .execute()
+            ),
+            "bootstrap_self_screenings",
+        )
+        tokens, expires_at = remaining_tokens(user["id"])
+        all_clients = client_counts.data or []
+        overview_payload = {
+            "trainer": profile,
+            "tokens_remaining": tokens,
+            "tokens_expires_at": expires_at,
+            "total_clients": len(all_clients),
+            "active_clients": sum(1 for row in all_clients if row.get("status") == "active"),
+            "completed_screenings": len(completed.data or []),
+            "referral_tokens_earned": sum(
+                int(row.get("tokens_granted") or 0) for row in rewards.data or []
+            ),
         }
+
+        payload = {
+            "overview": overview_payload,
+            "clients": recent_clients[:5],
+            "clients_page": 1,
+            "clients_page_size": 5,
+            "clients_total": len(all_clients),
+            "self_screenings": personal.data or [],
+            # Full history is requested only when the Tokens page is opened.
+            "token_history": {"cycles": [], "referral_rewards": []},
+            "loaded_at": _iso_now(),
+            "bootstrap_version": "trainer-bootstrap-v2-recent-five",
+        }
+        logger.info(
+            "PERF path=/trainer/bootstrap duration_ms=%d recent_clients=%d",
+            round((time.perf_counter() - started) * 1000),
+            len(payload["clients"]),
+        )
+        return payload
 
     @router.post("/trainer/clients")
     def create_client(payload: TrainerClientCreate, user: dict[str, str] = Depends(require_user)):
