@@ -14,7 +14,7 @@ import cv2
 import numpy as np
 
 
-VISION_QA_VERSION = "vision-qa-overlay-v1.6-aslr-common-hip-two-line"
+VISION_QA_VERSION = "vision-qa-overlay-v1.7-aslr-ear-hip-two-line"
 
 COCO_NAMES = [
     "nose",
@@ -243,6 +243,12 @@ def _draw_aslr_measurement(image: np.ndarray, metrics: Mapping[str, Any]) -> Non
 
     if body_start is not None and body_end is not None:
         cv2.line(image, body_start, body_end, (230, 100, 240), 6, cv2.LINE_AA)
+        origin_value = baseline.get("reference_origin") if isinstance(baseline, Mapping) else None
+        origin_label = str((baseline.get("reference_origin_label") if isinstance(baseline, Mapping) else None) or "Body")
+        if origin_value:
+            origin_point = _point(origin_value)
+            cv2.circle(image, origin_point, 9, (230, 100, 240), -1, cv2.LINE_AA)
+            _put_label(image, f"{origin_label.title()} reference", (origin_point[0] + 10, origin_point[1] - 10), 0.42)
         _put_label(image, "Body reference", (body_start[0] + 10, body_start[1] - 10), 0.45)
 
     if hip is not None and ankle is not None:
