@@ -37,7 +37,14 @@ import copy
 import httpx
 from importlib.metadata import PackageNotFoundError, version as package_version
 from datetime import datetime, timedelta, timezone
-from aslr_engine import ASLRQualityError, ASLR_ENGINE_VERSION, analyze_aslr_v2
+from aslr_engine import (
+    ASLRQualityError,
+    ASLR_ENGINE_VERSION,
+    ASLR_RED_MAX_DEG,
+    ASLR_YELLOW_MAX_DEG,
+    analyze_aslr_v2,
+    make_aslr_thresholds,
+)
 from vision_qa import VISION_QA_VERSION, build_vision_qa_payload
 # FlexiLab V2 backend architecture imports.
 # Old engines remain in the repository for rollback, but /program now uses:
@@ -364,8 +371,8 @@ async def request_timing_middleware(request, call_next):
 def health():
     return {
         "ok": True,
-        "patch_version": "V101.28.3-aslr-dedicated-yolo11m",
-        "base_patch": "V101.28.2-aslr-dual-orientation",
+        "patch_version": "V101.28.4-aslr-thresholds-60-75",
+        "base_patch": "V101.28.3-aslr-dedicated-yolo11m",
         "exercise_library_mode": EXERCISE_LIBRARY_MODE,
         "exercise_library_path": EXERCISE_LIBRARY_PATH,
         "exercise_library_count": len(EXERCISE_LIBRARY or []),
@@ -388,6 +395,12 @@ def health():
             "resting_knee_extension_min": ASLR_RESTING_KNEE_EXTENSION_MIN,
             "resting_leg_max_angle": ASLR_RESTING_LEG_MAX_ANGLE,
             "visual_thresholds_preserved": True,
+            "visual_band_layout": "equal_thirds",
+            "classification_bands_deg": {
+                "red": "<60",
+                "yellow": "60-75_inclusive",
+                "green": ">75",
+            },
             "source_orientation_requirement": "none",
             "chain_strategy": "dedicated_yolo11m_dual_orientation_then_endpoint_chain",
             "pose_passes": ["original", "rotated_90_clockwise"],
@@ -408,7 +421,7 @@ def health():
 @app.get("/library_status")
 def library_status():
     return {
-        "patch_version": "V101.28.3-aslr-dedicated-yolo11m",
+        "patch_version": "V101.28.4-aslr-thresholds-60-75",
         "exercise_library_mode": EXERCISE_LIBRARY_MODE,
         "exercise_library_path": EXERCISE_LIBRARY_PATH,
         "exercise_library_count": len(EXERCISE_LIBRARY or []),
@@ -1118,7 +1131,7 @@ def _fallback_metric_rating(test_type, metric_key, value):
     if test_type in {"shoulder_right", "shoulder_left"}:
         return "red" if number < 160 else "yellow" if number < 170 else "green"
     if test_type in {"aslr_right", "aslr_left"}:
-        return "red" if number < 45 else "yellow" if number < 70 else "green"
+        return "red" if number < ASLR_RED_MAX_DEG else "yellow" if number <= ASLR_YELLOW_MAX_DEG else "green"
     if test_type == "squat" and metric_key == "knee_angle":
         return "green" if number < 95 else "yellow" if number < 110 else "red"
     if test_type == "squat" and metric_key == "trunk_lean":
@@ -1127,12 +1140,19 @@ def _fallback_metric_rating(test_type, metric_key, value):
 
 
 def _screening_metric_rating(screening, threshold_key, metric_key, column_key=None):
+    value = _metric_value(screening, metric_key, column_key)
+
+    # ASLR thresholds were recalibrated in V101.28.4. Recompute the rating from
+    # the measured angle so historical rows with the previous 45°/70° payload
+    # are displayed consistently under the current 60°/75° policy.
+    if screening.get("test_type") in {"aslr_right", "aslr_left"}:
+        return _fallback_metric_rating(screening.get("test_type"), metric_key, value)
+
     thresholds = _as_dict(screening.get("thresholds"))
     threshold = _as_dict(thresholds.get(threshold_key))
     rating = str(threshold.get("rating") or "").strip().lower()
     if rating in V3_BAND_SCORES:
         return rating
-    value = _metric_value(screening, metric_key, column_key)
     return _fallback_metric_rating(screening.get("test_type"), metric_key, value)
 
 
@@ -3387,13 +3407,15 @@ def report(
         if aslr_r:
             mr = aslr_r.get("metrics") or {}
             tr = aslr_r.get("thresholds") or {}
-            thr = thr_item(tr, "aslr_angle")
+            aslr_value = _safe_number(mr.get("aslr_angle"))
+            thr = make_aslr_thresholds(aslr_value) if aslr_value is not None else thr_item(tr, "aslr_angle")
             items.append(item_obj("aslr_right_angle", mr.get("aslr_angle"), "°", (thr or {}).get("rating"), thr))
 
         if aslr_l:
             ml = aslr_l.get("metrics") or {}
             tl = aslr_l.get("thresholds") or {}
-            thr = thr_item(tl, "aslr_angle")
+            aslr_value = _safe_number(ml.get("aslr_angle"))
+            thr = make_aslr_thresholds(aslr_value) if aslr_value is not None else thr_item(tl, "aslr_angle")
             items.append(item_obj("aslr_left_angle", ml.get("aslr_angle"), "°", (thr or {}).get("rating"), thr))
 
         if aslr_r and aslr_l:
