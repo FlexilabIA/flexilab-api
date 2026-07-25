@@ -400,7 +400,7 @@ def analyze_aslr_v2(
     if len(xy) < 17 or len(conf) < 17:
         raise ASLRQualityError(
             "missing_pose",
-            "We could not identify the full leg. Retake the photo with the hips, both knees and both ankles visible.",
+            "We couldn’t measure this position clearly. Keep the pelvis, both legs and both feet visible, then retake the photo.",
         )
 
     requested_side = str(side or "RIGHT").strip().upper()
@@ -414,7 +414,7 @@ def analyze_aslr_v2(
     if pelvis_center is None:
         raise ASLRQualityError(
             "pelvis_not_detected",
-            "We could not identify the hip region reliably. Keep the full pelvis and both legs visible, then retake the photo.",
+            "We couldn’t measure this position clearly. Keep the pelvis and both legs visible, then retake the photo.",
         )
 
     flags = []
@@ -461,7 +461,7 @@ def analyze_aslr_v2(
     if not endpoints:
         raise ASLRQualityError(
             "required_landmarks_low_confidence",
-            "We could not identify the raised foot or ankle clearly. Keep both feet visible, improve the lighting and retake the photo.",
+            "We couldn’t measure the raised leg clearly. Keep both feet visible and retake the photo in good lighting.",
             {"missing_region": "ankles"},
         )
 
@@ -479,7 +479,7 @@ def analyze_aslr_v2(
     if raised_endpoint["chain"] is None:
         raise ASLRQualityError(
             "raised_chain_not_reconstructed",
-            "We found the raised foot but could not connect it reliably to the knee and hip. Keep the full raised leg visible and retake the photo.",
+            "We couldn’t measure the full raised leg clearly. Keep the hip, knee and foot visible, then retake the photo.",
             {
                 "raised_ankle": _rounded_point(raised_endpoint["ankle"]),
                 "raised_ankle_confidence": round(raised_endpoint["ankle_confidence"], 3),
@@ -544,7 +544,7 @@ def analyze_aslr_v2(
     if not endpoints_are_distinct and raised_angle < 18.0:
         raise ASLRQualityError(
             "raised_ankle_not_detected",
-            "The raised foot could not be detected reliably. Keep both feet fully visible and retake the photo.",
+            "We couldn’t measure the raised leg clearly. Keep both feet fully visible, then retake the photo.",
             {
                 "detected_endpoint_count": len(endpoints),
                 "candidate_angle": round(raised_angle, 2),
@@ -554,7 +554,7 @@ def analyze_aslr_v2(
     if raised_angle < minimum_detectable_raise:
         raise ASLRQualityError(
             "raised_leg_not_detected",
-            "We could not confirm that one leg was raised. Retake at the highest comfortable position with the knee straight.",
+            "Raise one leg to your highest comfortable position, keep the knee straight and retake the photo.",
         )
 
     raised_knee_extension = float(raised_chain["knee_extension_angle"])
