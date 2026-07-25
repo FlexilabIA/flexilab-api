@@ -19,7 +19,7 @@ from typing import Any, Dict, Mapping, Sequence, Tuple
 import cv2
 import numpy as np
 
-ASLR_ENGINE_VERSION = "aslr-dedicated-yolo11m-horizontal-endpoint-v10"
+ASLR_ENGINE_VERSION = "aslr-dedicated-yolo11m-ear-shoulder-hip-axis-v11"
 ASLR_THRESHOLD_EVIDENCE_STATUS = (
     "provisional_flexilab_reference_bands_not_diagnostic_cutoffs"
 )
@@ -74,6 +74,106 @@ def _horizontal_angle(anchor: Tuple[float, float], endpoint: Tuple[float, float]
     dx = abs(float(endpoint[0] - anchor[0]))
     dy_up = max(0.0, float(anchor[1] - endpoint[1]))
     return max(0.0, min(90.0, math.degrees(math.atan2(dy_up, dx + 1e-6))))
+
+
+def _weighted_center(
+    xy: Sequence[Sequence[float]],
+    conf: Sequence[float],
+    indices: Sequence[int],
+    minimum_confidence: float = 0.08,
+) -> Tuple[Tuple[float, float] | None, float]:
+    visible = []
+    for index in indices:
+        confidence = _confidence(conf, index)
+        if confidence < minimum_confidence:
+            continue
+        visible.append((_point(xy, index), confidence))
+    if not visible:
+        return None, 0.0
+    weight = sum(confidence for _, confidence in visible)
+    center = (
+        sum(point[0] * confidence for point, confidence in visible) / max(weight, 1e-6),
+        sum(point[1] * confidence for point, confidence in visible) / max(weight, 1e-6),
+    )
+    return center, weight / len(visible)
+
+
+def _body_reference_axis(
+    xy: Sequence[Sequence[float]],
+    conf: Sequence[float],
+    pelvis: Tuple[float, float],
+) -> Dict[str, Any]:
+    """Fit one straight supine body axis through ear, shoulder and hip centers.
+
+    The final ASLR measurement uses only this fitted body line and the pelvis-to-
+    raised-ankle line. The knee is validation only and never forms the measured
+    angle.
+    """
+    ear, ear_conf = _weighted_center(xy, conf, (3, 4))
+    shoulder, shoulder_conf = _weighted_center(xy, conf, (5, 6))
+
+    anchors = []
+    if ear is not None:
+        anchors.append((ear, max(0.20, ear_conf * 0.85), 'ear_center'))
+    if shoulder is not None:
+        anchors.append((shoulder, max(0.30, shoulder_conf), 'shoulder_center'))
+    anchors.append((pelvis, 1.0, 'pelvis_center'))
+
+    if shoulder is None and ear is None:
+        raise ASLRQualityError(
+            'body_axis_not_detected',
+            'Keep the head, shoulders, pelvis and raised foot visible, then retake the photo.',
+        )
+
+    points = np.array([point for point, _, _ in anchors], dtype=float)
+    weights = np.array([weight for _, weight, _ in anchors], dtype=float)
+    centroid = np.average(points, axis=0, weights=weights)
+    centered = points - centroid
+    covariance = (centered * weights[:, None]).T @ centered / max(float(weights.sum()), 1e-6)
+    values, vectors = np.linalg.eigh(covariance)
+    direction = vectors[:, int(np.argmax(values))]
+
+    # Keep the axis directed from the head/shoulder region toward the pelvis so
+    # overlays are stable. The measured acute angle is direction-independent.
+    upper_anchor = ear if ear is not None else shoulder
+    if upper_anchor is not None:
+        expected = np.array([pelvis[0] - upper_anchor[0], pelvis[1] - upper_anchor[1]], dtype=float)
+        if float(np.dot(direction, expected)) < 0:
+            direction = -direction
+
+    norm = float(np.linalg.norm(direction))
+    if norm <= 1e-6:
+        raise ASLRQualityError('body_axis_invalid', 'Keep the upper body and pelvis visible, then retake the photo.')
+    direction = direction / norm
+
+    # Draw the line from the uppermost resolved body anchor to the pelvis. This is
+    # one straight reference line, not an ear-shoulder-hip triangle/polyline.
+    line_start = upper_anchor if upper_anchor is not None else shoulder
+    line_end = pelvis
+    axis_image_angle = math.degrees(math.atan2(direction[1], direction[0]))
+
+    return {
+        'method': 'weighted_pca_ear_shoulder_pelvis_straight_axis',
+        'ear': ear,
+        'shoulder': shoulder,
+        'pelvis': pelvis,
+        'line_start': line_start,
+        'line_end': line_end,
+        'direction': (float(direction[0]), float(direction[1])),
+        'image_angle_deg': float(axis_image_angle),
+        'confidence': max(0.0, min(1.0, (ear_conf * 0.25 if ear is not None else 0.0) + (shoulder_conf * 0.45 if shoulder is not None else 0.0) + 0.30)),
+        'anchors_used': [label for _, _, label in anchors],
+    }
+
+
+def _acute_angle_between_vectors(a: Tuple[float, float], b: Tuple[float, float]) -> float:
+    na = math.hypot(a[0], a[1])
+    nb = math.hypot(b[0], b[1])
+    if na <= 1e-6 or nb <= 1e-6:
+        return 0.0
+    cosine = abs((a[0] * b[0] + a[1] * b[1]) / (na * nb))
+    cosine = max(-1.0, min(1.0, cosine))
+    return max(0.0, min(90.0, math.degrees(math.acos(cosine))))
 
 
 def _score_from_reference_bands(angle: float) -> float:
@@ -261,6 +361,7 @@ def analyze_aslr_v2(
         sum(p[1] * c for _, p, c in visible_hips) / max(weight_sum, 1e-6),
     )
     pelvis_conf = weight_sum / len(visible_hips)
+    body_baseline = _body_reference_axis(xy, conf, pelvis)
 
     endpoint_min_conf = min(0.09, keypoint_min_conf)
     raw_endpoints = []
@@ -321,14 +422,16 @@ def analyze_aslr_v2(
     if skin is not None:
         skin_angle = _horizontal_angle(pelvis, skin["endpoint"])
 
-    angle_method = "pelvis_to_highest_pose_endpoint_against_image_horizontal"
     endpoint = selected["point"]
-    final_angle = pose_angle
+    endpoint_source = "pose_ankle"
     if skin_angle is not None and skin_angle >= pose_angle + 8.0:
-        final_angle = skin_angle
         endpoint = skin["endpoint"]
-        angle_method = "pelvis_to_skin_shape_endpoint_against_image_horizontal"
+        endpoint_source = "skin_shape_rescue"
         flags.append("skin_shape_endpoint_rescue_used")
+
+    raised_vector = (float(endpoint[0] - pelvis[0]), float(endpoint[1] - pelvis[1]))
+    final_angle = _acute_angle_between_vectors(body_baseline["direction"], raised_vector)
+    angle_method = "straight_body_axis_to_pelvis_raised_ankle_line"
 
     if final_angle < 8.0:
         raise ASLRQualityError("raised_leg_not_detected", "Raise one leg and keep the foot fully visible, then retake the photo.")
@@ -342,7 +445,7 @@ def analyze_aslr_v2(
 
     # Reliability reflects landmark quality and agreement with the visual rescue.
     selected_conf = float(selected["confidence"])
-    reliability = max(0.0, min(1.0, pelvis_conf * 0.35 + selected_conf * 0.45 + float(chain["chain_score"]) * 0.20))
+    reliability = max(0.0, min(1.0, pelvis_conf * 0.25 + selected_conf * 0.35 + float(chain["chain_score"]) * 0.20 + float(body_baseline["confidence"]) * 0.20))
     if skin_angle is not None and abs(skin_angle - pose_angle) <= 8.0:
         reliability = min(1.0, reliability + 0.08)
     elif skin_angle is not None and abs(skin_angle - pose_angle) > 18.0:
@@ -380,8 +483,21 @@ def analyze_aslr_v2(
             "measurement_engine_version": ASLR_ENGINE_VERSION,
             "angle_method": angle_method,
             "source_orientation_requirement": "original_normalized_photo_only",
-            "reference_axis": "image_horizontal",
-            "pose_endpoint_angle": round(pose_angle, 2),
+            "reference_axis": "ear_shoulder_pelvis_straight_body_axis",
+            "pose_endpoint_angle_against_image_horizontal": round(pose_angle, 2),
+            "endpoint_source": endpoint_source,
+            "body_baseline": {
+                "method": body_baseline["method"],
+                "ear": _rounded_point(body_baseline["ear"]) if body_baseline.get("ear") is not None else None,
+                "shoulder": _rounded_point(body_baseline["shoulder"]) if body_baseline.get("shoulder") is not None else None,
+                "pelvis": _rounded_point(pelvis),
+                "line_start": _rounded_point(body_baseline["line_start"]),
+                "line_end": _rounded_point(body_baseline["line_end"]),
+                "vector": {"x": round(body_baseline["direction"][0], 6), "y": round(body_baseline["direction"][1], 6)},
+                "image_angle_deg": round(body_baseline["image_angle_deg"], 2),
+                "confidence": round(body_baseline["confidence"], 3),
+                "anchors_used": body_baseline["anchors_used"],
+            },
             "skin_shape_endpoint_angle": round(skin_angle, 2) if skin_angle is not None else None,
             "measurement_reliability": round(reliability, 3),
             "quality_label": "good" if reliability >= 0.72 and not flags else "moderate",
@@ -403,7 +519,7 @@ def analyze_aslr_v2(
                 "points": selected_points,
                 "available": True,
                 "body_relative_angle": round(final_angle, 2),
-                "horizontal_angle": round(final_angle, 2),
+                "horizontal_angle": round(_horizontal_angle(pelvis, endpoint), 2),
                 "chain_score": round(float(chain["chain_score"]), 3),
                 "mean_confidence": round(float(chain["mean_confidence"]), 3),
                 "minimum_confidence": round(float(chain["minimum_confidence"]), 3),
