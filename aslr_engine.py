@@ -948,9 +948,30 @@ def _raised_leg_chain_candidates(
     keypoint_min_conf: float,
 ) -> list[Dict[str, Any]]:
     """Build plausible pelvis-knee-ankle chains without trusting COCO side labels."""
+    torso_length = math.hypot(*torso_vector)
+
+    # Guard against a classic pose-model failure mode: when the resting-leg
+    # ankle is occluded, the model still emits a high-confidence keypoint for
+    # it, and that keypoint often collapses onto (or very near) the visible
+    # raised leg instead of the real resting foot. Two "ankles" that sit
+    # implausibly close together are almost certainly one real physical point
+    # plus one hallucinated duplicate. In that case we only let the
+    # higher-confidence ankle index compete; the low-confidence duplicate is
+    # dropped instead of being scored as an independent candidate.
+    ankle_min_separation_px = max(20.0, 0.18 * torso_length)
+    excluded_ankle_idx: int | None = None
+    ankle_conf_15 = _confidence(conf, 15)
+    ankle_conf_16 = _confidence(conf, 16)
+    if ankle_conf_15 >= keypoint_min_conf and ankle_conf_16 >= keypoint_min_conf:
+        ankle_gap = _distance(_point(xy, 15), _point(xy, 16))
+        if ankle_gap < ankle_min_separation_px:
+            excluded_ankle_idx = 16 if ankle_conf_15 >= ankle_conf_16 else 15
+
     candidates: list[Dict[str, Any]] = []
     for knee_idx in (13, 14):
         for ankle_idx in (15, 16):
+            if ankle_idx == excluded_ankle_idx:
+                continue
             knee_conf = _confidence(conf, knee_idx)
             ankle_conf = _confidence(conf, ankle_idx)
             if ankle_conf < keypoint_min_conf:
@@ -970,6 +991,17 @@ def _raised_leg_chain_candidates(
             thigh_length = _distance(pelvis, knee)
             shank_length = _distance(knee, ankle)
             if thigh_length <= 2.0 or shank_length <= 2.0:
+                continue
+
+            # A true straight-leg chain has pelvis->ankle roughly equal to
+            # thigh + shank. If the "ankle" actually belongs to a different,
+            # nearby landmark (e.g. a hallucinated duplicate near the knee),
+            # this ratio collapses well below 1 even when the perpendicular
+            # and projection checks above happen to pass. Reject those chains
+            # outright rather than letting them compete on score.
+            segment_sum = thigh_length + shank_length
+            length_consistency_ratio = leg_length / max(segment_sum, 1e-6)
+            if length_consistency_ratio < 0.80:
                 continue
 
             knee_extension = _joint_angle(pelvis, knee, ankle)
@@ -998,9 +1030,14 @@ def _raised_leg_chain_candidates(
             leg_vector = _vector(pelvis, ankle)
             torso_separation = _acute_angle_between_vectors(torso_vector, leg_vector)
             directional_torso_alignment = _angle_between_vectors(torso_vector, leg_vector)
+            same_coco_side = (
+                (knee_idx, ankle_idx) == (13, 15)
+                or (knee_idx, ankle_idx) == (14, 16)
+            )
             raised_score = (
-                chain_score * 0.62
-                + _clamp((torso_separation - 10.0) / 75.0) * 0.38
+                chain_score * 0.60
+                + _clamp((torso_separation - 10.0) / 75.0) * 0.36
+                + (0.04 if same_coco_side else 0.0)
             )
             candidates.append({
                 "hip_idx": None,
@@ -1024,10 +1061,8 @@ def _raised_leg_chain_candidates(
                 "perpendicular_ratio": perpendicular_ratio,
                 "chain_score": chain_score,
                 "unbiased_chain_score": chain_score,
-                "same_coco_side": (
-                    (knee_idx, ankle_idx) == (13, 15)
-                    or (knee_idx, ankle_idx) == (14, 16)
-                ),
+                "same_coco_side": same_coco_side,
+                "length_consistency_ratio": length_consistency_ratio,
                 "available": available,
                 "source_label": f"PELVIS-K{knee_idx}-A{ankle_idx}",
                 "torso_separation_angle": torso_separation,
