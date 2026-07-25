@@ -372,7 +372,7 @@ async def request_timing_middleware(request, call_next):
 def health():
     return {
         "ok": True,
-        "patch_version": "V101.35.8-aslr-shared-pelvic-anchor",
+        "patch_version": "V101.35.9-aslr-postpair-knee-validation",
         "base_patch": "V101.28.4-aslr-thresholds-60-75",
         "exercise_library_mode": EXERCISE_LIBRARY_MODE,
         "exercise_library_path": EXERCISE_LIBRARY_PATH,
@@ -403,7 +403,7 @@ def health():
                 "green": ">75",
             },
             "source_orientation_requirement": "head_left_capture_protocol_internal_90_clockwise_inference",
-            "chain_strategy": "rotated_90_clockwise_fullbody_then_shared_pelvic_anchor_two_leg_pairing",
+            "chain_strategy": "rotated_90_clockwise_fullbody_shared_pelvic_anchor_then_postpair_knee_validation",
             "pose_passes": ["rotated_90_clockwise_fullbody_detection"],
             "aslr_inference_imgsz": 960,
             "measurement_anchor": "separate_anatomical_hip_origins_between_two_true_yolo_ankle_axes",
@@ -422,7 +422,7 @@ def health():
 @app.get("/library_status")
 def library_status():
     return {
-        "patch_version": "V101.35.8-aslr-shared-pelvic-anchor",
+        "patch_version": "V101.35.9-aslr-postpair-knee-validation",
         "exercise_library_mode": EXERCISE_LIBRARY_MODE,
         "exercise_library_path": EXERCISE_LIBRARY_PATH,
         "exercise_library_count": len(EXERCISE_LIBRARY or []),
