@@ -16,7 +16,7 @@ import math
 from typing import Any, Dict, Mapping, Sequence, Tuple
 
 
-ASLR_ENGINE_VERSION = "aslr-dedicated-yolo11m-thresholds-60-75-v6"
+ASLR_ENGINE_VERSION = "aslr-dedicated-yolo11m-robust-geometry-v7"
 ASLR_THRESHOLD_EVIDENCE_STATUS = (
     "provisional_flexilab_reference_bands_not_diagnostic_cutoffs"
 )
@@ -528,16 +528,76 @@ def analyze_aslr_v2(
 
     # A strict side-view ASLR does not provide two visually separable hips.
     # Measurement therefore starts from one confidence-weighted pelvic anchor.
+    # V7 never lets a lone ankle define the floor/resting baseline. The complete
+    # resting chain must be anatomically verified first; otherwise the stable
+    # shoulder-to-pelvis body axis is used.
     raised_measurement_vector = _vector(pelvis_center, raised_chain["ankle"])
-    if resting_endpoint is not None and endpoints_are_distinct:
-        final_baseline_vector = _vector(pelvis_center, resting_endpoint["ankle"])
-        final_baseline_method = "pelvis_anchor_to_resting_ankle"
+
+    resting_angle = None
+    resting_knee_extension = None
+    resting_verified = False
+    if resting_endpoint is not None and endpoints_are_distinct and resting_chain is not None:
+        resting_angle = _acute_angle_between(torso_vector, resting_endpoint["vector"])
+        resting_knee_extension = float(resting_chain["knee_extension_angle"])
+        resting_verified = (
+            float(resting_chain["chain_score"]) >= 0.42
+            and float(resting_chain["mean_confidence"]) >= max(0.28, required_mean_conf * 0.80)
+            and resting_knee_extension >= resting_knee_extension_min
+            and resting_angle <= resting_leg_max_angle
+        )
+
+    if resting_verified:
+        final_baseline_vector = _vector(pelvis_center, resting_chain["ankle"])
+        final_baseline_method = "verified_resting_chain_axis"
     else:
         final_baseline_vector = torso_vector
         final_baseline_method = baseline_method
-        flags.append("resting_ankle_not_independently_resolved")
+        flags.append("unverified_resting_chain_body_axis_used")
 
-    raised_angle = _acute_angle_between(final_baseline_vector, raised_measurement_vector)
+    raised_knee_extension = float(raised_chain["knee_extension_angle"])
+    if raised_knee_extension < raised_knee_extension_min:
+        raise ASLRQualityError(
+            "raised_knee_bent",
+            "The raised knee appears bent. Retake the photo while keeping the raised knee straight.",
+            {
+                "raised_knee_extension_angle": round(raised_knee_extension, 2),
+                "required_minimum": raised_knee_extension_min,
+            },
+        )
+
+    # Robust consensus from independent anatomical estimators. These remain
+    # rotation-invariant because all are measured relative to the body axis.
+    body_axis_angle = _acute_angle_between(torso_vector, raised_measurement_vector)
+    hip_axis_angle = _acute_angle_between(torso_vector, _vector(raised_chain["hip"], raised_chain["ankle"]))
+    thigh_axis_angle = _acute_angle_between(torso_vector, _vector(raised_chain["hip"], raised_chain["knee"]))
+    body_estimators = [body_axis_angle, hip_axis_angle, thigh_axis_angle]
+    ordered_estimators = sorted(body_estimators)
+    body_consensus_angle = ordered_estimators[len(ordered_estimators) // 2]
+    body_estimator_spread = max(body_estimators) - min(body_estimators)
+    if body_estimator_spread > 12.0:
+        raise ASLRQualityError(
+            "aslr_geometry_disagreement",
+            "We detected the full leg, but the landmarks do not agree on one reliable angle. Please retake the photo without changing your position.",
+            {
+                "body_axis_angle": round(body_axis_angle, 2),
+                "hip_axis_angle": round(hip_axis_angle, 2),
+                "thigh_axis_angle": round(thigh_axis_angle, 2),
+                "estimator_spread": round(body_estimator_spread, 2),
+            },
+        )
+
+    resting_reference_angle = None
+    if resting_verified:
+        resting_reference_angle = _acute_angle_between(final_baseline_vector, raised_measurement_vector)
+        if abs(resting_reference_angle - body_consensus_angle) <= 12.0:
+            raised_angle = (resting_reference_angle + body_consensus_angle) / 2.0
+        else:
+            # A verified-looking resting chain can still contain a swapped hip or
+            # diagonal ankle. Prefer the internally consistent body estimators.
+            raised_angle = body_consensus_angle
+            flags.append("resting_reference_disagreed_body_consensus")
+    else:
+        raised_angle = body_consensus_angle
     # A lone ankle close to the resting/body baseline is almost always the
     # resting ankle, not a severe-mobility result. Reject instead of saving a
     # false low score. A clearly elevated single endpoint remains measurable.
@@ -557,53 +617,22 @@ def analyze_aslr_v2(
             "Raise one leg to your highest comfortable position, keep the knee straight and retake the photo.",
         )
 
-    raised_knee_extension = float(raised_chain["knee_extension_angle"])
-    if raised_knee_extension < raised_knee_extension_min:
-        raise ASLRQualityError(
-            "raised_knee_bent",
-            "The raised knee appears bent. Retake the photo while keeping the raised knee straight.",
-            {
-                "raised_knee_extension_angle": round(raised_knee_extension, 2),
-                "required_minimum": raised_knee_extension_min,
-            },
-        )
-
-    resting_angle = None
-    resting_knee_extension = None
-    resting_verified = False
     candidate_limbs = [
         _public_chain("RAISED_ENDPOINT_CHAIN", raised_chain, raised_angle)
     ]
 
     if resting_endpoint is not None and endpoints_are_distinct:
-        resting_angle = _acute_angle_between(torso_vector, resting_endpoint["vector"])
         if resting_chain is not None:
             candidate_limbs.append(
-                _public_chain("RESTING_ENDPOINT_CHAIN", resting_chain, resting_angle)
+                _public_chain("RESTING_ENDPOINT_CHAIN", resting_chain, resting_angle or 0.0)
             )
-            resting_knee_extension = float(resting_chain["knee_extension_angle"])
-            if resting_chain["chain_score"] >= 0.42:
-                resting_verified = True
-                if resting_angle > resting_leg_max_angle:
-                    raise ASLRQualityError(
-                        "resting_leg_lifted",
-                        "The resting leg appears lifted. Keep it straight and flat on the floor, then retake the photo.",
-                        {
-                            "resting_leg_angle": round(resting_angle, 2),
-                            "maximum_allowed": resting_leg_max_angle,
-                        },
-                    )
-                if resting_knee_extension < resting_knee_extension_min:
-                    raise ASLRQualityError(
-                        "resting_knee_bent",
-                        "The resting knee appears bent. Keep the resting leg straight and flat on the floor, then retake the photo.",
-                        {
-                            "resting_knee_extension_angle": round(resting_knee_extension, 2),
-                            "required_minimum": resting_knee_extension_min,
-                        },
-                    )
-            else:
-                flags.append("resting_chain_geometry_uncertain")
+            if not resting_verified:
+                if resting_angle is not None and resting_angle > resting_leg_max_angle:
+                    flags.append("resting_leg_angle_above_verification_limit")
+                if resting_knee_extension is not None and resting_knee_extension < resting_knee_extension_min:
+                    flags.append("resting_knee_below_verification_limit")
+                if float(resting_chain["chain_score"]) < 0.42:
+                    flags.append("resting_chain_geometry_uncertain")
         else:
             flags.append("resting_chain_not_reconstructed")
     else:
@@ -681,11 +710,20 @@ def analyze_aslr_v2(
             "detected_coco_side": detected_coco_side,
             "side_identity_method": "workflow_side_with_endpoint_first_chain_reconstruction",
             "measurement_engine_version": ASLR_ENGINE_VERSION,
-            "angle_method": "single_pelvic_anchor_to_raised_ankle_relative_to_resting_ankle_or_body_axis",
+            "angle_method": "robust_body_axis_consensus_with_verified_resting_chain_only",
             "chain_reconstruction_method": "raised_ankle_first_then_best_knee_and_hip_combination",
             "pelvic_anchor_method": "confidence_weighted_visible_hip_region",
             "source_orientation_requirement": "none",
             "body_baseline": baseline_public,
+            "angle_estimators": {
+                "body_axis": round(body_axis_angle, 2),
+                "hip_to_ankle": round(hip_axis_angle, 2),
+                "thigh_axis": round(thigh_axis_angle, 2),
+                "body_consensus": round(body_consensus_angle, 2),
+                "verified_resting_reference": round(resting_reference_angle, 2) if resting_reference_angle is not None else None,
+                "spread": round(body_estimator_spread, 2),
+            },
+            "measurement_reliability": round(confidence_out, 3),
             "raised_knee_extension_angle": round(raised_knee_extension, 2),
             "resting_leg_angle": round(resting_angle, 2) if resting_angle is not None else None,
             "resting_knee_extension_angle": (
