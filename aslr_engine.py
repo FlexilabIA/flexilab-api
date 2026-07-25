@@ -20,7 +20,7 @@ from typing import Any, Dict, Mapping, Sequence, Tuple
 
 import numpy as np
 
-ASLR_ENGINE_VERSION = "aslr-dedicated-yolo11m-common-hip-body-axis-ankle-first-v15"
+ASLR_ENGINE_VERSION = "aslr-dedicated-yolo11m-ear-hip-common-vertex-v16"
 ASLR_THRESHOLD_EVIDENCE_STATUS = (
     "provisional_flexilab_reference_bands_not_diagnostic_cutoffs"
 )
@@ -154,54 +154,59 @@ def _fit_body_chain(
     shoulder_index: int,
     hip_index: int,
 ) -> Dict[str, Any] | None:
-    """Fit one straight subject axis through one ear, shoulder and hip side."""
+    """Build one subject reference axis from the same-side ear/shoulder to the hip.
+
+    Primary rule: ear -> hip.
+    Fallback rule: shoulder -> hip when the ear is not reliable enough.
+    The shoulder is still used as a validation anchor when the ear is available.
+    """
     shoulder_conf = _confidence(conf, shoulder_index)
     hip_conf = _confidence(conf, hip_index)
-    if shoulder_conf < 0.08 or hip_conf < 0.08:
-        return None
-
-    shoulder = _point(xy, shoulder_index)
-    hip = _point(xy, hip_index)
     ear_conf = _confidence(conf, ear_index)
-    ear = _point(xy, ear_index) if ear_conf >= 0.05 else None
-
-    anchors = [(shoulder, max(0.20, shoulder_conf), "shoulder")]
-    if ear is not None:
-        anchors.insert(0, (ear, max(0.10, ear_conf * 0.65), "ear"))
-    anchors.append((hip, max(0.25, hip_conf), "hip"))
-
-    points = np.asarray([p for p, _, _ in anchors], dtype=float)
-    weights = np.asarray([w for _, w, _ in anchors], dtype=float)
-    centroid = np.average(points, axis=0, weights=weights)
-    centered = points - centroid
-    covariance = (centered * weights[:, None]).T @ centered / max(float(weights.sum()), 1e-6)
-    values, vectors = np.linalg.eigh(covariance)
-    direction = vectors[:, int(np.argmax(values))]
-
-    upper = ear if ear is not None else shoulder
-    expected = np.asarray([hip[0] - upper[0], hip[1] - upper[1]], dtype=float)
-    if float(np.dot(direction, expected)) < 0:
-        direction = -direction
-    norm = float(np.linalg.norm(direction))
-    if norm <= 1e-6:
+    if hip_conf < 0.08 or max(ear_conf, shoulder_conf) < 0.08:
         return None
-    direction = direction / norm
 
-    projections = centered @ direction
-    line_start_arr = centroid + float(np.min(projections)) * direction
-    line_end_arr = centroid + float(np.max(projections)) * direction
-    line_start = (float(line_start_arr[0]), float(line_start_arr[1]))
-    line_end = (float(line_end_arr[0]), float(line_end_arr[1]))
+    hip = _point(xy, hip_index)
+    shoulder = _point(xy, shoulder_index) if shoulder_conf >= 0.08 else None
+    ear = _point(xy, ear_index) if ear_conf >= 0.08 else None
 
-    normal = np.asarray([-direction[1], direction[0]], dtype=float)
-    residuals = np.abs(centered @ normal)
-    body_length = max(1.0, _distance(upper, hip))
-    residual_ratio = float(np.average(residuals, weights=weights) / body_length)
+    if ear is not None:
+        origin = ear
+        origin_label = "ear"
+        origin_conf = ear_conf
+    elif shoulder is not None:
+        origin = shoulder
+        origin_label = "shoulder"
+        origin_conf = shoulder_conf
+    else:
+        return None
+
+    direction_arr = np.asarray([hip[0] - origin[0], hip[1] - origin[1]], dtype=float)
+    body_length = float(np.linalg.norm(direction_arr))
+    if body_length <= 1e-6:
+        return None
+    direction = direction_arr / body_length
+
+    validation_points = []
+    validation_weights = []
+    if origin_label == "ear" and shoulder is not None:
+        validation_points.append(shoulder)
+        validation_weights.append(max(0.20, shoulder_conf))
+    elif origin_label == "shoulder" and ear is not None:
+        validation_points.append(ear)
+        validation_weights.append(max(0.10, ear_conf * 0.5))
+
+    if validation_points:
+        normal = np.asarray([-direction[1], direction[0]], dtype=float)
+        centered = np.asarray(validation_points, dtype=float) - np.asarray(origin, dtype=float)
+        residuals = np.abs(centered @ normal)
+        residual_ratio = float(np.average(residuals, weights=np.asarray(validation_weights, dtype=float)) / max(body_length, 1.0))
+    else:
+        residual_ratio = 0.0
     collinearity = max(0.0, min(1.0, 1.0 - residual_ratio * 6.0))
-    mean_confidence = float(
-        np.mean([shoulder_conf, hip_conf] + ([ear_conf] if ear is not None else []))
-    )
-    score = mean_confidence * 0.68 + collinearity * 0.32
+
+    mean_confidence = float(np.mean([hip_conf, origin_conf] + ([shoulder_conf] if shoulder is not None else [])))
+    score = mean_confidence * 0.74 + collinearity * 0.26
 
     return {
         "side": label,
@@ -209,23 +214,47 @@ def _fit_body_chain(
         "shoulder": shoulder,
         "hip": hip,
         "ear_index": ear_index if ear is not None else None,
-        "shoulder_index": shoulder_index,
+        "shoulder_index": shoulder_index if shoulder is not None else None,
         "hip_index": hip_index,
-        "line_start": line_start,
-        "line_end": line_end,
+        "reference_origin": origin,
+        "reference_origin_label": origin_label,
+        "line_start": origin,
+        "line_end": hip,
         "direction": (float(direction[0]), float(direction[1])),
         "image_angle_deg": float(math.degrees(math.atan2(direction[1], direction[0]))),
         "confidence": max(0.0, min(1.0, score)),
         "collinearity": collinearity,
         "residual_ratio": residual_ratio,
-        "anchors_used": [name for _, _, name in anchors],
+        "anchors_used": [origin_label, "hip"] + (["shoulder_validation"] if shoulder is not None and origin_label == "ear" else []),
     }
+
+
+def _build_selected_hip_reference_axis(
+    xy: Sequence[Sequence[float]],
+    conf: Sequence[float],
+    selected_hip: Tuple[float, float],
+    selected_hip_idx: int,
+) -> Dict[str, Any] | None:
+    del selected_hip
+    if int(selected_hip_idx) == 11:
+        return _fit_body_chain(xy, conf, "COCO_LEFT_BODY", 3, 5, 11)
+    if int(selected_hip_idx) == 12:
+        return _fit_body_chain(xy, conf, "COCO_RIGHT_BODY", 4, 6, 12)
+    return None
 
 
 def _body_reference_axis(
     xy: Sequence[Sequence[float]],
     conf: Sequence[float],
+    *,
+    selected_hip: Tuple[float, float] | None = None,
+    selected_hip_idx: int | None = None,
 ) -> Dict[str, Any]:
+    if selected_hip is not None and selected_hip_idx is not None:
+        selected_axis = _build_selected_hip_reference_axis(xy, conf, selected_hip, selected_hip_idx)
+        if selected_axis is not None:
+            return selected_axis
+
     candidates = [
         _fit_body_chain(xy, conf, "COCO_LEFT_BODY", 3, 5, 11),
         _fit_body_chain(xy, conf, "COCO_RIGHT_BODY", 4, 6, 12),
@@ -283,16 +312,17 @@ def _reference_line_through_selected_hip(
 ) -> Dict[str, Any]:
     """Translate the fitted body direction through the selected raised hip.
 
-    The angle between two vectors is translation invariant, so this does not
-    alter the formula. It makes the visual and mathematical construction share
-    one exact vertex: the selected raised hip. The line begins near the ear and
-    extends toward the most distal confidently detected resting-foot endpoint.
+    The angle between two vectors is translation invariant, so the visual line
+    can be extended beyond the hip without changing the formula. The preferred
+    construction is: ear -> selected hip, then continue in the same direction
+    toward the resting foot. If the ear is unreliable, shoulder -> selected hip
+    becomes the fallback reference construction.
     """
     direction = (
         float(body_baseline["direction"][0]),
         float(body_baseline["direction"][1]),
     )
-    upper = body_baseline.get("ear") or body_baseline.get("shoulder")
+    upper = body_baseline.get("reference_origin") or body_baseline.get("ear") or body_baseline.get("shoulder")
     source_hip = body_baseline.get("hip") or selected_hip
     body_length = max(80.0, _distance(upper, source_hip) if upper is not None else 180.0)
 
@@ -345,7 +375,7 @@ def _reference_line_through_selected_hip(
         "distal_reference_point": distal_point,
         "distal_reference_index": distal_index,
         "distal_reference_confidence": distal_confidence,
-        "policy": "body_direction_translated_through_selected_raised_hip",
+        "policy": "ear_or_shoulder_to_selected_hip_then_extend_toward_resting_foot",
     }
 
 
@@ -536,11 +566,17 @@ def analyze_aslr_v2(
     resting_leg_max_angle: float = 15.0,
     **_: Any,
 ) -> Dict[str, Any]:
-    """Measure ASLR from a subject body axis to a genuine YOLO ankle.
+    """Measure ASLR from a subject reference line to a genuine YOLO ankle.
 
     Detection strategy:
-    1. Original-photo ear/shoulder/hip landmarks define one straight subject
-       reference axis, so camera tilt is corrected mathematically.
+    1. Provisional body direction is inferred from ear/shoulder/hip landmarks.
+    2. The raised endpoint is selected exactly as in the stable V101.28 model:
+       evaluate genuine YOLO ankle keypoints 15 and 16 first.
+    3. After the raised chain is selected, the final reference line is rebuilt
+       from the selected raised hip to the same-side ear. If the ear is weak,
+       the same-side shoulder becomes the fallback origin.
+    4. The pink line is then extended through the hip toward the resting foot,
+       while the yellow line remains the selected hip -> true YOLO ankle line.
     2. The raised endpoint is selected exactly as in the stable V101.28 model:
        evaluate genuine YOLO ankle keypoints 15 and 16 first.
     3. For each ankle, reconstruct the most plausible hip/knee chain from all
@@ -566,7 +602,7 @@ def analyze_aslr_v2(
         reference_xy = xy
         reference_conf = conf
 
-    body_baseline = _body_reference_axis(reference_xy, reference_conf)
+    provisional_body_baseline = _body_reference_axis(reference_xy, reference_conf)
     pelvis, pelvis_confidence = _pelvis_center(reference_xy, reference_conf)
 
     endpoint_candidates = []
@@ -588,7 +624,7 @@ def analyze_aslr_v2(
             continue
         leg_vector = _vector(chain["hip"], chain["ankle"])
         body_relative_angle = _acute_angle_between_vectors(
-            body_baseline["direction"],
+            provisional_body_baseline["direction"],
             leg_vector,
         )
         endpoint_candidates.append({
@@ -619,6 +655,49 @@ def analyze_aslr_v2(
     )
     selected_endpoint = endpoint_candidates[0]
     selected = selected_endpoint["chain"]
+
+    # Rebuild the final body reference from the selected raised hip so the
+    # displayed and computed reference line passes through the visible ear/hip
+    # pair whenever possible.
+    body_baseline = provisional_body_baseline
+    for _ in range(2):
+        refined_baseline = _body_reference_axis(
+            reference_xy,
+            reference_conf,
+            selected_hip=selected["hip"],
+            selected_hip_idx=int(selected["hip_idx"]),
+        )
+        reranked = []
+        for endpoint in endpoint_candidates:
+            endpoint_copy = dict(endpoint)
+            leg_vector = _vector(endpoint_copy["chain"]["hip"], endpoint_copy["chain"]["ankle"])
+            endpoint_copy["body_relative_angle"] = _acute_angle_between_vectors(
+                refined_baseline["direction"],
+                leg_vector,
+            )
+            reranked.append(endpoint_copy)
+        reranked.sort(
+            key=lambda item: (
+                item["body_relative_angle"],
+                item["chain"]["chain_score"],
+                item["ankle_confidence"],
+            ),
+            reverse=True,
+        )
+        body_baseline = refined_baseline
+        endpoint_candidates = reranked
+        new_selected_endpoint = endpoint_candidates[0]
+        new_selected = new_selected_endpoint["chain"]
+        if (
+            int(new_selected_endpoint["ankle_idx"]) == int(selected_endpoint["ankle_idx"])
+            and int(new_selected["hip_idx"]) == int(selected["hip_idx"])
+        ):
+            selected_endpoint = new_selected_endpoint
+            selected = new_selected
+            break
+        selected_endpoint = new_selected_endpoint
+        selected = new_selected
+
     final_angle = float(selected_endpoint["body_relative_angle"])
 
     if final_angle < 18.0:
@@ -689,11 +768,13 @@ def analyze_aslr_v2(
     )
 
     body_baseline_payload = {
-        "method": "ear_shoulder_hip_direction_translated_through_selected_raised_hip",
+        "method": "ear_to_selected_hip_with_shoulder_fallback_then_extended_toward_resting_foot",
         "side": body_baseline["side"],
         "ear": _rounded_point(body_baseline["ear"]),
         "shoulder": _rounded_point(body_baseline["shoulder"]),
         "pelvis": _rounded_point(body_baseline["hip"]),
+        "reference_origin": _rounded_point(body_baseline.get("reference_origin")),
+        "reference_origin_label": body_baseline.get("reference_origin_label"),
         "source_fit_line_start": _rounded_point(body_baseline["line_start"]),
         "source_fit_line_end": _rounded_point(body_baseline["line_end"]),
         "line_start": _rounded_point(common_reference["line_start"]),
@@ -762,10 +843,10 @@ def analyze_aslr_v2(
             "detected_coco_side": selected_endpoint["ankle_label"].replace("_ANKLE", ""),
             "side_identity_method": "workflow_label_plus_ankle_first_geometry",
             "measurement_engine_version": ASLR_ENGINE_VERSION,
-            "angle_method": "common_raised_hip_vertex_body_axis_to_true_yolo_ankle",
+            "angle_method": "common_raised_hip_vertex_ear_or_shoulder_reference_to_true_yolo_ankle",
             "source_orientation_requirement": "none_dual_orientation_pose_detection",
-            "reference_axis": "subject_body_direction_translated_through_selected_raised_hip",
-            "measurement_vertex_policy": "pink_reference_and_yellow_leg_line_share_selected_raised_hip",
+            "reference_axis": "ear_to_selected_hip_or_shoulder_fallback_extended_toward_resting_foot",
+            "measurement_vertex_policy": "pink_reference_uses_same_selected_hip_vertex_as_yellow_leg_line",
             "body_baseline": body_baseline_payload,
             "endpoint_source": "true_yolo_ankle_keypoint",
             "endpoint_policy": "ankle_indices_15_or_16_only_no_toe_no_skin_endpoint",
