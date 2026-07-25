@@ -248,7 +248,7 @@ aslr_model = _load_aslr_pose_model()
 
 app = FastAPI(
     title="FlexiLab Movement Intelligence API",
-    version="101.30.1",
+    version="101.32.0",
 )
 app.include_router(create_account_router(supabase))
 app.include_router(create_stripe_router(supabase))
@@ -371,7 +371,7 @@ async def request_timing_middleware(request, call_next):
 def health():
     return {
         "ok": True,
-        "patch_version": "V101.30.1-phase1-report-audit",
+        "patch_version": "V101.32.0-program-lifecycle",
         "base_patch": "V101.28.4-aslr-thresholds-60-75",
         "exercise_library_mode": EXERCISE_LIBRARY_MODE,
         "exercise_library_path": EXERCISE_LIBRARY_PATH,
@@ -421,7 +421,7 @@ def health():
 @app.get("/library_status")
 def library_status():
     return {
-        "patch_version": "V101.30.1-phase1-report-audit",
+        "patch_version": "V101.32.0-program-lifecycle",
         "exercise_library_mode": EXERCISE_LIBRARY_MODE,
         "exercise_library_path": EXERCISE_LIBRARY_PATH,
         "exercise_library_count": len(EXERCISE_LIBRARY or []),
@@ -1815,6 +1815,66 @@ def finalize_session(
         session_id,
     )
 
+    # Client-app lifecycle: when the user's previous program is already
+    # complete, a newly completed self-assessment immediately receives its new
+    # program. An unfinished program is never replaced automatically.
+    automatic_program = {
+        "generated": False,
+        "reason": "not_eligible",
+        "program_id": None,
+    }
+    client_owner_id = str(row.get("user_id") or "")
+    if client_owner_id and user["id"] == client_owner_id:
+        try:
+            existing_for_session = _program_for_screening(user["id"], session_id)
+            if existing_for_session:
+                automatic_program = {
+                    "generated": False,
+                    "reason": "already_generated_for_assessment",
+                    "program_id": str(existing_for_session.get("id")),
+                }
+            else:
+                previous_program = _current_program_row(user["id"])
+                previous_completion = (
+                    _program_completion_summary(previous_program)
+                    if previous_program
+                    else None
+                )
+                if previous_program and previous_completion["is_completed"]:
+                    generated_payload = _generate_program_for_session(
+                        session_id=session_id,
+                        lang="en",
+                        authorization=authorization,
+                    )
+                    automatic_program = {
+                        "generated": True,
+                        "reason": "previous_program_completed",
+                        "program_id": generated_payload.get("program_id"),
+                    }
+                elif previous_program:
+                    automatic_program = {
+                        "generated": False,
+                        "reason": "active_program_unfinished",
+                        "program_id": str(previous_program.get("id")),
+                        "remaining_sessions": previous_completion["remaining_sessions"],
+                    }
+                else:
+                    automatic_program = {
+                        "generated": False,
+                        "reason": "first_program_available_on_program_page",
+                        "program_id": None,
+                    }
+        except Exception as exc:
+            # Assessment completion and credit consumption remain authoritative;
+            # a program-generation failure must never invalidate the screening.
+            logger.exception("automatic_program_generation_failed session_id=%s", session_id)
+            automatic_program = {
+                "generated": False,
+                "reason": "generation_failed",
+                "error": str(exc),
+                "program_id": None,
+            }
+
     return {
         "session_id": session_id,
         "status": "completed",
@@ -1824,6 +1884,7 @@ def finalize_session(
             "credits_remaining",
             0,
         ),
+        "automatic_program": automatic_program,
     }
 
 
@@ -3891,6 +3952,196 @@ def resolve_corrective_program(
 
 
 
+def _program_for_screening(user_id: str, screening_session_id: str):
+    if not supabase or not user_id or not screening_session_id:
+        return None
+    response = (
+        supabase.table("corrective_programs")
+        .select(
+            "id,user_id,user_email,screening_session_id,program_version,language,"
+            "status,program_data,generated_at,completed_at,created_at"
+        )
+        .eq("user_id", user_id)
+        .eq("screening_session_id", str(screening_session_id))
+        .order("generated_at", desc=True)
+        .limit(1)
+        .execute()
+    )
+    rows = getattr(response, "data", None) or []
+    return rows[0] if rows else None
+
+
+def _program_progress_rows(program_id: str):
+    if not supabase or not program_id:
+        return []
+    response = (
+        supabase.table("program_session_progress")
+        .select(
+            "id,program_id,user_email,week_number,day_number,status,"
+            "started_at,completed_at,updated_at,completion_data"
+        )
+        .eq("program_id", str(program_id))
+        .order("week_number")
+        .order("day_number")
+        .execute()
+    )
+    return getattr(response, "data", None) or []
+
+
+def _program_total_sessions(program_row: dict) -> int:
+    data = program_row.get("program_data") if isinstance(program_row, dict) else {}
+    program_data = data.get("program") if isinstance(data, dict) and isinstance(data.get("program"), dict) else data
+    if not isinstance(program_data, dict):
+        return 12
+    return sum(
+        len(week.get("sessions") or [])
+        for week in (program_data.get("weeks") or [])
+        if isinstance(week, dict)
+    ) or 12
+
+
+def _program_completion_summary(program_row: dict, progress_rows=None) -> dict:
+    rows = progress_rows if progress_rows is not None else _program_progress_rows(program_row.get("id"))
+    completed_count = len([row for row in rows if row.get("status") == "completed"])
+    total_sessions = _program_total_sessions(program_row)
+    stored_completed = str(program_row.get("status") or "").lower() == "completed"
+    is_completed = stored_completed or completed_count >= total_sessions
+    return {
+        "is_completed": is_completed,
+        "completed_sessions": completed_count,
+        "total_sessions": total_sessions,
+        "remaining_sessions": max(0, total_sessions - completed_count),
+    }
+
+
+def _stored_program_response(program_row: dict, lang: str = "en") -> dict:
+    """Rebuild the public /program contract from a durable stored program."""
+    language = "en" if str(lang).lower().startswith("en") else "fr"
+    program_data = copy.deepcopy(program_row.get("program_data") or {})
+    if isinstance(program_data, dict):
+        program_data["program_id"] = str(program_row.get("id"))
+        program_data["generated_from_screening_id"] = str(program_row.get("screening_session_id"))
+        program_data.setdefault("generated_at", program_row.get("generated_at") or program_row.get("created_at"))
+        program_data = _v45_walk_program_i18n(program_data, language)
+    return {
+        "session_id": str(program_row.get("screening_session_id")),
+        "program_id": str(program_row.get("id")),
+        "generated_from_screening_id": str(program_row.get("screening_session_id")),
+        "program_generated_at": program_row.get("generated_at") or program_row.get("created_at"),
+        "language": language,
+        "program": program_data,
+        "prescription": program_data,
+        "resource_load_errors": RESOURCE_LOAD_ERRORS,
+        "storage_status": str(program_row.get("status") or "active"),
+        "api_contract_note": {
+            "program_is_canonical": True,
+            "prescription_is_legacy_alias": True,
+            "stored_program_reused": True,
+        },
+    }
+
+
+def _parse_datetime(value):
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except Exception:
+        return None
+
+
+def _session_created_at(session_id: str):
+    if not supabase or not session_id:
+        return None
+    response = (
+        supabase.table("sessions")
+        .select("id,created_at,status")
+        .eq("id", str(session_id))
+        .limit(1)
+        .execute()
+    )
+    rows = getattr(response, "data", None) or []
+    return _parse_datetime(rows[0].get("created_at")) if rows else None
+
+
+def _assessment_is_newer(latest_session: dict, program_row: dict | None) -> bool:
+    if not latest_session:
+        return False
+    if not program_row:
+        return True
+    if str(latest_session.get("id")) == str(program_row.get("screening_session_id")):
+        return False
+    latest_created = _parse_datetime(latest_session.get("created_at"))
+    source_created = _session_created_at(program_row.get("screening_session_id"))
+    if latest_created and source_created:
+        return latest_created > source_created
+    # The latest session query is authoritative and ordered newest first. If its
+    # ID differs from the program source, treat it as newer when timestamps are
+    # unavailable on legacy rows.
+    return True
+
+
+def _current_program_row(user_id: str):
+    """Return one current row without downloading the user's full history."""
+    if not supabase or not user_id:
+        return None
+
+    fields = (
+        "id,user_id,user_email,screening_session_id,program_version,language,"
+        "status,program_data,generated_at,completed_at,created_at"
+    )
+    active_response = (
+        supabase.table("corrective_programs")
+        .select(fields)
+        .eq("user_id", user_id)
+        .eq("status", "active")
+        .order("generated_at", desc=True)
+        .limit(1)
+        .execute()
+    )
+    active_rows = getattr(active_response, "data", None) or []
+    if active_rows:
+        return active_rows[0]
+
+    latest_response = (
+        supabase.table("corrective_programs")
+        .select(fields)
+        .eq("user_id", user_id)
+        .order("generated_at", desc=True)
+        .limit(1)
+        .execute()
+    )
+    latest_rows = getattr(latest_response, "data", None) or []
+    return latest_rows[0] if latest_rows else None
+
+
+def _program_generation_state(
+    user_id: str,
+    latest_session: dict,
+    current_row: dict | None,
+    progress_rows=None,
+) -> dict:
+    completion = _program_completion_summary(current_row, progress_rows) if current_row else {
+        "is_completed": False,
+        "completed_sessions": 0,
+        "total_sessions": 0,
+        "remaining_sessions": 0,
+    }
+    newer = _assessment_is_newer(latest_session, current_row)
+    current_status = str(current_row.get("status") or "") if current_row else None
+    can_generate = bool(latest_session and newer and current_row and not completion["is_completed"])
+    return {
+        "latest_assessment_id": latest_session.get("id") if latest_session else None,
+        "current_program_id": current_row.get("id") if current_row else None,
+        "current_program_status": current_status,
+        "current_program_source_assessment_id": current_row.get("screening_session_id") if current_row else None,
+        "has_newer_completed_assessment": newer,
+        "can_generate_from_latest": can_generate,
+        "automatic_generation_eligible": bool(latest_session and newer and (current_row is None or completion["is_completed"])),
+        **completion,
+    }
+
+
 def _latest_owned_session_for_user(user):
     completed = (
         supabase.table("sessions")
@@ -4036,26 +4287,16 @@ def me_bootstrap(lang: str = "en", authorization: str = Header(None)):
     }
     session = _latest_owned_session_for_user(user)
     program_summary = None
-    if session:
-        program_res = (
-            supabase.table("corrective_programs")
-            .select("id,screening_session_id,program_data,generated_at,status")
-            .eq("user_id", user["id"])
-            .eq("screening_session_id", session["id"])
-            .order("generated_at", desc=True)
-            .limit(1)
-            .execute()
-        )
-        row = program_res.data[0] if program_res.data else None
-        if row:
-            progress_res = (
-                supabase.table("program_session_progress")
-                .select("week_number,day_number,status")
-                .eq("program_id", row["id"])
-                .execute()
-            )
-            program_summary = _compact_program_summary(row.get("program_data"), progress_res.data or [])
-            program_summary["program_id"] = row.get("id")
+    current_program = _current_program_row(user["id"])
+    progress_rows = _program_progress_rows(current_program["id"]) if current_program else []
+    generation_state = _program_generation_state(
+        user["id"], session, current_program, progress_rows
+    )
+    if current_program:
+        program_summary = _compact_program_summary(current_program.get("program_data"), progress_rows)
+        program_summary["program_id"] = current_program.get("id")
+        program_summary["screening_session_id"] = current_program.get("screening_session_id")
+        program_summary["status"] = current_program.get("status")
     return {
         "account": {"id": user["id"], "email": user["email"]},
         "account_mode": {"is_trainer": False, "mode": "client"},
@@ -4065,6 +4306,7 @@ def me_bootstrap(lang: str = "en", authorization: str = Header(None)):
             "score": session.get("composite_score") if session else None,
             "created_at": session.get("created_at") if session else None,
             "program": program_summary,
+            "program_generation": generation_state,
         },
         "server_ms": round((time.perf_counter() - started) * 1000, 1),
     }
@@ -4072,38 +4314,182 @@ def me_bootstrap(lang: str = "en", authorization: str = Header(None)):
 
 @app.get("/me/program-overview")
 def me_program_overview(lang: str = "en", authorization: str = Header(None)):
+    """Return the correct active program without replacing unfinished progress.
+
+    Lifecycle rules:
+    - No program yet: generate from the latest completed assessment.
+    - Current program completed + newer assessment: generate automatically.
+    - Current program unfinished + newer assessment: keep it active and expose
+      a user-controlled generation action.
+    - Same assessment already used: reuse the stored program.
+    """
     total_started = time.perf_counter()
     phases = {}
+
     phase = time.perf_counter()
     user = authenticated_user(supabase, authorization)
     phases["auth"] = round((time.perf_counter() - phase) * 1000, 1)
+
     phase = time.perf_counter()
     entitlement = effective_entitlement(supabase, user["id"])
     phases["entitlements"] = round((time.perf_counter() - phase) * 1000, 1)
     if not entitlement.get("program_access"):
         raise HTTPException(status_code=402, detail={"code": "PROGRAM_ACCESS_REQUIRED"})
+
     phase = time.perf_counter()
-    session = _latest_owned_session_for_user(user)
+    latest_session = _latest_owned_session_for_user(user)
     phases["latest_session"] = round((time.perf_counter() - phase) * 1000, 1)
-    if not session:
+    if not latest_session:
         raise HTTPException(status_code=404, detail={"code": "NO_COMPLETED_SCREENING"})
+
     phase = time.perf_counter()
-    program_payload = program(session_id=session["id"], lang=lang, authorization=authorization)
-    phases["program"] = round((time.perf_counter() - phase) * 1000, 1)
-    program_id = program_payload.get("program_id") or session["id"]
+    current_row = _current_program_row(user["id"])
+    initial_current_id = str(current_row.get("id")) if current_row else None
+    initial_progress_rows = _program_progress_rows(initial_current_id) if initial_current_id else []
+    latest_program_row = _program_for_screening(user["id"], latest_session["id"])
+    phases["program_state"] = round((time.perf_counter() - phase) * 1000, 1)
+
+    auto_generated = False
+    generation_reason = None
+
+    # If a program already exists for the newest assessment, it is authoritative.
+    if latest_program_row:
+        current_row = latest_program_row
+    else:
+        lifecycle = _program_generation_state(
+            user["id"], latest_session, current_row, initial_progress_rows
+        )
+        if lifecycle["automatic_generation_eligible"]:
+            phase = time.perf_counter()
+            generated = _generate_program_for_session(
+                session_id=latest_session["id"],
+                lang=lang,
+                authorization=authorization,
+            )
+            phases["automatic_generation"] = round((time.perf_counter() - phase) * 1000, 1)
+            current_row = _program_for_screening(user["id"], latest_session["id"])
+            if not current_row:
+                # Supabase may be unavailable in local tests; keep the generated
+                # payload usable even when durable persistence is unavailable.
+                program_payload = generated
+                progress_payload = {
+                    "program_id": generated.get("program_id") or latest_session["id"],
+                    "screening_session_id": latest_session["id"],
+                    "progress": [],
+                }
+                state = {
+                    **lifecycle,
+                    "auto_generated": True,
+                    "generation_reason": "first_program" if lifecycle["current_program_id"] is None else "completed_program_and_new_assessment",
+                    "can_generate_from_latest": False,
+                    "has_newer_completed_assessment": False,
+                }
+                result = {
+                    "access": {"program_access": True},
+                    "latest_session": latest_session,
+                    "program": program_payload,
+                    "progress": progress_payload,
+                    "generation": state,
+                }
+                phases["total"] = round((time.perf_counter() - total_started) * 1000, 1)
+                result["timings_ms"] = phases
+                return result
+            auto_generated = True
+            generation_reason = (
+                "first_program"
+                if lifecycle["current_program_id"] is None
+                else "completed_program_and_new_assessment"
+            )
+
+    if not current_row:
+        raise HTTPException(status_code=404, detail={"code": "PROGRAM_NOT_AVAILABLE"})
+
     phase = time.perf_counter()
-    progress_payload = get_program_progress(program_id=program_id, authorization=authorization)
+    if initial_current_id and str(current_row.get("id")) == initial_current_id:
+        progress_rows = initial_progress_rows
+    else:
+        progress_rows = _program_progress_rows(current_row["id"])
     phases["progress"] = round((time.perf_counter() - phase) * 1000, 1)
+
+    state = _program_generation_state(
+        user["id"], latest_session, current_row, progress_rows
+    )
+    state["auto_generated"] = auto_generated
+    state["generation_reason"] = generation_reason
+
     result = {
         "access": {"program_access": True},
-        "latest_session": session,
-        "program": program_payload,
-        "progress": progress_payload,
+        "latest_session": latest_session,
+        "program": _stored_program_response(current_row, lang=lang),
+        "progress": {
+            "program_id": str(current_row["id"]),
+            "screening_session_id": current_row.get("screening_session_id"),
+            "progress": progress_rows,
+        },
+        "generation": state,
     }
     phases["total"] = round((time.perf_counter() - total_started) * 1000, 1)
-    logger.info("program_overview user_id=%s phases=%s", user["id"], phases)
+    logger.info("program_overview user_id=%s phases=%s generation=%s", user["id"], phases, state)
     result["timings_ms"] = phases
     return result
+
+
+@app.post("/programs/generate-latest")
+def generate_program_from_latest_assessment(
+    replace_current: bool = Form(False),
+    lang: str = Form("en"),
+    authorization: str = Header(None),
+):
+    """Generate once from the newest completed assessment.
+
+    The same assessment can never be used to create a second random program.
+    An unfinished active program requires explicit replacement confirmation.
+    """
+    language = "en" if str(lang).lower().startswith("en") else "fr"
+    user = authenticated_user(supabase, authorization)
+    entitlement = effective_entitlement(supabase, user["id"])
+    if not (entitlement.get("program_access") and entitlement.get("can_generate_program")):
+        raise HTTPException(status_code=402, detail={"code": "PROGRAM_ACCESS_REQUIRED"})
+
+    latest_session = _latest_owned_session_for_user(user)
+    if not latest_session:
+        raise HTTPException(status_code=404, detail={"code": "NO_COMPLETED_SCREENING"})
+
+    existing_latest = _program_for_screening(user["id"], latest_session["id"])
+    if existing_latest:
+        return {
+            "generated": False,
+            "reason": "LATEST_ASSESSMENT_ALREADY_USED",
+            "program": _stored_program_response(existing_latest, lang=language),
+        }
+
+    current_row = _current_program_row(user["id"])
+    if current_row and not _assessment_is_newer(latest_session, current_row):
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "NO_NEWER_COMPLETED_ASSESSMENT"},
+        )
+
+    completion = _program_completion_summary(current_row) if current_row else None
+    if current_row and not completion["is_completed"] and not replace_current:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "ACTIVE_PROGRAM_REPLACEMENT_CONFIRMATION_REQUIRED",
+                "remaining_sessions": completion["remaining_sessions"],
+            },
+        )
+
+    generated = _generate_program_for_session(
+        session_id=latest_session["id"],
+        lang=language,
+        authorization=authorization,
+    )
+    return {
+        "generated": True,
+        "reason": "USER_REPLACED_ACTIVE_PROGRAM" if current_row and not completion["is_completed"] else "NEWER_ASSESSMENT",
+        "program": generated,
+    }
 
 
 @app.get("/programs/{user_email}")
@@ -4276,8 +4662,7 @@ def save_program_progress(
     }
 
 
-@app.get("/program")
-def program(
+def _generate_program_for_session(
     session_id: str,
     lang: str = "fr",
     intake_json: str = None,
@@ -4311,6 +4696,13 @@ def program(
                 "message": "An active FlexiLab plan with corrective-program access is required.",
             },
         )
+
+    # A program is immutable for a given completed assessment. Reopening the
+    # Program page must reuse the durable program instead of generating a new
+    # exercise selection from the same results.
+    existing_program = _program_for_screening(program_user["id"], session_id)
+    if existing_program:
+        return _stored_program_response(existing_program, lang=lang)
 
     try:
         report_data = report(
@@ -4447,6 +4839,69 @@ def program(
 
     return result_payload
 
+
+
+@app.get("/program")
+def program(
+    session_id: str,
+    lang: str = "fr",
+    intake_json: str = None,
+    questionnaire_json: str = None,
+    authorization: str = Header(None),
+):
+    """Return the correct durable program under the lifecycle rules.
+
+    This compatibility endpoint no longer replaces an unfinished program merely
+    because a newer assessment exists. Explicit replacement uses the dedicated
+    POST endpoint after user confirmation.
+    """
+    language = "en" if str(lang).lower().startswith("en") else "fr"
+    user = authenticated_user(supabase, authorization)
+    entitlement = effective_entitlement(supabase, user["id"])
+    if not (entitlement.get("program_access") and entitlement.get("can_generate_program")):
+        raise HTTPException(status_code=402, detail={"code": "PROGRAM_ACCESS_REQUIRED"})
+
+    # Only the client who owns this screening can access its corrective program.
+    requested_session = require_owned_session(user, session_id)
+    if str(requested_session.get("user_id") or "") != user["id"]:
+        raise HTTPException(
+            status_code=403,
+            detail="Only the client who owns this screening can access its corrective program.",
+        )
+    if str(requested_session.get("status") or "").lower() != "completed":
+        raise HTTPException(status_code=409, detail={"code": "COMPLETED_ASSESSMENT_REQUIRED"})
+
+    existing = _program_for_screening(user["id"], session_id)
+    if existing:
+        return _stored_program_response(existing, lang=language)
+
+    latest_session = _latest_owned_session_for_user(user)
+    if not latest_session or str(latest_session.get("id")) != str(session_id):
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "PROGRAM_GENERATION_REQUIRES_LATEST_ASSESSMENT"},
+        )
+
+    current_row = _current_program_row(user["id"])
+    if current_row and _assessment_is_newer(latest_session, current_row):
+        completion = _program_completion_summary(current_row)
+        if not completion["is_completed"]:
+            response = _stored_program_response(current_row, lang=language)
+            response["generation"] = {
+                "has_newer_completed_assessment": True,
+                "can_generate_from_latest": True,
+                "remaining_sessions": completion["remaining_sessions"],
+                "latest_assessment_id": latest_session.get("id"),
+            }
+            return response
+
+    return _generate_program_for_session(
+        session_id=session_id,
+        lang=language,
+        intake_json=intake_json,
+        questionnaire_json=questionnaire_json,
+        authorization=authorization,
+    )
 
 
 @app.get("/history/{user_email}")
