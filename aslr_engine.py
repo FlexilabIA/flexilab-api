@@ -1,6 +1,6 @@
 """FlexiLab ASLR rotated full-body image-horizontal engine.
 
-V101.35.12 rotates a private full-body copy 90 degrees clockwise for YOLO pose
+V101.35.13 keeps the validated image-horizontal geometry and uses one private 90-degree-clockwise YOLO pose
 inference, inverse-maps the landmarks to the original photo, and measures the
 raised leg from a shared pelvic anchor. The raised endpoint must always be a
 true YOLO ankle keypoint. The reference is the deterministic horizontal image
@@ -19,7 +19,7 @@ from typing import Any, Dict, Mapping, Sequence, Tuple
 
 import numpy as np
 
-ASLR_ENGINE_VERSION = "aslr-dedicated-yolo11m-image-horizontal-primary-v23"
+ASLR_ENGINE_VERSION = "aslr-dedicated-yolo11m-image-horizontal-single-inference-v24"
 ASLR_THRESHOLD_EVIDENCE_STATUS = (
     "provisional_flexilab_reference_bands_not_diagnostic_cutoffs"
 )
@@ -1520,6 +1520,8 @@ def analyze_aslr_rotated_fullbody(
                 "shoulder_landmarks_used_for_angle": False,
                 "resting_landmarks_used_for_angle": False,
                 "full_body_rotated_inference_required": True,
+                "pose_inference_policy": "single_rotated_fullbody_inference_only",
+                "original_orientation_pose_inference_used": False,
                 "shared_pelvic_anchor_required": True,
                 "coco_side_labels_ignored": True,
                 "overlay_angle_consistency_max_error_deg": 0.05,

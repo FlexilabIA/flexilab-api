@@ -372,7 +372,7 @@ async def request_timing_middleware(request, call_next):
 def health():
     return {
         "ok": True,
-        "patch_version": "V101.35.12-aslr-image-horizontal-primary",
+        "patch_version": "V101.35.13-aslr-single-rotated-inference",
         "base_patch": "V101.28.4-aslr-thresholds-60-75",
         "exercise_library_mode": EXERCISE_LIBRARY_MODE,
         "exercise_library_path": EXERCISE_LIBRARY_PATH,
@@ -403,10 +403,10 @@ def health():
                 "green": ">75",
             },
             "source_orientation_requirement": "head_left_capture_protocol_internal_90_clockwise_inference",
-            "chain_strategy": "rotated_90_clockwise_fullbody_then_image_horizontal_primary",
-            "pose_passes": ["rotated_90_clockwise_fullbody_detection"],
+            "chain_strategy": "rotated_90_clockwise_single_inference_then_image_horizontal_primary",
+            "pose_passes": ["rotated_90_clockwise_single_fullbody_detection"],
             "aslr_inference_imgsz": 960,
-            "measurement_anchor": "single_shared_pelvic_anchor_body_axis_to_true_raised_ankle",
+            "measurement_anchor": "single_shared_pelvic_anchor_image_horizontal_to_true_raised_ankle",
             "dedicated_pose_model": ASLR_POSE_MODEL_NAME,
             "general_model_fallback": False,
         },
@@ -422,7 +422,7 @@ def health():
 @app.get("/library_status")
 def library_status():
     return {
-        "patch_version": "V101.35.12-aslr-image-horizontal-primary",
+        "patch_version": "V101.35.13-aslr-single-rotated-inference",
         "exercise_library_mode": EXERCISE_LIBRARY_MODE,
         "exercise_library_path": EXERCISE_LIBRARY_PATH,
         "exercise_library_count": len(EXERCISE_LIBRARY or []),
@@ -2472,28 +2472,59 @@ def run_yolo_analysis_from_bytes(img_bytes, test_type, capture_metadata=None):
     is_aslr = str(test_type).startswith("aslr")
 
     first_requested_imgsz = max(POSE_INFERENCE_IMGSZ, 960) if is_aslr else None
-    pose_detector = detect_aslr_pose_with_fallback if is_aslr else detect_pose_with_fallback
-    # V101.34: ASLR uses the original normalized photo only. The clinical
-    # angle is measured against image horizontal, so rotating the source before
-    # inference creates an unnecessary second coordinate system and was the
-    # root of inconsistent 30°/65°/80° results.
-    first_pose_image = img
-    first_prediction, first_threshold, first_imgsz = pose_detector(
-        first_pose_image,
-        inference_imgsz=first_requested_imgsz,
-    ) if is_aslr else pose_detector(
-        first_pose_image,
-        test_type,
-        inference_imgsz=first_requested_imgsz,
-    )
-    (
-        first_boxes,
-        first_areas,
-        first_box_confidences,
-        first_main_idx,
-        first_xy,
-        first_conf,
-    ) = _pose_arrays(first_prediction)
+    aslr_single_rotated_pass = None
+
+    if is_aslr:
+        # V101.35.13: ASLR performs exactly one pose-model inference. The full
+        # normalized image is rotated 90° clockwise privately so YOLO sees an
+        # upright person. All selected coordinates are then inverse-mapped to
+        # the untouched original image for scoring and display.
+        rotated_pose_image = cv2.rotate(img, cv2.ROTATE_90_CLOCKWISE)
+        first_prediction, first_threshold, first_imgsz = detect_aslr_pose_with_fallback(
+            rotated_pose_image,
+            inference_imgsz=first_requested_imgsz,
+        )
+        (
+            first_boxes,
+            first_areas,
+            first_box_confidences,
+            first_main_idx,
+            first_xy,
+            first_conf,
+        ) = _pose_arrays(first_prediction)
+        first_xy, first_boxes = _map_rotated_cw_pose_to_original(
+            first_xy,
+            first_boxes,
+            img.shape,
+        )
+        first_areas = np.array([
+            max(0.0, float(box[2] - box[0])) * max(0.0, float(box[3] - box[1]))
+            for box in first_boxes
+        ], dtype=float)
+        aslr_single_rotated_pass = {
+            "name": "rotated_90_clockwise_single_inference",
+            "xy": first_xy,
+            "conf": first_conf,
+            "boxes": first_boxes,
+            "box_confidences": first_box_confidences,
+            "main_idx": first_main_idx,
+            "threshold": first_threshold,
+            "imgsz": first_imgsz,
+        }
+    else:
+        first_prediction, first_threshold, first_imgsz = detect_pose_with_fallback(
+            img,
+            test_type,
+            inference_imgsz=first_requested_imgsz,
+        )
+        (
+            first_boxes,
+            first_areas,
+            first_box_confidences,
+            first_main_idx,
+            first_xy,
+            first_conf,
+        ) = _pose_arrays(first_prediction)
     if is_aslr and len(first_boxes) > 1:
         main_area = max(float(first_areas[first_main_idx]), 1.0)
         significant_others = [
@@ -2597,64 +2628,15 @@ def run_yolo_analysis_from_bytes(img_bytes, test_type, capture_metadata=None):
         body_reference_conf = np.array(final_conf, dtype=float, copy=True)
 
         # A true YOLO ankle is mandatory. Toe, shoe-contour and skin endpoints
-        # are never permitted.
-        limb_pose_passes = []
-
+        # are never permitted. Reuse the one already completed rotated pass;
+        # no original-orientation ASLR inference and no second YOLO call occur.
+        if aslr_single_rotated_pass is None:
+            raise ASLRQualityError(
+                "aslr_single_inference_unavailable",
+                "The ASLR pose inference could not be completed. Please retake the photo.",
+            )
+        limb_pose_passes = [aslr_single_rotated_pass]
         rotated_failure = None
-        try:
-            rotated_pose_image = cv2.rotate(img, cv2.ROTATE_90_CLOCKWISE)
-            rotated_prediction, rotated_threshold, rotated_imgsz = detect_aslr_pose_with_fallback(
-                rotated_pose_image,
-                inference_imgsz=max(POSE_INFERENCE_IMGSZ, 960),
-            )
-            (
-                rotated_boxes,
-                rotated_areas,
-                rotated_box_confidences,
-                rotated_main_idx,
-                rotated_xy,
-                rotated_conf,
-            ) = _pose_arrays(rotated_prediction)
-            rotated_xy, rotated_boxes = _map_rotated_cw_pose_to_original(
-                rotated_xy,
-                rotated_boxes,
-                img.shape,
-            )
-            rotated_areas = np.array([
-                max(0.0, float(box[2] - box[0])) * max(0.0, float(box[3] - box[1]))
-                for box in rotated_boxes
-            ], dtype=float)
-            if len(rotated_boxes) > 1:
-                main_area = max(float(rotated_areas[rotated_main_idx]), 1.0)
-                significant_others = [
-                    index
-                    for index, area in enumerate(rotated_areas)
-                    if index != rotated_main_idx
-                    and float(area) >= main_area * 0.35
-                    and float(rotated_box_confidences[index]) >= 0.25
-                ]
-                if significant_others:
-                    raise ASLRQualityError(
-                        "multiple_people",
-                        "More than one person is visible. Retake the photo with only the person being assessed in the frame.",
-                        {"significant_other_person_count": len(significant_others)},
-                    )
-
-            limb_pose_passes.append({
-                "name": "rotated_90_clockwise_limb_detection",
-                "xy": rotated_xy,
-                "conf": rotated_conf,
-                "boxes": rotated_boxes,
-                "box_confidences": rotated_box_confidences,
-                "main_idx": rotated_main_idx,
-                "threshold": rotated_threshold,
-                "imgsz": rotated_imgsz,
-            })
-        except ASLRQualityError:
-            raise
-        except Exception as exc:
-            rotated_failure = str(exc)
-            logger.warning("ASLR rotated true-ankle pass unavailable: %s", exc)
 
         evaluated_passes = []
         accepted_passes = []
@@ -2729,11 +2711,13 @@ def run_yolo_analysis_from_bytes(img_bytes, test_type, capture_metadata=None):
             selected_pass_name = selected_pass["name"]
 
         analysis_pass = {
-            "mode": "aslr_rotated_fullbody_image_horizontal_primary",
+            "mode": "aslr_single_rotated_inference_image_horizontal_primary",
             "selected_pass": selected_pass_name,
             "source_orientation_required": False,
             "pose_passes": evaluated_passes,
             "pose_pass_count": len(limb_pose_passes),
+            "pose_model_inference_count": 1,
+            "original_orientation_pose_inference_used": False,
             "rotated_pass_failure": rotated_failure,
             "fallback_used": False,
             "visual_endpoint_allowed": False,

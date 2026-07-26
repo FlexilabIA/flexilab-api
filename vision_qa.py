@@ -14,7 +14,7 @@ import cv2
 import numpy as np
 
 
-VISION_QA_VERSION = "vision-qa-overlay-v2.4-aslr-image-horizontal-primary"
+VISION_QA_VERSION = "vision-qa-overlay-v2.5-aslr-image-horizontal-single-inference"
 
 COCO_NAMES = [
     "nose",
