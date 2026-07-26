@@ -3,9 +3,9 @@ from typing import Any, Dict, List, Optional, Tuple
 from pathlib import Path
 from datetime import datetime, timezone
 from collections import Counter, defaultdict
-import json, math, re
+import json, math, re, unicodedata
 
-ENGINE_VERSION = "FlexiLab Clinical Prescription Engine v3.5-direct-priority-quota-symptom-aware-recovery"
+ENGINE_VERSION = "FlexiLab Clinical Prescription Engine v3.6-direct-priority-quota-symptom-aware-recovery-compat"
 
 # Direct movement families are the only exercises allowed to satisfy minimum
 # priority quotas. Supporting and integration exercises remain available for
@@ -137,40 +137,6 @@ def _band(score, lang):
     if score >= 60: return {"color":"orange","label":"Needs improvement" if lang=="en" else "À améliorer"}
     return {"color":"red","label":"Limited" if lang=="en" else "Limité"}
 
-def _questionnaire(payload):
-    payload = payload or {}
-    report = payload.get("report", payload) or {}
-    candidates = [
-        payload.get("intake_context"), payload.get("questionnaire"),
-        payload.get("questionnaire_json"), payload.get("pre_screening_questionnaire"),
-        payload.get("intake"), report.get("intake_context"), report.get("questionnaire")
-    ]
-    for q in candidates:
-        if isinstance(q, str):
-            try: q = json.loads(q)
-            except Exception: q = {}
-        if isinstance(q, dict) and q: return q
-    return {}
-
-
-def _truthy(value) -> bool:
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, (int, float)):
-        return value != 0
-    if isinstance(value, (list, tuple, set, dict)):
-        return bool(value)
-    return str(value or "").strip().lower() not in {"", "no", "none", "false", "0", "not_applicable", "n/a"}
-
-
-def _normalize_area(value) -> Optional[str]:
-    raw = str(value or "").strip().lower().replace("-", "_")
-    raw = re.sub(r"\s+", " ", raw)
-    if raw in {"", "none", "no specific tension", "aucune zone spécifique", "not_applicable"}:
-        return None
-    return AREA_ALIASES.get(raw) or AREA_ALIASES.get(raw.replace(" ", "_"))
-
-
 def _safe_dict(value) -> Dict[str, Any]:
     if isinstance(value, dict):
         return value
@@ -183,21 +149,203 @@ def _safe_dict(value) -> Dict[str, Any]:
     return {}
 
 
-def _normalize_symptom_status(value) -> str:
-    """Normalize questionnaire and movement-clearance answers.
+def _safe_json_value(value) -> Any:
+    if not isinstance(value, str):
+        return value
+    raw = value.strip()
+    if not raw or raw[0] not in "[{":
+        return value
+    try:
+        return json.loads(raw)
+    except Exception:
+        return value
 
-    The current frontend sends none / mild / moderate / significant for each
-    movement. The questionnaire sends no_pain / discomfort / pain. Generic
-    questionnaire "pain" is treated as moderate and non-sharp unless a red flag
-    or significant/sharp movement answer is also present.
+
+def _deep_merge(base: Dict[str, Any], incoming: Dict[str, Any]) -> Dict[str, Any]:
+    out = dict(base or {})
+    for key, value in (incoming or {}).items():
+        if isinstance(out.get(key), dict) and isinstance(value, dict):
+            out[key] = _deep_merge(out[key], value)
+        else:
+            out[key] = value
+    return out
+
+
+def _questionnaire_fragment(value) -> Dict[str, Any]:
+    """Unwrap common API/storage envelopes without discarding direct fields."""
+    obj = _safe_dict(value)
+    if not obj:
+        return {}
+    wrappers = (
+        "data", "answers", "responses", "questionnaire", "questionnaire_json",
+        "pre_screening_questionnaire", "intake", "intake_json", "intake_context",
+    )
+    merged: Dict[str, Any] = {}
+    for wrapper in wrappers:
+        nested = _safe_dict(obj.get(wrapper))
+        if nested:
+            merged = _deep_merge(merged, _questionnaire_fragment(nested))
+    for key, item in obj.items():
+        if key not in wrappers:
+            merged[key] = item
+    return merged
+
+
+def _apply_questionnaire_aliases(q: Dict[str, Any]) -> Dict[str, Any]:
+    aliases = {
+        "painLevel": "pain_level",
+        "painStatus": "pain_status",
+        "painScore": "pain_score",
+        "painIntensity": "pain_intensity",
+        "symptomLevel": "symptom_level",
+        "discomfortLevel": "discomfort_level",
+        "primaryTensionArea": "primary_tension_area",
+        "tensionAreas": "tension_areas",
+        "medicalRestriction": "medical_restriction",
+        "medicalRestrictions": "medical_restriction",
+        "recentInjury": "recent_injury",
+        "availableEquipment": "available_equipment",
+        "painClearance": "pain_clearance",
+        "movementPainClearance": "movement_pain_clearance",
+        "movementClearance": "movement_clearance",
+        "painContext": "pain_context",
+        "activityLevel": "activity_level",
+        "trainingLevel": "training_level",
+        "seatedHoursPerDay": "seated_hours_per_day",
+        "redFlags": "red_flags",
+        "safetyFlags": "safety_flags",
+        "painQuality": "pain_quality",
+        "painDescription": "pain_description",
+        "medicalNotes": "medical_notes",
+        "sharpPain": "sharp_pain",
+        "radiatingSymptoms": "radiating_symptoms",
+        "neurologicalSymptoms": "neurological_symptoms",
+        "recentTrauma": "recent_trauma",
+        "acuteInjury": "acute_injury",
+        "unexplainedWeakness": "unexplained_weakness",
+    }
+    out = dict(q or {})
+    for source, target in aliases.items():
+        if target not in out and source in out:
+            out[target] = out[source]
+    return out
+
+
+def _questionnaire(payload):
+    """Merge every supported questionnaire/intake representation.
+
+    Report/session values are loaded first and explicit top-level request values
+    override them. This preserves the base questionnaire while accepting a later
+    pain-clearance object supplied under a different compatibility field.
     """
+    payload = payload or {}
+    report = _safe_dict(payload.get("report"))
+    # Low-to-high precedence: legacy intake first, questionnaire_json last.
+    candidate_keys = (
+        "pre_screening_questionnaire", "intake", "intake_json",
+        "intake_context", "questionnaire", "questionnaire_json",
+    )
+    direct_shape_keys = (
+        "pain_level", "painLevel", "pain_score", "painScore", "painIntensity",
+        "tension_areas", "tensionAreas", "pain_clearance", "painClearance",
+        "medical_restriction", "medicalRestriction",
+    )
+    merged: Dict[str, Any] = {}
+    for container in (report, payload):
+        for key in candidate_keys:
+            fragment = _questionnaire_fragment(container.get(key))
+            if fragment:
+                merged = _deep_merge(merged, fragment)
+        # Also accept questionnaire-shaped fields attached directly to report or payload.
+        if any(key in container for key in direct_shape_keys):
+            direct = {key: value for key, value in container.items() if key != "report"}
+            merged = _deep_merge(merged, _questionnaire_fragment(direct))
+    return _apply_questionnaire_aliases(merged)
+
+
+def _normalize_token(value) -> str:
+    raw = str(value or "").strip().lower()
+    raw = unicodedata.normalize("NFKD", raw)
+    raw = "".join(ch for ch in raw if not unicodedata.combining(ch))
+    raw = raw.replace("’", "'")
+    raw = re.sub(r"[\\/|]+", "_", raw)
+    raw = re.sub(r"[^a-z0-9]+", "_", raw)
+    return raw.strip("_")
+
+
+_NEGATIVE_ANSWERS = {
+    "", "0", "false", "no", "none", "non", "n", "not_applicable", "na",
+    "n_a", "aucun", "aucune", "sans", "negative", "absent", "no_pain",
+    "none_reported", "nothing_reported", "no_issue", "no_issues",
+    "no_restriction", "no_restrictions", "no_medical_restriction",
+    "no_medical_restrictions", "no_recent_injury", "no_injury",
+    "aucune_restriction", "aucune_restriction_medicale", "pas_de_restriction",
+    "pas_de_restriction_medicale", "aucune_blessure", "pas_de_blessure",
+    "aucun_symptome", "aucun_drapeau_rouge",
+}
+
+
+def _truthy(value) -> bool:
+    value = _safe_json_value(value)
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value != 0
     if isinstance(value, dict):
-        if _truthy(value.get("sharp")) or _truthy(value.get("radiating")) or _truthy(value.get("numbness")):
-            return "high_risk_pain"
-        value = (
-            value.get("severity") or value.get("status") or value.get("level")
-            or value.get("pain") or value.get("value") or value.get("answer")
+        for key in ("value", "answer", "status", "selected", "checked", "enabled", "present", "yes"):
+            if key in value:
+                return _truthy(value.get(key))
+        return any(_truthy(item) for item in value.values())
+    if isinstance(value, (list, tuple, set)):
+        return any(_truthy(item) for item in value)
+    token = _normalize_token(value)
+    if token in _NEGATIVE_ANSWERS:
+        return False
+    negative_prefixes = ("no_", "not_", "pas_de_", "aucune_", "aucun_", "sans_")
+    negative_subjects = ("restriction", "injury", "blessure", "symptom", "pain", "douleur", "red_flag", "drapeau_rouge")
+    if token.startswith(negative_prefixes) and any(subject in token for subject in negative_subjects):
+        return False
+    return True
+
+
+def _normalize_area(value) -> Optional[str]:
+    raw = _normalize_token(value)
+    if raw in _NEGATIVE_ANSWERS or raw in {
+        "no_specific_tension", "aucune_zone_specifique", "nothing", "rien",
+    }:
+        return None
+    normalized_aliases = {_normalize_token(alias): area for alias, area in AREA_ALIASES.items()}
+    normalized_aliases.update({
+        "epaule": "shoulders", "epaules": "shoulders",
+        "haut_du_dos": "upper_back", "dos_superieur": "upper_back",
+        "bas_du_dos": "lower_back", "lombaires": "lower_back",
+        "ischio_jambier": "hamstrings", "ischio_jambiers": "hamstrings",
+        "ischios_jambiers": "hamstrings", "arriere_des_cuisses": "hamstrings",
+        "cheville_pied": "ankles_feet", "chevilles_pieds": "ankles_feet",
+        "ankles_and_feet": "ankles_feet", "ankle_foot": "ankles_feet",
+    })
+    return normalized_aliases.get(raw)
+
+
+def _normalize_symptom_status(value) -> str:
+    """Normalize raw labels, scores, localized text and structured answers."""
+    value = _safe_json_value(value)
+    if isinstance(value, dict):
+        risk_keys = (
+            "sharp", "is_sharp", "sharp_pain", "radiating", "radiation",
+            "radiating_symptoms", "numbness", "tingling", "instability",
+            "significant", "severe", "neurological", "neurological_symptoms",
         )
+        if any(_truthy(value.get(key)) for key in risk_keys if key in value):
+            return "high_risk_pain"
+        for key in (
+            "severity", "status", "level", "pain_level", "painLevel",
+            "pain_score", "painScore", "pain_intensity", "painIntensity",
+            "pain", "value", "answer",
+        ):
+            if key in value and value.get(key) not in (None, ""):
+                return _normalize_symptom_status(value.get(key))
+        return "no_pain"
     if isinstance(value, (int, float)):
         score = float(value)
         if score >= 7:
@@ -208,42 +356,65 @@ def _normalize_symptom_status(value) -> str:
             return "mild_discomfort"
         return "no_pain"
 
-    raw = str(value or "").strip().lower().replace("-", "_").replace(" ", "_")
-    if not raw or raw in {"none", "no", "no_pain", "false", "0", "clear"}:
+    raw_string = str(value or "").strip()
+    numeric_match = re.fullmatch(r"([0-9]+(?:[.,][0-9]+)?)\s*(?:/\s*10)?", raw_string)
+    if numeric_match:
+        return _normalize_symptom_status(float(numeric_match.group(1).replace(",", ".")))
+
+    raw = _normalize_token(raw_string)
+    negative_pain_prefixes = ("no_", "not_", "pas_de_", "aucune_", "aucun_", "sans_")
+    if raw.startswith(negative_pain_prefixes) and any(
+        token in raw for token in ("pain", "douleur", "discomfort", "inconfort", "gene", "sharp", "vive", "significant", "important")
+    ):
         return "no_pain"
-    if any(token in raw for token in (
-        "significant", "sharp", "severe", "high", "radiating", "numb",
-        "tingling", "instability", "acute_injury", "trauma",
-    )):
+    if raw in _NEGATIVE_ANSWERS or raw in {
+        "no_pain", "sans_douleur", "aucune_douleur", "pas_de_douleur",
+        "no_discomfort", "aucun_inconfort", "clear", "comfortable",
+    }:
+        return "no_pain"
+    high_tokens = (
+        "significant", "important", "importante", "sharp", "vive", "aigu",
+        "severe", "high", "radiat", "irradi", "numb", "engourdi", "tingl",
+        "fourmil", "instabil", "acute_injury", "trauma", "neurolog",
+    )
+    if any(token in raw for token in high_tokens):
         return "high_risk_pain"
-    if raw in {"moderate", "moderate_pain", "pain", "non_sharp_pain"} or "moderate" in raw:
+    if raw in {
+        "moderate", "modere", "moderee", "moderate_pain", "douleur_moderee",
+        "pain", "douleur", "non_sharp_pain", "moderate_non_sharp_pain",
+    } or "moderate" in raw or "modere" in raw:
         return "moderate_non_sharp_pain"
-    if any(token in raw for token in ("mild", "discomfort", "tension", "caution", "ache")):
+    mild_tokens = (
+        "mild", "leger", "legere", "discomfort", "inconfort", "gene",
+        "tension", "caution", "ache", "courbature", "sensitive",
+    )
+    if any(token in raw for token in mild_tokens):
         return "mild_discomfort"
     return "no_pain"
 
 
 def _movement_key(value) -> str:
-    raw = str(value or "").strip().lower().replace("-", "_").replace(" ", "_")
+    raw = _normalize_token(value)
     aliases = {
-        "deep_squat": "squat",
-        "squat_test": "squat",
+        "deep_squat": "squat", "squat_test": "squat", "deep_squat_test": "squat",
         "active_straight_leg_raise_right": "aslr_right",
         "active_straight_leg_raise_left": "aslr_left",
-        "aslr_r": "aslr_right",
-        "aslr_l": "aslr_left",
+        "active_straight_leg_raise_r": "aslr_right",
+        "active_straight_leg_raise_l": "aslr_left",
+        "aslr_r": "aslr_right", "aslr_l": "aslr_left",
+        "right_aslr": "aslr_right", "left_aslr": "aslr_left",
         "shoulder_mobility_right": "shoulder_right",
         "shoulder_mobility_left": "shoulder_left",
-        "right_shoulder": "shoulder_right",
-        "left_shoulder": "shoulder_left",
-        "side_posture": "posture_side",
+        "right_shoulder": "shoulder_right", "left_shoulder": "shoulder_left",
+        "shoulder_right_test": "shoulder_right", "shoulder_left_test": "shoulder_left",
+        "side_posture": "posture_side", "posture_side_test": "posture_side",
     }
     if raw in aliases:
         return aliases[raw]
     if "aslr" in raw or "straight_leg" in raw:
-        return "aslr_left" if "left" in raw or raw.endswith("_l") else "aslr_right"
-    if "shoulder" in raw:
-        return "shoulder_left" if "left" in raw or raw.endswith("_l") else "shoulder_right"
+        return "aslr_left" if "left" in raw or "gauche" in raw or raw.endswith("_l") else "aslr_right"
+    if "shoulder" in raw or "epaule" in raw:
+        return "shoulder_left" if "left" in raw or "gauche" in raw or raw.endswith("_l") else "shoulder_right"
     if "squat" in raw:
         return "squat"
     if "posture" in raw:
@@ -260,48 +431,65 @@ def _movement_side(movement: str) -> Optional[str]:
     return None
 
 
+def _medical_restriction_present(q: Dict[str, Any]) -> bool:
+    for key in (
+        "medical_restriction", "medical_restrictions", "recent_injury",
+        "medicalRestriction", "medicalRestrictions", "recentInjury",
+    ):
+        if key in q and q.get(key) not in (None, ""):
+            return _truthy(q.get(key))
+    labels = _safe_dict(q.get("labels"))
+    for key in ("medical_restriction", "medicalRestriction", "medical"):
+        if key in labels:
+            return _truthy(labels.get(key))
+    return False
+
+
 def _red_flags(q: Dict[str, Any]) -> List[str]:
     q = q or {}
     found: List[str] = []
-    if _truthy(q.get("medical_restriction")):
+    if _medical_restriction_present(q):
         found.append("medical_restriction")
     direct_flags = {
-        "sharp_pain": ("sharp_pain", "sharp"),
-        "radiating_symptoms": ("radiating_symptoms", "radiating", "radiation"),
+        "sharp_pain": ("sharp_pain", "sharp", "sharpPain"),
+        "radiating_symptoms": ("radiating_symptoms", "radiating", "radiation", "radiatingSymptoms"),
         "numbness": ("numbness", "numb"),
         "tingling": ("tingling",),
-        "instability": ("instability", "giving_way"),
-        "recent_trauma": ("recent_trauma", "trauma"),
-        "acute_injury": ("acute_injury", "injury"),
-        "neurological_symptoms": ("neurological_symptoms", "neurological"),
+        "instability": ("instability", "giving_way", "givingWay"),
+        "recent_trauma": ("recent_trauma", "trauma", "recentTrauma"),
+        "acute_injury": ("acute_injury", "injury", "acuteInjury"),
+        "neurological_symptoms": ("neurological_symptoms", "neurological", "neurologicalSymptoms"),
         "dizziness": ("dizziness", "dizzy"),
-        "unexplained_weakness": ("unexplained_weakness",),
+        "unexplained_weakness": ("unexplained_weakness", "unexplainedWeakness"),
     }
     for label, keys in direct_flags.items():
-        if any(_truthy(q.get(key)) for key in keys):
+        if any(_truthy(q.get(key)) for key in keys if key in q):
             found.append(label)
 
-    raw_flags = q.get("red_flags") or q.get("safety_flags") or []
+    raw_flags = q.get("red_flags") or q.get("safety_flags") or q.get("redFlags") or q.get("safetyFlags") or []
+    raw_flags = _safe_json_value(raw_flags)
     if isinstance(raw_flags, str):
         raw_flags = _csv(raw_flags)
     if isinstance(raw_flags, dict):
         raw_flags = [key for key, value in raw_flags.items() if _truthy(value)]
     for value in raw_flags if isinstance(raw_flags, list) else []:
-        label = str(value).strip().lower().replace(" ", "_")
-        if label and label not in found:
+        label = _normalize_token(value)
+        if label and label not in _NEGATIVE_ANSWERS and label not in found:
             found.append(label)
 
     free_text = " ".join(str(q.get(key) or "") for key in (
-        "pain_quality", "pain_description", "symptoms", "notes", "medical_notes"
+        "pain_quality", "painQuality", "pain_description", "painDescription",
+        "symptoms", "notes", "medical_notes", "medicalNotes",
     )).lower()
     text_terms = {
-        "sharp_pain": ("sharp pain", "douleur vive"),
+        "sharp_pain": ("sharp pain", "douleur vive", "douleur aigue", "douleur aiguë"),
         "radiating_symptoms": ("radiat", "irradi"),
         "numbness": ("numb", "engourdi"),
         "tingling": ("tingl", "fourmil"),
-        "instability": ("instab", "giving way"),
-        "recent_trauma": ("trauma", "chute récente", "recent fall"),
+        "instability": ("instab", "giving way", "derob"),
+        "recent_trauma": ("trauma", "chute recente", "chute récente", "recent fall"),
         "dizziness": ("dizz", "vertige"),
+        "neurological_symptoms": ("neurolog",),
     }
     for label, terms in text_terms.items():
         if any(term in free_text for term in terms) and label not in found:
@@ -338,31 +526,134 @@ def _choose_movement_area(
     return candidates[0] if candidates else None
 
 
+def _as_values(value) -> List[Any]:
+    value = _safe_json_value(value)
+    if value is None:
+        return []
+    if isinstance(value, dict):
+        # Checkbox-style storage: {"hamstrings": true, "hips": false}
+        return [key for key, selected in value.items() if _truthy(selected)]
+    if isinstance(value, (list, tuple, set)):
+        return list(value)
+    if isinstance(value, str):
+        return _csv(value)
+    return [value]
+
+
+def _questionnaire_severity(q: Dict[str, Any]) -> Tuple[str, List[Dict[str, Any]]]:
+    fields = (
+        "pain_level", "pain_status", "pain", "pain_score", "pain_intensity",
+        "painLevel", "painStatus", "painScore", "painIntensity",
+        "symptom_level", "discomfort_level",
+    )
+    observed: List[Dict[str, Any]] = []
+    strongest = "no_pain"
+    for field in fields:
+        if field not in q or q.get(field) in (None, ""):
+            continue
+        status = _normalize_symptom_status(q.get(field))
+        observed.append({"field": field, "value": q.get(field), "normalized": status})
+        if SEVERITY_RANK[status] > SEVERITY_RANK[strongest]:
+            strongest = status
+    labels = _safe_dict(q.get("labels"))
+    if not observed and labels.get("pain_level"):
+        status = _normalize_symptom_status(labels.get("pain_level"))
+        observed.append({"field": "labels.pain_level", "value": labels.get("pain_level"), "normalized": status})
+        strongest = status
+    return strongest, observed
+
+
+def _iter_movement_clearance(q: Dict[str, Any]) -> List[Tuple[str, Any]]:
+    """Accept dict, nested dict, list and legacy flat movement-pain fields."""
+    entries: List[Tuple[str, Any]] = []
+    wrapper_keys = {"tests", "movements", "answers", "responses", "results", "items", "pain_clearance"}
+
+    def consume(value):
+        value = _safe_json_value(value)
+        if isinstance(value, list):
+            for item in value:
+                if isinstance(item, dict):
+                    movement = (
+                        item.get("movement") or item.get("movement_key") or item.get("movementKey")
+                        or item.get("test_type") or item.get("testType") or item.get("test")
+                        or item.get("key") or item.get("id") or item.get("name")
+                    )
+                    if movement:
+                        entries.append((str(movement), item))
+                    else:
+                        consume(item)
+            return
+        if not isinstance(value, dict):
+            return
+        for key, item in value.items():
+            if _normalize_token(key) in wrapper_keys:
+                consume(item)
+            else:
+                entries.append((str(key), item))
+
+    for key in (
+        "pain_clearance", "movement_pain_clearance", "movement_clearance",
+        "painClearance", "movementPainClearance", "movementClearance",
+    ):
+        if key in q and q.get(key) not in (None, ""):
+            consume(q.get(key))
+
+    flat_patterns = (
+        re.compile(r"^(?:pain_clearance|movement_pain|movement_clearance)_(.+)$"),
+        re.compile(r"^(.+?)_(?:pain_clearance|pain_status|pain|discomfort)$"),
+    )
+    for key, value in q.items():
+        normalized_key = _normalize_token(key)
+        if normalized_key in {
+            "pain", "pain_status", "pain_level", "pain_clearance",
+            "movement_pain_clearance", "movement_clearance",
+        }:
+            continue
+        for pattern in flat_patterns:
+            match = pattern.match(normalized_key)
+            if match:
+                entries.append((match.group(1), value))
+                break
+
+    deduped: Dict[str, Any] = {}
+    for movement, value in entries:
+        key = _movement_key(movement)
+        if not key:
+            continue
+        current = deduped.get(key)
+        if current is None or SEVERITY_RANK[_normalize_symptom_status(value)] >= SEVERITY_RANK[_normalize_symptom_status(current)]:
+            deduped[key] = value
+    return list(deduped.items())
+
+
 def _build_symptom_profile(q: Dict[str, Any], priorities: List[Dict[str, Any]]) -> Dict[str, Any]:
     """Merge questionnaire and movement-level symptom answers into one profile."""
-    q = q or {}
+    q = _apply_questionnaire_aliases(q or {})
     signals: List[Dict[str, Any]] = []
     flags = _red_flags(q)
     medical_restriction = "medical_restriction" in flags
 
     explicit_areas: List[str] = []
-    primary = _normalize_area(q.get("primary_tension_area"))
+    labels = _safe_dict(q.get("labels"))
+    primary = _normalize_area(
+        q.get("primary_tension_area") or labels.get("primary_tension_area")
+    )
     if primary:
         explicit_areas.append(primary)
-    areas = q.get("tension_areas") or []
-    if isinstance(areas, str):
-        areas = _csv(areas)
-    for value in areas if isinstance(areas, list) else []:
+    tension_values = q.get("tension_areas")
+    if tension_values in (None, "", []):
+        tension_values = labels.get("tension_areas")
+    for value in _as_values(tension_values):
         area = _normalize_area(value)
         if area and area not in explicit_areas:
             explicit_areas.append(area)
 
-    questionnaire_raw = q.get("pain_level") or q.get("pain_status") or q.get("pain") or "no_pain"
-    questionnaire_severity = _normalize_symptom_status(questionnaire_raw)
+    questionnaire_severity, pain_fields = _questionnaire_severity(q)
+    questionnaire_raw = [entry["value"] for entry in pain_fields]
     if explicit_areas:
         area_severity = questionnaire_severity
         if area_severity == "no_pain":
-            # A selected tension area is still a valid mild-discomfort signal.
+            # Selecting a tension area is itself a valid mild-discomfort signal.
             area_severity = "mild_discomfort"
         for area in explicit_areas:
             signals.append({
@@ -371,49 +662,46 @@ def _build_symptom_profile(q: Dict[str, Any], priorities: List[Dict[str, Any]]) 
                 "source": "questionnaire",
                 "related_movement": None,
                 "side": None,
-                "raw_status": str(questionnaire_raw),
+                "raw_status": questionnaire_raw,
             })
 
-    clearance = (
-        q.get("pain_clearance") or q.get("movement_pain_clearance")
-        or q.get("movement_clearance") or {}
-    )
-    clearance = _safe_dict(clearance)
-    for movement, raw_value in clearance.items():
+    clearance_entries = _iter_movement_clearance(q)
+    for movement, raw_value in clearance_entries:
         detail = raw_value if isinstance(raw_value, dict) else {}
         severity = _normalize_symptom_status(raw_value)
         if severity == "no_pain":
             continue
-        explicit_area = (
-            detail.get("area") or detail.get("target_area") or detail.get("body_area")
-            if isinstance(detail, dict) else None
-        )
+        explicit_area = None
+        if isinstance(detail, dict):
+            explicit_area = (
+                detail.get("area") or detail.get("target_area") or detail.get("targetArea")
+                or detail.get("body_area") or detail.get("bodyArea") or detail.get("region")
+            )
         area = _choose_movement_area(movement, explicit_areas, priorities, explicit_area)
+        side_value = None
+        if isinstance(detail, dict):
+            side_value = detail.get("side") or detail.get("body_side") or detail.get("bodySide")
         signals.append({
             "area": area,
             "severity": severity,
             "source": "movement_pain_clearance",
             "related_movement": _movement_key(movement),
-            "side": (detail.get("side") if isinstance(detail, dict) else None) or _movement_side(movement),
-            "raw_status": str(raw_value),
+            "side": side_value or _movement_side(movement),
+            "raw_status": raw_value,
         })
 
-    # Significant/sharp answers protect their area from self-massage. A medical
-    # restriction or global neurological red flag disables targeted recovery.
     high_risk_areas = {
         signal["area"] for signal in signals
         if signal.get("area") and signal.get("severity") == "high_risk_pain"
     }
     global_high_risk = medical_restriction or any(
         flag in flags for flag in {
-            "radiating_symptoms", "numbness", "tingling", "instability",
+            "sharp_pain", "radiating_symptoms", "numbness", "tingling", "instability",
             "recent_trauma", "acute_injury", "neurological_symptoms",
             "dizziness", "unexplained_weakness",
         }
     )
 
-    # Merge duplicate area signals while retaining the strongest severity and
-    # all sources/movements for transparent program metadata.
     merged: Dict[str, Dict[str, Any]] = {}
     for signal in signals:
         area = signal.get("area")
@@ -443,7 +731,6 @@ def _build_symptom_profile(q: Dict[str, Any], priorities: List[Dict[str, Any]]) 
         if value["severity"] in {"mild_discomfort", "moderate_non_sharp_pain"}
         and area not in high_risk_areas
     ]
-    # Preserve explicit questionnaire order, then movement-derived targets.
     area_order = explicit_areas + [
         signal.get("area") for signal in signals if signal.get("area") not in explicit_areas
     ]
@@ -457,14 +744,14 @@ def _build_symptom_profile(q: Dict[str, Any], priorities: List[Dict[str, Any]]) 
     for signal in signals:
         if SEVERITY_RANK[signal["severity"]] > SEVERITY_RANK[overall_state]:
             overall_state = signal["severity"]
-    if flags and overall_state != "high_risk_pain":
-        if medical_restriction or global_high_risk:
-            overall_state = "high_risk_pain"
-    if questionnaire_severity == "moderate_non_sharp_pain" and SEVERITY_RANK[overall_state] < 2:
-        overall_state = "moderate_non_sharp_pain"
+    if global_high_risk:
+        overall_state = "high_risk_pain"
 
-    duration = str(q.get("duration") or "").lower()
-    is_acute = duration in {"less_than_1_week", "less than 1 week", "moins_d_une_semaine"}
+    duration_token = _normalize_token(q.get("duration"))
+    is_acute = duration_token in {
+        "less_than_1_week", "less_than_one_week", "moins_d_une_semaine",
+        "moins_de_1_semaine", "under_1_week",
+    }
 
     return {
         "overall_state": overall_state,
@@ -481,6 +768,11 @@ def _build_symptom_profile(q: Dict[str, Any], priorities: List[Dict[str, Any]]) 
         "global_high_risk": global_high_risk,
         "medical_restriction": medical_restriction,
         "is_acute": is_acute,
+        "input_compatibility": {
+            "pain_fields_detected": [entry["field"] for entry in pain_fields],
+            "movement_clearance_entries": len(clearance_entries),
+            "questionnaire_keys": sorted(str(key) for key in q.keys()),
+        },
     }
 
 
@@ -494,10 +786,22 @@ def _experience(q):
     return "intermediate"
 
 def _available_equipment(q):
-    raw = q.get("available_equipment") or q.get("equipment") or q.get("materials")
+    raw = q.get("available_equipment") or q.get("availableEquipment") or q.get("equipment") or q.get("materials")
     if not raw:
         return {"none","bodyweight","foam_roller","massage_ball","elastic_band","light_weight","balance_pad","stick_or_pvc","trx"}
-    vals = set(_csv(raw))
+    aliases = {
+        "none":"none", "no_equipment":"none", "aucun":"none",
+        "bodyweight":"bodyweight", "body_weight":"bodyweight", "poids_du_corps":"bodyweight",
+        "foam_roller":"foam_roller", "foamroller":"foam_roller", "rouleau":"foam_roller",
+        "massage_ball":"massage_ball", "massageball":"massage_ball", "balle_de_massage":"massage_ball",
+        "elastic_band":"elastic_band", "resistance_band":"elastic_band", "bande_elastique":"elastic_band",
+        "light_weight":"light_weight", "light_weights":"light_weight", "poids_legers":"light_weight",
+        "balance_pad":"balance_pad", "coussin_d_equilibre":"balance_pad",
+        "stick_or_pvc":"stick_or_pvc", "stick":"stick_or_pvc", "pvc":"stick_or_pvc",
+        "trx":"trx",
+    }
+    values = _as_values(raw)
+    vals = {aliases.get(_normalize_token(value), _normalize_token(value)) for value in values if _normalize_token(value)}
     vals |= {"none","bodyweight"}
     return vals
 
@@ -530,13 +834,17 @@ def _reported_categories(q):
         "lower_back":["CS","HM","RB"], "hips":["HM","CS","FI"], "hamstrings":["HS","HM"],
         "knees":["FI","HM","CS"], "ankles_feet":["AM","FI","HM"]
     }
-    areas = q.get("tension_areas") or []
-    if isinstance(areas, str): areas = _csv(areas)
-    primary = q.get("primary_tension_area")
+    labels = _safe_dict(q.get("labels"))
+    raw_areas = q.get("tension_areas") or q.get("tensionAreas") or labels.get("tension_areas")
+    areas = [_normalize_area(value) for value in _as_values(raw_areas)]
+    primary = _normalize_area(
+        q.get("primary_tension_area") or q.get("primaryTensionArea") or labels.get("primary_tension_area")
+    )
     cats = []
-    for area in ([primary] if primary else []) + list(areas):
-        for c in mapping.get(str(area), []):
-            if c not in cats: cats.append(c)
+    for area in ([primary] if primary else []) + [area for area in areas if area]:
+        for category in mapping.get(area, []):
+            if category not in cats:
+                cats.append(category)
     return cats
 
 
@@ -1459,7 +1767,7 @@ def generate_clinical_prescription_v21(screening_payload, exercise_library, rule
             sessions.append({
                 "day":day, "week":week,
                 "focus":focuses[day][0] if lang=="en" else focuses[day][1],
-                "session_model":"priority_constrained_symptom_aware_v3_5",
+                "session_model":"priority_constrained_symptom_aware_v3_6_compat",
                 "estimated_duration_minutes":min(30, 5+len(selected)*3),
                 "exercises":selected,
                 "clinical_balance":{
@@ -1622,9 +1930,10 @@ def generate_clinical_prescription_v21(screening_payload, exercise_library, rule
                 "variety inside the same movement-priority family",
                 "strategic repetition when the filmed demo library is scarce",
                 "questionnaire and movement-clearance driven safety",
+                "compatibility aliases for intake_json, questionnaire_json, camelCase fields, numeric pain scores and localized negative answers",
                 "exercise-specific dosage",
             ],
-            "progression_model":"direct_priority_quota_symptom_aware_recovery_restore_control_stabilize_integrate_v8",
+            "progression_model":"direct_priority_quota_symptom_aware_recovery_restore_control_stabilize_integrate_v9_compat",
             "available_equipment":sorted(equipment),
             "reported_category_preferences":qcats,
             "symptom_recovery_strategy":{
