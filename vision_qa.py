@@ -1,8 +1,9 @@
 """Private, ephemeral Vision QA rendering for FlexiLab validation accounts.
 
-The generated composite is returned only inside the completed analysis job when
-`vision_qa_requested` is present in trusted capture metadata. It is intentionally
-not written into the authoritative `screenings` row.
+The generated composite is retained only for non-ASLR validation requests.
+ASLR composite generation is disabled in V101.35.14 to remove tracked-image
+rendering, JPEG encoding, and payload overhead. It is never written into the
+authoritative `screenings` row.
 """
 
 from __future__ import annotations
@@ -14,7 +15,7 @@ import cv2
 import numpy as np
 
 
-VISION_QA_VERSION = "vision-qa-overlay-v2.5-aslr-image-horizontal-single-inference"
+VISION_QA_VERSION = "vision-qa-overlay-v2.6-aslr-disabled-performance"
 
 COCO_NAMES = [
     "nose",

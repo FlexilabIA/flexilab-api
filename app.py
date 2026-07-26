@@ -372,7 +372,7 @@ async def request_timing_middleware(request, call_next):
 def health():
     return {
         "ok": True,
-        "patch_version": "V101.35.13-aslr-single-rotated-inference",
+        "patch_version": "V101.35.14-aslr-one-call-no-tracked-images",
         "base_patch": "V101.28.4-aslr-thresholds-60-75",
         "exercise_library_mode": EXERCISE_LIBRARY_MODE,
         "exercise_library_path": EXERCISE_LIBRARY_PATH,
@@ -403,8 +403,11 @@ def health():
                 "green": ">75",
             },
             "source_orientation_requirement": "head_left_capture_protocol_internal_90_clockwise_inference",
-            "chain_strategy": "rotated_90_clockwise_single_inference_then_image_horizontal_primary",
+            "chain_strategy": "single_rotated_yolo_call_then_image_horizontal_primary_no_tracking_images",
             "pose_passes": ["rotated_90_clockwise_single_fullbody_detection"],
+            "pose_model_inference_count": 1,
+            "detection_attempt_count": 1,
+            "tracked_image_processing": False,
             "aslr_inference_imgsz": 960,
             "measurement_anchor": "single_shared_pelvic_anchor_image_horizontal_to_true_raised_ankle",
             "dedicated_pose_model": ASLR_POSE_MODEL_NAME,
@@ -414,6 +417,8 @@ def health():
             "version": VISION_QA_VERSION,
             "delivery": "ephemeral_job_result_only",
             "enabled_by_capture_metadata": True,
+            "aslr_enabled": False,
+            "aslr_tracking_images_removed_for_performance": True,
         },
         "runtime_versions": RUNTIME_PACKAGE_VERSIONS,
     }
@@ -422,7 +427,7 @@ def health():
 @app.get("/library_status")
 def library_status():
     return {
-        "patch_version": "V101.35.13-aslr-single-rotated-inference",
+        "patch_version": "V101.35.14-aslr-one-call-no-tracked-images",
         "exercise_library_mode": EXERCISE_LIBRARY_MODE,
         "exercise_library_path": EXERCISE_LIBRARY_PATH,
         "exercise_library_count": len(EXERCISE_LIBRARY or []),
@@ -2161,10 +2166,15 @@ def detect_pose_with_fallback(img, test_type, inference_imgsz=None):
 
 
 def detect_aslr_pose_with_fallback(img, inference_imgsz=None):
-    """Run ASLR with its dedicated higher-accuracy model, fail closed on error."""
+    """Run exactly one dedicated ASLR YOLO inference.
+
+    V101.35.14 removes the confidence-threshold retry loop. A single model call
+    is made at a permissive person-detection threshold; anatomical confidence
+    and geometry gates in the ASLR engine decide whether the result is usable.
+    """
     global aslr_model, ASLR_POSE_MODEL_LOAD_ERROR, ASLR_POSE_MODEL_RELOAD_COUNT
 
-    thresholds = [0.25, 0.18, 0.12]
+    threshold = 0.18
     requested_imgsz = int(inference_imgsz or 960)
     requested_imgsz = max(640, min(1280, requested_imgsz))
 
@@ -2176,56 +2186,52 @@ def detect_aslr_pose_with_fallback(img, inference_imgsz=None):
                 "The dedicated ASLR pose model is temporarily unavailable. Please retry shortly."
             )
 
-        recovered_once = False
-        for threshold in thresholds:
-            while True:
-                try:
-                    prediction = aslr_model(
-                        img,
-                        conf=threshold,
-                        classes=[0],
-                        imgsz=requested_imgsz,
-                        verbose=False,
-                    )
-                    break
-                except AttributeError as exc:
-                    error_text = str(exc)
-                    known_fused_conv_error = (
-                        "Conv" in error_text
-                        and "has no attribute" in error_text
-                        and "bn" in error_text
-                    )
-                    if not known_fused_conv_error or recovered_once:
-                        raise ValueError(
-                            "ASLR pose analysis is temporarily unavailable. Please retry."
-                        ) from exc
-                    logger.warning(
-                        "Reloading dedicated ASLR pose model after fused Conv error: %s",
-                        error_text,
-                    )
-                    recovered_once = True
-                    ASLR_POSE_MODEL_RELOAD_COUNT += 1
-                    aslr_model = _load_aslr_pose_model()
-                    if aslr_model is None:
-                        raise ValueError(
-                            "The ASLR pose model could not be reloaded. Please retry shortly."
-                        ) from exc
-                except Exception as exc:
-                    logger.exception("Dedicated ASLR YOLO inference failed")
-                    raise ValueError(
-                        "ASLR pose analysis is temporarily unavailable. Please retry."
-                    ) from exc
+        try:
+            prediction = aslr_model(
+                img,
+                conf=threshold,
+                classes=[0],
+                imgsz=requested_imgsz,
+                verbose=False,
+            )
+        except AttributeError as exc:
+            error_text = str(exc)
+            known_fused_conv_error = (
+                "Conv" in error_text
+                and "has no attribute" in error_text
+                and "bn" in error_text
+            )
+            if not known_fused_conv_error:
+                raise ValueError(
+                    "ASLR pose analysis is temporarily unavailable. Please retry."
+                ) from exc
+            # Reloading repairs the model object but deliberately does not run a
+            # second inference in the same request. The user can retry once.
+            logger.warning(
+                "Reloading dedicated ASLR pose model after fused Conv error: %s",
+                error_text,
+            )
+            ASLR_POSE_MODEL_RELOAD_COUNT += 1
+            aslr_model = _load_aslr_pose_model()
+            raise ValueError(
+                "ASLR pose analysis was reset. Please retry the photo once."
+            ) from exc
+        except Exception as exc:
+            logger.exception("Dedicated ASLR YOLO inference failed")
+            raise ValueError(
+                "ASLR pose analysis is temporarily unavailable. Please retry."
+            ) from exc
 
-            if (
-                prediction
-                and prediction[0].keypoints is not None
-                and len(prediction[0].keypoints.xy) > 0
-            ):
-                return prediction, threshold, requested_imgsz
+        if (
+            prediction
+            and prediction[0].keypoints is not None
+            and len(prediction[0].keypoints.xy) > 0
+        ):
+            return prediction, threshold, requested_imgsz
 
     raise ValueError(
-        "The ASLR pose could not be detected reliably. Keep the pelvis, both knees, "
-        "and both feet visible, then retake the photo."
+        "The ASLR pose could not be detected reliably. Keep the pelvis, raised knee, "
+        "and complete raised foot visible, then retake the photo."
     )
 
 
@@ -2475,7 +2481,7 @@ def run_yolo_analysis_from_bytes(img_bytes, test_type, capture_metadata=None):
     aslr_single_rotated_pass = None
 
     if is_aslr:
-        # V101.35.13: ASLR performs exactly one pose-model inference. The full
+        # V101.35.14: ASLR performs exactly one pose-model inference and no tracked-image rendering. The full
         # normalized image is rotated 90° clockwise privately so YOLO sees an
         # upright person. All selected coordinates are then inverse-mapped to
         # the untouched original image for scoring and display.
@@ -2544,11 +2550,15 @@ def run_yolo_analysis_from_bytes(img_bytes, test_type, capture_metadata=None):
     image_area = max(1.0, float(img.shape[0] * img.shape[1]))
     person_coverage = float(first_areas[first_main_idx]) / image_area
     first_relevant_conf = _relevant_pose_confidence(first_conf, test_type)
-    crop_img, crop_bounds = _expanded_person_crop(
-        img,
-        first_boxes[first_main_idx],
-        aslr=is_aslr,
-    )
+    if is_aslr:
+        # No crop copy or second-pass preparation for ASLR.
+        crop_img, crop_bounds = None, None
+    else:
+        crop_img, crop_bounds = _expanded_person_crop(
+            img,
+            first_boxes[first_main_idx],
+            aslr=False,
+        )
 
     # A body-focused pass is used only when the subject is small or lower-body
     # landmarks are weak. Portrait ASLR and desktop webcam frames are therefore
@@ -2635,90 +2645,39 @@ def run_yolo_analysis_from_bytes(img_bytes, test_type, capture_metadata=None):
                 "aslr_single_inference_unavailable",
                 "The ASLR pose inference could not be completed. Please retake the photo.",
             )
-        limb_pose_passes = [aslr_single_rotated_pass]
-        rotated_failure = None
-
-        evaluated_passes = []
-        accepted_passes = []
-        rejected_passes = []
-        for limb_pass in limb_pose_passes:
-            try:
-                pass_result = analyze_aslr(
-                    limb_pass["xy"],
-                    limb_pass["conf"],
-                    requested_side,
-                    img,
-                    body_xy=body_reference_xy,
-                    body_conf=body_reference_conf,
-                )
-                quality_score = _aslr_pose_pass_quality(pass_result)
-                pass_metrics = pass_result.get("metrics") or {}
-                evaluated_passes.append({
-                    "name": limb_pass["name"],
-                    "status": "accepted",
-                    "quality_score": quality_score,
-                    "aslr_angle": pass_metrics.get("aslr_angle"),
-                    "confidence": pass_result.get("confidence"),
-                    "endpoint_source": pass_metrics.get("endpoint_source"),
-                    "endpoint_index": (pass_metrics.get("selected_source_indices") or {}).get("ankle"),
-                    "knee_index": (pass_metrics.get("selected_source_indices") or {}).get("knee"),
-                    "chain_method": pass_metrics.get("chain_reconstruction_method"),
-                })
-                accepted_passes.append((quality_score, limb_pass, pass_result))
-            except ASLRQualityError as exc:
-                diagnostic_score = 0.0
-                if isinstance(exc.details, dict):
-                    diagnostic_score = float(exc.details.get("candidate_angle") or 0.0) / 180.0
-                evaluated_passes.append({
-                    "name": limb_pass["name"],
-                    "status": "rejected",
-                    "code": exc.code,
-                    "message": str(exc),
-                    "diagnostic_score": round(diagnostic_score, 6),
-                })
-                rejected_passes.append((diagnostic_score, limb_pass, exc))
-
-        if accepted_passes:
-            _quality, selected_pass, aslr_precomputed_result = max(
-                accepted_passes,
-                key=lambda item: item[0],
+        selected_pass = aslr_single_rotated_pass
+        selected_pass_name = selected_pass["name"]
+        try:
+            aslr_precomputed_result = analyze_aslr(
+                selected_pass["xy"],
+                selected_pass["conf"],
+                requested_side,
+                img,
+                body_xy=body_reference_xy,
+                body_conf=body_reference_conf,
             )
-            final_xy = selected_pass["xy"]
-            final_conf = selected_pass["conf"]
-            final_boxes = selected_pass["boxes"]
-            final_box_confidences = selected_pass["box_confidences"]
-            final_main_idx = selected_pass["main_idx"]
-            detection_threshold = selected_pass["threshold"]
-            inference_imgsz = selected_pass["imgsz"]
-            selected_pass_name = selected_pass["name"]
-        else:
-            if not rejected_passes:
-                raise ASLRQualityError(
-                    "raised_ankle_or_knee_not_detected",
-                    "The raised ankle and knee were not identified reliably. Retake the photo with the complete raised foot visible.",
-                )
-            _diagnostic, selected_pass, aslr_precomputed_error = max(
-                rejected_passes,
-                key=lambda item: item[0],
-            )
-            final_xy = selected_pass["xy"]
-            final_conf = selected_pass["conf"]
-            final_boxes = selected_pass["boxes"]
-            final_box_confidences = selected_pass["box_confidences"]
-            final_main_idx = selected_pass["main_idx"]
-            detection_threshold = selected_pass["threshold"]
-            inference_imgsz = selected_pass["imgsz"]
-            selected_pass_name = selected_pass["name"]
+        except ASLRQualityError as exc:
+            aslr_precomputed_error = exc
+
+        final_xy = selected_pass["xy"]
+        final_conf = selected_pass["conf"]
+        final_boxes = selected_pass["boxes"]
+        final_box_confidences = selected_pass["box_confidences"]
+        final_main_idx = selected_pass["main_idx"]
+        detection_threshold = selected_pass["threshold"]
+        inference_imgsz = selected_pass["imgsz"]
 
         analysis_pass = {
-            "mode": "aslr_single_rotated_inference_image_horizontal_primary",
+            "mode": "aslr_one_yolo_call_image_horizontal_primary_no_tracking_images",
             "selected_pass": selected_pass_name,
             "source_orientation_required": False,
-            "pose_passes": evaluated_passes,
-            "pose_pass_count": len(limb_pose_passes),
+            "pose_passes": [selected_pass_name],
+            "pose_pass_count": 1,
             "pose_model_inference_count": 1,
+            "detection_attempt_count": 1,
+            "tracked_image_processing_enabled": False,
             "original_orientation_pose_inference_used": False,
-            "rotated_pass_failure": rotated_failure,
+            "rotated_pass_failure": None,
             "fallback_used": False,
             "visual_endpoint_allowed": False,
             "endpoint_policy": "raised_true_yolo_ankle_required_floor_leg_optional_validation_only",
@@ -2782,7 +2741,9 @@ def run_yolo_analysis_from_bytes(img_bytes, test_type, capture_metadata=None):
                 "metrics": rejection_metrics,
                 "thresholds": {},
             }
-            if bool((capture_metadata or {}).get("vision_qa_requested")):
+            # ASLR tracked-image composites are disabled for performance.
+            # Other tests may still request Vision QA.
+            if (not is_aslr) and bool((capture_metadata or {}).get("vision_qa_requested")):
                 rejected_result["metrics"]["vision_qa"] = build_vision_qa_payload(
                     img,
                     xy,
@@ -2818,7 +2779,7 @@ def run_yolo_analysis_from_bytes(img_bytes, test_type, capture_metadata=None):
     }
 
     vision_qa_requested = bool((capture_metadata or {}).get("vision_qa_requested"))
-    if vision_qa_requested:
+    if vision_qa_requested and not is_aslr:
         result["metrics"]["vision_qa"] = build_vision_qa_payload(
             img,
             xy,
@@ -2828,6 +2789,8 @@ def run_yolo_analysis_from_bytes(img_bytes, test_type, capture_metadata=None):
             test_type,
             analysis_pass=analysis_pass,
         )
+    elif is_aslr:
+        result["metrics"]["vision_qa_disabled_for_performance"] = True
 
     return result, session_update
 
