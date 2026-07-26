@@ -5,7 +5,89 @@ from datetime import datetime, timezone
 from collections import Counter, defaultdict
 import json, math, re
 
-ENGINE_VERSION = "FlexiLab Clinical Prescription Engine v3.2-priority-constrained-variety"
+ENGINE_VERSION = "FlexiLab Clinical Prescription Engine v3.5-direct-priority-quota-symptom-aware-recovery"
+
+# Direct movement families are the only exercises allowed to satisfy minimum
+# priority quotas. Supporting and integration exercises remain available for
+# variety, but they cannot replace the required direct stimulus.
+DIRECT_PRIORITY_CATS = {
+    "cervical_control": {"CC"},
+    "thoracic_mobility": {"TM"},
+    "shoulder_mobility": {"SH"},
+    "scapular_control": {"SH"},
+    "core_stability": {"CS"},
+    "trunk_core_control": {"CS"},
+    "hip_mobility": {"HM"},
+    "hamstring_mobility": {"HS"},
+    "aslr": {"HS"},
+    "ankle_mobility": {"AM"},
+    "squat_pattern": {"FI"},
+    "functional_integration": {"FI"},
+    "balance_proprioception": {"BP"},
+}
+
+# Filmed demo exercises that can be used as area-specific recovery support.
+# These mappings target surrounding soft tissue; they never instruct the user
+# to roll directly over a joint, bone, or the spine.
+RECOVERY_AREA_EXERCISE_IDS = {
+    "neck": ["DMCC002"],
+    "shoulders": ["DMSH008", "DMSH009"],
+    "upper_back": ["DMTM004", "DMSH009", "DMTM005"],
+    "lower_back": ["DMRB002"],
+    "hips": ["DMRB003", "DMRB004"],
+    "hamstrings": ["DMRB005"],
+    "knees": ["DMRB007"],
+    "ankles_feet": ["DMRB006"],
+}
+
+AREA_ALIASES = {
+    "neck": "neck", "nuque": "neck", "cervical": "neck",
+    "shoulder": "shoulders", "shoulders": "shoulders", "epaule": "shoulders",
+    "épaules": "shoulders", "epaules": "shoulders",
+    "upper_back": "upper_back", "upper back": "upper_back", "haut_du_dos": "upper_back",
+    "haut du dos": "upper_back", "thoracic": "upper_back",
+    "lower_back": "lower_back", "lower back": "lower_back", "bas_du_dos": "lower_back",
+    "bas du dos": "lower_back", "lumbar": "lower_back",
+    "hip": "hips", "hips": "hips", "hanche": "hips", "hanches": "hips",
+    "hamstring": "hamstrings", "hamstrings": "hamstrings",
+    "ischio-jambiers": "hamstrings", "ischios": "hamstrings",
+    "knee": "knees", "knees": "knees", "genou": "knees", "genoux": "knees",
+    "ankle": "ankles_feet", "ankles": "ankles_feet", "foot": "ankles_feet",
+    "feet": "ankles_feet", "ankles_feet": "ankles_feet",
+    "chevilles": "ankles_feet", "pieds": "ankles_feet",
+}
+
+MOVEMENT_DISCOMFORT_AREAS = {
+    "posture_side": ["neck", "upper_back"],
+    "shoulder_right": ["shoulders"],
+    "shoulder_left": ["shoulders"],
+    "squat": ["hips", "knees", "ankles_feet"],
+    "aslr_right": ["hamstrings"],
+    "aslr_left": ["hamstrings"],
+}
+
+DOMAIN_TO_RECOVERY_AREAS = {
+    "cervical_control": ["neck"],
+    "thoracic_mobility": ["upper_back"],
+    "shoulder_mobility": ["shoulders"],
+    "scapular_control": ["shoulders", "upper_back"],
+    "core_stability": ["lower_back"],
+    "trunk_core_control": ["lower_back", "hips"],
+    "hip_mobility": ["hips"],
+    "hamstring_mobility": ["hamstrings"],
+    "aslr": ["hamstrings"],
+    "ankle_mobility": ["ankles_feet"],
+    "squat_pattern": ["hips", "knees", "ankles_feet"],
+    "functional_integration": ["hips"],
+    "balance_proprioception": ["ankles_feet"],
+}
+
+SEVERITY_RANK = {
+    "no_pain": 0,
+    "mild_discomfort": 1,
+    "moderate_non_sharp_pain": 2,
+    "high_risk_pain": 3,
+}
 
 DOMAIN_TO_CATS = {
     "cervical_control": ["CC", "SH"],
@@ -70,15 +152,340 @@ def _questionnaire(payload):
         if isinstance(q, dict) and q: return q
     return {}
 
-def _pain_state(q):
-    raw = str(q.get("pain_level") or q.get("pain_status") or q.get("pain") or "no_pain").lower()
-    score = _num(q.get("pain_score", q.get("painIntensity", 0)))
-    restriction = str(q.get("medical_restriction") or "no").lower()
-    if restriction not in {"", "no", "none", "false", "0"}:
-        return "pain"
-    if score >= 4 or raw in {"pain","moderate","severe","high"}: return "pain"
-    if score > 0 or raw in {"discomfort","mild","caution"}: return "discomfort"
+
+def _truthy(value) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value != 0
+    if isinstance(value, (list, tuple, set, dict)):
+        return bool(value)
+    return str(value or "").strip().lower() not in {"", "no", "none", "false", "0", "not_applicable", "n/a"}
+
+
+def _normalize_area(value) -> Optional[str]:
+    raw = str(value or "").strip().lower().replace("-", "_")
+    raw = re.sub(r"\s+", " ", raw)
+    if raw in {"", "none", "no specific tension", "aucune zone spécifique", "not_applicable"}:
+        return None
+    return AREA_ALIASES.get(raw) or AREA_ALIASES.get(raw.replace(" ", "_"))
+
+
+def _safe_dict(value) -> Dict[str, Any]:
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+            return parsed if isinstance(parsed, dict) else {}
+        except Exception:
+            return {}
+    return {}
+
+
+def _normalize_symptom_status(value) -> str:
+    """Normalize questionnaire and movement-clearance answers.
+
+    The current frontend sends none / mild / moderate / significant for each
+    movement. The questionnaire sends no_pain / discomfort / pain. Generic
+    questionnaire "pain" is treated as moderate and non-sharp unless a red flag
+    or significant/sharp movement answer is also present.
+    """
+    if isinstance(value, dict):
+        if _truthy(value.get("sharp")) or _truthy(value.get("radiating")) or _truthy(value.get("numbness")):
+            return "high_risk_pain"
+        value = (
+            value.get("severity") or value.get("status") or value.get("level")
+            or value.get("pain") or value.get("value") or value.get("answer")
+        )
+    if isinstance(value, (int, float)):
+        score = float(value)
+        if score >= 7:
+            return "high_risk_pain"
+        if score >= 4:
+            return "moderate_non_sharp_pain"
+        if score > 0:
+            return "mild_discomfort"
+        return "no_pain"
+
+    raw = str(value or "").strip().lower().replace("-", "_").replace(" ", "_")
+    if not raw or raw in {"none", "no", "no_pain", "false", "0", "clear"}:
+        return "no_pain"
+    if any(token in raw for token in (
+        "significant", "sharp", "severe", "high", "radiating", "numb",
+        "tingling", "instability", "acute_injury", "trauma",
+    )):
+        return "high_risk_pain"
+    if raw in {"moderate", "moderate_pain", "pain", "non_sharp_pain"} or "moderate" in raw:
+        return "moderate_non_sharp_pain"
+    if any(token in raw for token in ("mild", "discomfort", "tension", "caution", "ache")):
+        return "mild_discomfort"
     return "no_pain"
+
+
+def _movement_key(value) -> str:
+    raw = str(value or "").strip().lower().replace("-", "_").replace(" ", "_")
+    aliases = {
+        "deep_squat": "squat",
+        "squat_test": "squat",
+        "active_straight_leg_raise_right": "aslr_right",
+        "active_straight_leg_raise_left": "aslr_left",
+        "aslr_r": "aslr_right",
+        "aslr_l": "aslr_left",
+        "shoulder_mobility_right": "shoulder_right",
+        "shoulder_mobility_left": "shoulder_left",
+        "right_shoulder": "shoulder_right",
+        "left_shoulder": "shoulder_left",
+        "side_posture": "posture_side",
+    }
+    if raw in aliases:
+        return aliases[raw]
+    if "aslr" in raw or "straight_leg" in raw:
+        return "aslr_left" if "left" in raw or raw.endswith("_l") else "aslr_right"
+    if "shoulder" in raw:
+        return "shoulder_left" if "left" in raw or raw.endswith("_l") else "shoulder_right"
+    if "squat" in raw:
+        return "squat"
+    if "posture" in raw:
+        return "posture_side"
+    return raw
+
+
+def _movement_side(movement: str) -> Optional[str]:
+    key = _movement_key(movement)
+    if "right" in key:
+        return "right"
+    if "left" in key:
+        return "left"
+    return None
+
+
+def _red_flags(q: Dict[str, Any]) -> List[str]:
+    q = q or {}
+    found: List[str] = []
+    if _truthy(q.get("medical_restriction")):
+        found.append("medical_restriction")
+    direct_flags = {
+        "sharp_pain": ("sharp_pain", "sharp"),
+        "radiating_symptoms": ("radiating_symptoms", "radiating", "radiation"),
+        "numbness": ("numbness", "numb"),
+        "tingling": ("tingling",),
+        "instability": ("instability", "giving_way"),
+        "recent_trauma": ("recent_trauma", "trauma"),
+        "acute_injury": ("acute_injury", "injury"),
+        "neurological_symptoms": ("neurological_symptoms", "neurological"),
+        "dizziness": ("dizziness", "dizzy"),
+        "unexplained_weakness": ("unexplained_weakness",),
+    }
+    for label, keys in direct_flags.items():
+        if any(_truthy(q.get(key)) for key in keys):
+            found.append(label)
+
+    raw_flags = q.get("red_flags") or q.get("safety_flags") or []
+    if isinstance(raw_flags, str):
+        raw_flags = _csv(raw_flags)
+    if isinstance(raw_flags, dict):
+        raw_flags = [key for key, value in raw_flags.items() if _truthy(value)]
+    for value in raw_flags if isinstance(raw_flags, list) else []:
+        label = str(value).strip().lower().replace(" ", "_")
+        if label and label not in found:
+            found.append(label)
+
+    free_text = " ".join(str(q.get(key) or "") for key in (
+        "pain_quality", "pain_description", "symptoms", "notes", "medical_notes"
+    )).lower()
+    text_terms = {
+        "sharp_pain": ("sharp pain", "douleur vive"),
+        "radiating_symptoms": ("radiat", "irradi"),
+        "numbness": ("numb", "engourdi"),
+        "tingling": ("tingl", "fourmil"),
+        "instability": ("instab", "giving way"),
+        "recent_trauma": ("trauma", "chute récente", "recent fall"),
+        "dizziness": ("dizz", "vertige"),
+    }
+    for label, terms in text_terms.items():
+        if any(term in free_text for term in terms) and label not in found:
+            found.append(label)
+    return found
+
+
+def _priority_area_order(priorities: List[Dict[str, Any]]) -> List[str]:
+    ordered: List[str] = []
+    for priority in priorities:
+        for area in DOMAIN_TO_RECOVERY_AREAS.get(priority.get("id"), []):
+            if area not in ordered:
+                ordered.append(area)
+    return ordered
+
+
+def _choose_movement_area(
+    movement: str,
+    explicit_areas: List[str],
+    priorities: List[Dict[str, Any]],
+    explicit_area: Optional[str] = None,
+) -> Optional[str]:
+    if explicit_area:
+        normalized = _normalize_area(explicit_area)
+        if normalized:
+            return normalized
+    candidates = MOVEMENT_DISCOMFORT_AREAS.get(_movement_key(movement), [])
+    for area in explicit_areas:
+        if area in candidates:
+            return area
+    for area in _priority_area_order(priorities):
+        if area in candidates:
+            return area
+    return candidates[0] if candidates else None
+
+
+def _build_symptom_profile(q: Dict[str, Any], priorities: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Merge questionnaire and movement-level symptom answers into one profile."""
+    q = q or {}
+    signals: List[Dict[str, Any]] = []
+    flags = _red_flags(q)
+    medical_restriction = "medical_restriction" in flags
+
+    explicit_areas: List[str] = []
+    primary = _normalize_area(q.get("primary_tension_area"))
+    if primary:
+        explicit_areas.append(primary)
+    areas = q.get("tension_areas") or []
+    if isinstance(areas, str):
+        areas = _csv(areas)
+    for value in areas if isinstance(areas, list) else []:
+        area = _normalize_area(value)
+        if area and area not in explicit_areas:
+            explicit_areas.append(area)
+
+    questionnaire_raw = q.get("pain_level") or q.get("pain_status") or q.get("pain") or "no_pain"
+    questionnaire_severity = _normalize_symptom_status(questionnaire_raw)
+    if explicit_areas:
+        area_severity = questionnaire_severity
+        if area_severity == "no_pain":
+            # A selected tension area is still a valid mild-discomfort signal.
+            area_severity = "mild_discomfort"
+        for area in explicit_areas:
+            signals.append({
+                "area": area,
+                "severity": area_severity,
+                "source": "questionnaire",
+                "related_movement": None,
+                "side": None,
+                "raw_status": str(questionnaire_raw),
+            })
+
+    clearance = (
+        q.get("pain_clearance") or q.get("movement_pain_clearance")
+        or q.get("movement_clearance") or {}
+    )
+    clearance = _safe_dict(clearance)
+    for movement, raw_value in clearance.items():
+        detail = raw_value if isinstance(raw_value, dict) else {}
+        severity = _normalize_symptom_status(raw_value)
+        if severity == "no_pain":
+            continue
+        explicit_area = (
+            detail.get("area") or detail.get("target_area") or detail.get("body_area")
+            if isinstance(detail, dict) else None
+        )
+        area = _choose_movement_area(movement, explicit_areas, priorities, explicit_area)
+        signals.append({
+            "area": area,
+            "severity": severity,
+            "source": "movement_pain_clearance",
+            "related_movement": _movement_key(movement),
+            "side": (detail.get("side") if isinstance(detail, dict) else None) or _movement_side(movement),
+            "raw_status": str(raw_value),
+        })
+
+    # Significant/sharp answers protect their area from self-massage. A medical
+    # restriction or global neurological red flag disables targeted recovery.
+    high_risk_areas = {
+        signal["area"] for signal in signals
+        if signal.get("area") and signal.get("severity") == "high_risk_pain"
+    }
+    global_high_risk = medical_restriction or any(
+        flag in flags for flag in {
+            "radiating_symptoms", "numbness", "tingling", "instability",
+            "recent_trauma", "acute_injury", "neurological_symptoms",
+            "dizziness", "unexplained_weakness",
+        }
+    )
+
+    # Merge duplicate area signals while retaining the strongest severity and
+    # all sources/movements for transparent program metadata.
+    merged: Dict[str, Dict[str, Any]] = {}
+    for signal in signals:
+        area = signal.get("area")
+        if not area:
+            continue
+        current = merged.get(area)
+        if current is None:
+            merged[area] = {
+                "area": area,
+                "severity": signal["severity"],
+                "sources": [signal["source"]],
+                "related_movements": [signal["related_movement"]] if signal.get("related_movement") else [],
+                "sides": [signal["side"]] if signal.get("side") else [],
+            }
+            continue
+        if SEVERITY_RANK[signal["severity"]] > SEVERITY_RANK[current["severity"]]:
+            current["severity"] = signal["severity"]
+        if signal["source"] not in current["sources"]:
+            current["sources"].append(signal["source"])
+        if signal.get("related_movement") and signal["related_movement"] not in current["related_movements"]:
+            current["related_movements"].append(signal["related_movement"])
+        if signal.get("side") and signal["side"] not in current["sides"]:
+            current["sides"].append(signal["side"])
+
+    eligible_targets = [
+        value for area, value in merged.items()
+        if value["severity"] in {"mild_discomfort", "moderate_non_sharp_pain"}
+        and area not in high_risk_areas
+    ]
+    # Preserve explicit questionnaire order, then movement-derived targets.
+    area_order = explicit_areas + [
+        signal.get("area") for signal in signals if signal.get("area") not in explicit_areas
+    ]
+    order_index = {area: idx for idx, area in enumerate(area_order)}
+    eligible_targets.sort(key=lambda item: (
+        -SEVERITY_RANK[item["severity"]],
+        order_index.get(item["area"], 999),
+    ))
+
+    overall_state = questionnaire_severity
+    for signal in signals:
+        if SEVERITY_RANK[signal["severity"]] > SEVERITY_RANK[overall_state]:
+            overall_state = signal["severity"]
+    if flags and overall_state != "high_risk_pain":
+        if medical_restriction or global_high_risk:
+            overall_state = "high_risk_pain"
+    if questionnaire_severity == "moderate_non_sharp_pain" and SEVERITY_RANK[overall_state] < 2:
+        overall_state = "moderate_non_sharp_pain"
+
+    duration = str(q.get("duration") or "").lower()
+    is_acute = duration in {"less_than_1_week", "less than 1 week", "moins_d_une_semaine"}
+
+    return {
+        "overall_state": overall_state,
+        "legacy_pain_state": (
+            "no_pain" if overall_state == "no_pain"
+            else "discomfort" if overall_state == "mild_discomfort"
+            else "pain"
+        ),
+        "questionnaire_severity": questionnaire_severity,
+        "signals": signals,
+        "eligible_targets": eligible_targets,
+        "high_risk_areas": sorted(high_risk_areas),
+        "red_flags": flags,
+        "global_high_risk": global_high_risk,
+        "medical_restriction": medical_restriction,
+        "is_acute": is_acute,
+    }
+
+
+def _pain_state(q):
+    return _build_symptom_profile(q or {}, [])["overall_state"]
 
 def _experience(q):
     raw = str(q.get("activity_level") or q.get("training_level") or q.get("experience") or "moderate").lower()
@@ -132,20 +539,176 @@ def _reported_categories(q):
             if c not in cats: cats.append(c)
     return cats
 
+
+def _weekly_recovery_plan(profile: Dict[str, Any], week: int) -> List[Dict[str, Any]]:
+    """Return the area-specific recovery targets for one week.
+
+    Mild discomfort receives one exposure for one area or two exposures when
+    several relevant areas are reported. Moderate non-sharp pain receives only
+    one gentle exposure per week, rotating areas when several are present.
+    """
+    if profile.get("global_high_risk"):
+        return []
+    eligible = list(profile.get("eligible_targets") or [])
+    moderate = [x for x in eligible if x.get("severity") == "moderate_non_sharp_pain"]
+    mild = [x for x in eligible if x.get("severity") == "mild_discomfort"]
+    if moderate:
+        return [moderate[(week - 1) % len(moderate)]]
+    if not mild:
+        return []
+    if len(mild) == 1:
+        return [mild[0]]
+    start = ((week - 1) * 2) % len(mild)
+    return [mild[start], mild[(start + 1) % len(mild)]]
+
+
+def _targeted_recovery_candidates(area: str, exercise_library: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    wanted = RECOVERY_AREA_EXERCISE_IDS.get(area, [])
+    by_id = {str(ex.get("exercise_id")): ex for ex in exercise_library}
+    return [by_id[eid] for eid in wanted if eid in by_id]
+
+
+def _recovery_candidate_allowed(
+    ex: Dict[str, Any],
+    signal: Dict[str, Any],
+    profile: Dict[str, Any],
+    week: int,
+    pain: str,
+    experience: str,
+    equipment: set,
+) -> Tuple[bool, Optional[str]]:
+    if ex.get("intervention_role") != "recovery":
+        return False, "not_recovery"
+    if str(ex.get("equipment") or "") not in {"foam_roller", "massage_ball"}:
+        return False, "unsupported_equipment"
+    if ex.get("demo_ready") is False or ex.get("video_ready") is False:
+        return False, "video_not_ready"
+    if profile.get("global_high_risk") or signal.get("severity") == "high_risk_pain":
+        return False, "high_risk_symptom"
+    if signal.get("area") in set(profile.get("high_risk_areas") or []):
+        return False, "high_risk_area"
+    if not _stage_allowed(ex, week) or not _load_allowed(ex, week, pain, experience, equipment):
+        return False, "stage_load_or_equipment"
+
+    contraindications = str(ex.get("contraindications") or "").lower()
+    flags = set(profile.get("red_flags") or [])
+    contraindication_map = {
+        "dizziness": ("dizziness", "dizzy"),
+        "neurological_symptoms": ("neurological",),
+        "recent_trauma": ("trauma",),
+        "acute_injury": ("acute", "injury"),
+        "radiating_symptoms": ("radiat",),
+        "numbness": ("numb",),
+        "instability": ("unstable", "instability"),
+    }
+    for flag, terms in contraindication_map.items():
+        if flag in flags and any(term in contraindications for term in terms):
+            return False, f"contraindication_{flag}"
+    if profile.get("is_acute") and "acute" in contraindications and signal.get("severity") == "moderate_non_sharp_pain":
+        return False, "acute_pain_contraindication"
+    return True, None
+
+
+def _targeted_recovery_copy(
+    ex: Dict[str, Any],
+    signal: Dict[str, Any],
+    week: int,
+    day: int,
+    priorities: List[Dict[str, Any]],
+    pain: str,
+    experience: str,
+    lang: str,
+) -> Dict[str, Any]:
+    localized = _loc(ex, week, day, priorities, pain, experience, lang)
+    severity = signal.get("severity") or "mild_discomfort"
+    area = signal.get("area")
+    moderate = severity == "moderate_non_sharp_pain"
+    side_values = signal.get("sides") or []
+    side = side_values[0] if len(side_values) == 1 else None
+    movements = signal.get("related_movements") or []
+    sources = signal.get("sources") or []
+
+    localized["targeted_discomfort_recovery"] = True
+    localized["targeted_symptom_recovery"] = True
+    localized["gentle_recovery"] = True
+    localized["symptom_severity"] = severity
+    localized["target_area"] = area
+    localized["targeted_recovery_area"] = area  # backward compatibility
+    localized["target_side"] = side
+    localized["symptom_source"] = sources[0] if len(sources) == 1 else sources
+    localized["related_movement"] = movements[0] if len(movements) == 1 else movements
+    localized["pressure_level"] = "light" if moderate else "light_to_moderate"
+    localized["sets"] = "1"
+
+    if moderate:
+        localized["reps_time"] = "30 sec"
+        stop_message = (
+            "Use light pressure and stay within a comfortable range. Stop immediately if pain increases, becomes sharp, radiates, or causes numbness or tingling."
+            if lang == "en" else
+            "Utilisez une pression légère et restez dans une zone confortable. Arrêtez immédiatement si la douleur augmente, devient vive, irradie ou provoque un engourdissement ou des fourmillements."
+        )
+        rationale = (
+            f"Included once this week as gentle, area-specific recovery support for reported moderate non-sharp pain in the {area.replace('_', ' ')}."
+            if lang == "en" else
+            f"Inclus une fois cette semaine comme récupération douce et ciblée pour une douleur modérée non vive signalée au niveau de {area.replace('_', ' ')}."
+        )
+    else:
+        # Keep filmed-exercise dosage, bounded to a short recovery exposure.
+        duration = int(_num(ex.get("default_duration_seconds_v3"), 30))
+        duration = max(30, min(60, duration))
+        localized["reps_time"] = f"{duration} sec"
+        stop_message = (
+            "Use comfortable pressure. Stop if discomfort increases, becomes sharp, radiates, or causes numbness or tingling."
+            if lang == "en" else
+            "Utilisez une pression confortable. Arrêtez si la gêne augmente, devient vive, irradie ou provoque un engourdissement ou des fourmillements."
+        )
+        rationale = (
+            f"Included as targeted self-massage for reported tension or mild discomfort in the {area.replace('_', ' ')}."
+            if lang == "en" else
+            f"Inclus comme auto-massage ciblé pour une tension ou une gêne légère signalée au niveau de {area.replace('_', ' ')}."
+        )
+
+    joint_warning = (
+        " Do not roll directly over a joint, bone, or the spine."
+        if lang == "en" else
+        " Ne passez pas directement sur une articulation, un os ou la colonne vertébrale."
+    )
+    localized["safety_stop_message"] = stop_message
+    localized["why_in_this_program"] = rationale
+    localized["instructions"] = ((localized.get("instructions") or "").strip() + " " + stop_message + joint_warning).strip()
+    localized["tips"] = ((localized.get("tips") or "").strip() + joint_warning).strip()
+    return localized
+
 def _exercise_domains(ex):
     return _csv(ex.get("screening_domains_improved"))
 
+
 def _load_allowed(ex, week, pain, experience, equipment):
     eq = str(ex.get("equipment") or "none").lower()
-    if eq not in equipment and eq not in {"none","bodyweight"}: return False
+    if eq not in equipment and eq not in {"none","bodyweight"}:
+        return False
     load = int(_num(ex.get("load_level_v3"), 0))
-    if pain == "pain" and load >= 3: return False
-    if pain == "discomfort" and load >= 5: return False
+    if pain == "high_risk_pain" and load >= 2:
+        return False
+    if pain == "moderate_non_sharp_pain" and load >= 3:
+        return False
+    if pain == "mild_discomfort" and load >= 5:
+        return False
+
     earliest = 1
-    if eq == "elastic_band": earliest = 2 if pain=="no_pain" else 3
+    if eq == "elastic_band":
+        earliest = {
+            "no_pain": 2,
+            "mild_discomfort": 3,
+            "moderate_non_sharp_pain": 4,
+            "high_risk_pain": 99,
+        }.get(pain, 3)
+    if eq == "trx" and pain == "high_risk_pain":
+        earliest = 99
     if eq == "light_weight":
         earliest = {"beginner":4,"intermediate":3,"advanced":2}[experience]
-        if pain != "no_pain": earliest = 99
+        if pain != "no_pain":
+            earliest = 99
     return week >= earliest
 
 def _stage_allowed(ex, week):
@@ -158,6 +721,36 @@ def _matches_priority(ex, domain_id: str) -> Tuple[bool, bool]:
     mapped = str(ex.get("category_code") or "") in DOMAIN_TO_CATS.get(domain_id, [])
     return exact, mapped
 
+def _is_direct_priority_exercise(ex: Dict[str, Any], domain_id: str) -> bool:
+    """Strict direct match used for dosage quotas.
+
+    An exercise must explicitly improve the measured domain and belong to that
+    domain's direct library family. Supporting or integration exercises remain
+    selectable, but never count as direct exposure.
+    """
+    domains = set(_exercise_domains(ex))
+    category = str(ex.get("category_code") or "")
+    return domain_id in domains and category in DIRECT_PRIORITY_CATS.get(domain_id, set())
+
+def _direct_priority_exposure_counts(sessions: List[Dict[str, Any]], priorities: List[Dict[str, Any]]) -> Dict[str, int]:
+    counts = Counter()
+    for session in sessions:
+        for ex in session.get("exercises", []):
+            for p in priorities[:3]:
+                if _is_direct_priority_exercise(ex, p["id"]):
+                    counts[p["id"]] += 1
+    return dict(counts)
+
+def _priority_relationship(ex: Dict[str, Any], domain_id: str) -> str:
+    if _is_direct_priority_exercise(ex, domain_id):
+        return "direct"
+    exact, mapped = _matches_priority(ex, domain_id)
+    if exact:
+        return "supporting"
+    if mapped:
+        return "integration"
+    return "unrelated"
+
 def _priority_weekly_quota(priority: Dict[str, Any], rank: int) -> int:
     """Minimum direct exposures. Rank and deficit determine dose, not library size."""
     score = _num(priority.get("score"), 100)
@@ -166,6 +759,32 @@ def _priority_weekly_quota(priority: Dict[str, Any], rank: int) -> int:
     if rank == 1:
         return 3 if score < 60 else 2 if score < 80 else 1
     return 2 if score < 70 else 1
+
+def _feasible_direct_quota(
+    priority: Dict[str, Any],
+    rank: int,
+    exercise_library: List[Dict[str, Any]],
+    week: int,
+    pain: str,
+    experience: str,
+    equipment: set,
+) -> int:
+    """Cap the dosage target only when the current demo library cannot deliver it.
+
+    Feasibility respects progression stage, equipment, pain/load rules and each
+    exercise's weekly repeat cap. This prevents a false failed audit for a domain
+    that has only one safe Week-1 direct exercise, while retaining the full quota
+    whenever the library can support it.
+    """
+    base = _priority_weekly_quota(priority, rank)
+    capacity = 0
+    for ex in exercise_library:
+        if not _is_direct_priority_exercise(ex, priority["id"]):
+            continue
+        if not _stage_allowed(ex, week) or not _load_allowed(ex, week, pain, experience, equipment):
+            continue
+        capacity += min(3, int(_num(ex.get("repeat_limit_per_week_v3"), 2)))
+    return min(base, capacity)
 
 def _build_priority_slots(priorities: List[Dict[str, Any]]) -> Dict[int, List[str]]:
     """Distribute priority exposures across three sessions while preserving variety."""
@@ -258,7 +877,7 @@ def _dose(ex, week, pain, experience, lang):
 
     if dtype in {"recovery_hold","soft_tissue_time"}:
         sets = 1
-    elif pain == "pain":
+    elif pain in {"moderate_non_sharp_pain", "high_risk_pain"}:
         sets = min_sets
     elif week == 1:
         sets = default_sets
@@ -299,6 +918,7 @@ def _loc(ex, week, day, priorities, pain, experience, lang):
         "name":name, "name_en":ex.get("name_en"), "name_fr":ex.get("name_fr"),
         "category_code":ex.get("category_code"), "target":ex.get("category_en") if lang=="en" else ex.get("category_fr"),
         "screening_domains_improved": _exercise_domains(ex),
+        "priority_relationships": {p["id"]: _priority_relationship(ex, p["id"]) for p in priorities[:3]},
         "primary_objective":ex.get("primary_objective"), "intervention_role":role,
         "clinical_subject":ex.get("clinical_subject_v4") or ex.get("category_en"),
         "clinical_intervention_role":ex.get("clinical_intervention_role_v4") or role,
@@ -321,9 +941,305 @@ def _loc(ex, week, day, priorities, pain, experience, lang):
         "progression_stage":week,
     }
 
+def _enforce_direct_priority_quotas(
+    sessions: List[Dict[str, Any]],
+    priorities: List[Dict[str, Any]],
+    exercise_library: List[Dict[str, Any]],
+    week: int,
+    qcats: List[str],
+    pain: str,
+    experience: str,
+    equipment: set,
+    week_counts: Counter,
+    program_counts: Counter,
+    previous_week_ids: set,
+    lang: str,
+) -> Dict[str, Any]:
+    """Repair a generated week until strict direct-priority quotas are met.
+
+    The repair runs after normal selection, so progression and variety still
+    shape the program. It replaces the least valuable non-direct slot only when
+    a measured priority is underdosed.
+    """
+    targets = {
+        p["id"]: _feasible_direct_quota(p, rank, exercise_library, week, pain, experience, equipment)
+        for rank, p in enumerate(priorities[:3])
+    }
+    replacements = []
+
+    def counts_now():
+        return _direct_priority_exposure_counts(sessions, priorities)
+
+    for rank, priority in enumerate(priorities[:3]):
+        domain = priority["id"]
+        safety = 0
+        while counts_now().get(domain, 0) < targets[domain] and safety < 12:
+            safety += 1
+            # Put the next exposure into the session with the fewest direct
+            # exercises for this priority, preserving day-to-day variety.
+            session_order = sorted(
+                sessions,
+                key=lambda s: (
+                    sum(_is_direct_priority_exercise(e, domain) for e in s.get("exercises", [])),
+                    s.get("day", 0),
+                ),
+            )
+            placed = False
+            for session in session_order:
+                day = int(session.get("day", 1))
+                used = {e.get("exercise_id") or e.get("id") for e in session.get("exercises", [])}
+                candidates = []
+                for ex in exercise_library:
+                    eid = ex.get("exercise_id")
+                    if not eid or eid in used or not _is_direct_priority_exercise(ex, domain):
+                        continue
+                    sc = _score_ex(
+                        ex, week, day, priorities, qcats, pain, experience, equipment,
+                        used, week_counts, program_counts, previous_week_ids,
+                        target_domain=domain,
+                    )
+                    if sc <= -1e8:
+                        continue
+                    # Direct quota delivery outranks stage novelty, while normal
+                    # scoring still chooses the safest and most varied option.
+                    candidates.append((sc + 500 - week_counts[eid] * 20, ex))
+                candidates.sort(key=lambda x: (x[0], str(x[1].get("exercise_id"))), reverse=True)
+                if not candidates:
+                    continue
+                new_ex = candidates[0][1]
+
+                # Protect all direct work for the top three priorities. Prefer
+                # replacing unrelated/supporting exercises from overrepresented
+                # categories, never another scarce direct-priority anchor.
+                category_counts = Counter(e.get("category_code") for e in session.get("exercises", []))
+                replaceable = []
+                for idx, old in enumerate(session.get("exercises", [])):
+                    if old.get("targeted_discomfort_recovery"):
+                        continue
+                    if any(_is_direct_priority_exercise(old, p["id"]) for p in priorities[:3]):
+                        continue
+                    relationships = [_priority_relationship(old, p["id"]) for p in priorities[:3]]
+                    importance = sum({"direct": 100, "supporting": 20, "integration": 8, "unrelated": 0}[r] for r in relationships)
+                    # Repeated categories and late-session novelty are easiest to replace.
+                    replace_score = importance - category_counts.get(old.get("category_code"), 0) * 5 - idx * 0.1
+                    replaceable.append((replace_score, idx, old))
+                if not replaceable:
+                    continue
+                replaceable.sort(key=lambda x: (x[0], x[1]))
+                _, idx, old = replaceable[0]
+                old_id = old.get("exercise_id") or old.get("id")
+                if old_id:
+                    week_counts[old_id] = max(0, week_counts[old_id] - 1)
+                    program_counts[old_id] = max(0, program_counts[old_id] - 1)
+                localized = _loc(new_ex, week, day, priorities, pain, experience, lang)
+                session["exercises"][idx] = localized
+                new_id = new_ex.get("exercise_id")
+                week_counts[new_id] += 1
+                program_counts[new_id] += 1
+                replacements.append({
+                    "priority": domain,
+                    "day": day,
+                    "removed": old_id,
+                    "added": new_id,
+                })
+                placed = True
+                break
+            if not placed:
+                break
+
+    final_counts = counts_now()
+    return {
+        "targets": targets,
+        "counts": final_counts,
+        "passed": all(final_counts.get(k, 0) >= v for k, v in targets.items()),
+        "replacements": replacements,
+    }
+
+
+def _enforce_targeted_discomfort_recovery(
+    sessions: List[Dict[str, Any]],
+    priorities: List[Dict[str, Any]],
+    exercise_library: List[Dict[str, Any]],
+    week: int,
+    profile: Dict[str, Any],
+    pain: str,
+    experience: str,
+    equipment: set,
+    week_counts: Counter,
+    program_counts: Counter,
+    lang: str,
+) -> Dict[str, Any]:
+    """Insert symptom-specific massage/rolling without displacing direct work."""
+    plan = _weekly_recovery_plan(profile, week)
+    requested_quota = len(plan)
+    if requested_quota == 0:
+        return {
+            "planned_targets": [],
+            "requested_quota": 0,
+            "quota": 0,
+            "count": 0,
+            "maximum_per_week": 0,
+            "passed": True,
+            "replacements": [],
+            "skipped_targets": [],
+        }
+
+    replacements: List[Dict[str, Any]] = []
+    skipped: List[Dict[str, Any]] = []
+    deliverable_plan: List[Tuple[Dict[str, Any], List[Dict[str, Any]]]] = []
+
+    for signal in plan:
+        allowed_candidates = []
+        rejection_reasons = Counter()
+        for ex in _targeted_recovery_candidates(signal["area"], exercise_library):
+            allowed, reason = _recovery_candidate_allowed(
+                ex, signal, profile, week, pain, experience, equipment,
+            )
+            if not allowed:
+                rejection_reasons[reason or "unknown"] += 1
+                continue
+            eid = ex.get("exercise_id")
+            weekly_cap = int(_num(ex.get("repeat_limit_per_week_v3"), 2))
+            program_cap = max(8, int(_num(ex.get("repeat_limit_program_v3"), 5)))
+            if week_counts[eid] >= weekly_cap:
+                rejection_reasons["weekly_cap"] += 1
+                continue
+            if program_counts[eid] >= program_cap:
+                rejection_reasons["program_cap"] += 1
+                continue
+            allowed_candidates.append(ex)
+        if allowed_candidates:
+            deliverable_plan.append((signal, allowed_candidates))
+        else:
+            skipped.append({
+                "area": signal.get("area"),
+                "severity": signal.get("severity"),
+                "reason": rejection_reasons.most_common(1)[0][0] if rejection_reasons else "no_filmed_candidate",
+            })
+
+    required_quota = len(deliverable_plan)
+    if required_quota == 0:
+        return {
+            "planned_targets": plan,
+            "requested_quota": requested_quota,
+            "quota": 0,
+            "count": 0,
+            "maximum_per_week": 1 if any(x.get("severity") == "moderate_non_sharp_pain" for x in plan) else 2,
+            "passed": True,
+            "replacements": [],
+            "skipped_targets": skipped,
+        }
+
+    moderate_plan = any(signal.get("severity") == "moderate_non_sharp_pain" for signal, _ in deliverable_plan)
+    desired_days = [3] if moderate_plan or required_quota == 1 else [1, 3]
+
+    for slot, (signal, candidates) in enumerate(deliverable_plan):
+        # Prefer the least-used filmed option to preserve variety.
+        candidates = sorted(
+            candidates,
+            key=lambda ex: (
+                week_counts[ex.get("exercise_id")],
+                program_counts[ex.get("exercise_id")],
+                str(ex.get("exercise_id")),
+            ),
+        )
+        preferred_day = desired_days[min(slot, len(desired_days) - 1)]
+        session_order = sorted(
+            sessions,
+            key=lambda s: (
+                0 if s.get("day") == preferred_day else 1,
+                sum(1 for e in s.get("exercises", []) if e.get("targeted_symptom_recovery")),
+                s.get("day", 0),
+            ),
+        )
+        placed = False
+
+        for session in session_order:
+            if any(e.get("targeted_symptom_recovery") for e in session.get("exercises", [])):
+                continue  # maximum one targeted recovery exercise per session
+            used = {e.get("exercise_id") or e.get("id") for e in session.get("exercises", [])}
+            new_ex = next((ex for ex in candidates if ex.get("exercise_id") not in used), None)
+            if new_ex is None:
+                continue
+
+            category_counts = Counter(e.get("category_code") for e in session.get("exercises", []))
+            replaceable = []
+            for idx, old in enumerate(session.get("exercises", [])):
+                if old.get("targeted_symptom_recovery"):
+                    continue
+                if any(_is_direct_priority_exercise(old, p["id"]) for p in priorities[:3]):
+                    continue
+                relationships = [_priority_relationship(old, p["id"]) for p in priorities[:3]]
+                importance = sum(
+                    {"direct": 100, "supporting": 22, "integration": 10, "unrelated": 0}[r]
+                    for r in relationships
+                )
+                # Generic recovery and repeated/unrelated novelty are replaced first.
+                generic_recovery_bonus = -50 if old.get("intervention_role") == "recovery" else 0
+                repetition_bonus = -category_counts.get(old.get("category_code"), 0) * 6
+                replace_score = importance + generic_recovery_bonus + repetition_bonus - idx * 0.1
+                replaceable.append((replace_score, idx, old))
+            if not replaceable:
+                continue
+
+            replaceable.sort(key=lambda item: (item[0], item[1]))
+            _, idx, old = replaceable[0]
+            old_id = old.get("exercise_id") or old.get("id")
+            if old_id:
+                week_counts[old_id] = max(0, week_counts[old_id] - 1)
+                program_counts[old_id] = max(0, program_counts[old_id] - 1)
+
+            localized = _targeted_recovery_copy(
+                new_ex, signal, week, int(session.get("day", 1)),
+                priorities, pain, experience, lang,
+            )
+            # Keep targeted recovery at the end of the session.
+            remaining = [
+                exercise for exercise_index, exercise in enumerate(session["exercises"])
+                if exercise_index != idx
+            ]
+            session["exercises"] = remaining + [localized]
+
+            new_id = new_ex.get("exercise_id")
+            week_counts[new_id] += 1
+            program_counts[new_id] += 1
+            replacements.append({
+                "area": signal.get("area"),
+                "severity": signal.get("severity"),
+                "day": session.get("day"),
+                "removed": old_id,
+                "added": new_id,
+            })
+            placed = True
+            break
+
+        if not placed:
+            skipped.append({
+                "area": signal.get("area"),
+                "severity": signal.get("severity"),
+                "reason": "no_replaceable_session_slot",
+            })
+
+    targeted = [
+        e for session in sessions for e in session.get("exercises", [])
+        if e.get("targeted_symptom_recovery")
+    ]
+    count = len(targeted)
+    return {
+        "planned_targets": plan,
+        "requested_quota": requested_quota,
+        "quota": required_quota,
+        "count": count,
+        "maximum_per_week": 1 if moderate_plan else 2,
+        "passed": count >= required_quota,
+        "replacements": replacements,
+        "skipped_targets": skipped,
+    }
+
 def _session_similarity(a, b):
     A={e["id"] for e in a}; B={e["id"] for e in b}
     return len(A&B)/max(1,len(A|B))
+
 
 def _quality(program, pain):
     sessions=[s for w in program["weeks"] for s in w["sessions"]]
@@ -338,15 +1254,57 @@ def _quality(program, pain):
         for e in s["exercises"]:
             if e.get("equipment") in {"elastic_band","light_weight","trx"}:
                 loaded_by_week[s["week"]]+=1
+
     failures=[]
-    if similarities and max(similarities) > .55: failures.append("within_week_session_similarity")
-    if recovery > 8: failures.append("recovery_overuse")
-    if pain=="no_pain" and loaded_by_week[3]+loaded_by_week[4] == 0: failures.append("missing_loaded_progression")
+    if similarities and max(similarities) > .55:
+        failures.append("within_week_session_similarity")
+    if recovery > 12:
+        failures.append("recovery_overuse")
+    if pain=="no_pain" and loaded_by_week[3]+loaded_by_week[4] == 0:
+        failures.append("missing_loaded_progression")
+
     underexposed_weeks=[]
+    targeted_failed_weeks=[]
+    targeted_cap_violations=[]
+    multiple_targeted_in_session=[]
+    unsafe_targeted=[]
+    equipment_mismatches=[]
+    available_equipment=set(program.get("selection_strategy",{}).get("available_equipment") or [])
+    profile=program.get("symptom_profile") or {}
+    high_risk_areas=set(profile.get("high_risk_areas") or [])
+    global_high_risk=bool(profile.get("global_high_risk"))
+
     for week in program.get("weeks", []):
         if not week.get("priority_coverage_passed", True):
             underexposed_weeks.append(week.get("week"))
-    if underexposed_weeks: failures.append("priority_underexposure")
+        audit=week.get("targeted_symptom_recovery") or week.get("targeted_discomfort_recovery") or {}
+        if not audit.get("passed", True):
+            targeted_failed_weeks.append(week.get("week"))
+        if audit.get("count",0) > audit.get("maximum_per_week",2):
+            targeted_cap_violations.append(week.get("week"))
+        for session in week.get("sessions", []):
+            targeted=[e for e in session.get("exercises",[]) if e.get("targeted_symptom_recovery")]
+            if len(targeted)>1:
+                multiple_targeted_in_session.append({"week":week.get("week"),"day":session.get("day")})
+            for ex in targeted:
+                if global_high_risk or ex.get("target_area") in high_risk_areas:
+                    unsafe_targeted.append(ex.get("exercise_id"))
+                if ex.get("equipment") not in available_equipment:
+                    equipment_mismatches.append(ex.get("exercise_id"))
+
+    if underexposed_weeks:
+        failures.append("priority_underexposure")
+    if targeted_failed_weeks:
+        failures.append("targeted_symptom_recovery_missing")
+    if targeted_cap_violations:
+        failures.append("targeted_symptom_recovery_overuse")
+    if multiple_targeted_in_session:
+        failures.append("multiple_targeted_recovery_in_session")
+    if unsafe_targeted:
+        failures.append("unsafe_targeted_recovery")
+    if equipment_mismatches:
+        failures.append("targeted_recovery_equipment_unavailable")
+
     return {
         "passed": not failures,
         "failures": failures,
@@ -354,15 +1312,22 @@ def _quality(program, pain):
         "recovery_exposure_total": recovery,
         "loaded_exposures_by_week": dict(loaded_by_week),
         "priority_underexposed_weeks": underexposed_weeks,
+        "targeted_recovery_failed_weeks": targeted_failed_weeks,
+        "targeted_recovery_cap_violations": targeted_cap_violations,
+        "multiple_targeted_recovery_sessions": multiple_targeted_in_session,
+        "unsafe_targeted_recovery_exercises": unsafe_targeted,
+        "targeted_recovery_equipment_mismatches": equipment_mismatches,
     }
+
 
 def generate_clinical_prescription_v21(screening_payload, exercise_library, rules=None, movement_dna=None, language="fr"):
     lang=_lang(language)
     q=_questionnaire(screening_payload)
-    pain=_pain_state(q)
     experience=_experience(q)
     equipment=_available_equipment(q)
     priorities=_domains(screening_payload,lang)
+    symptom_profile=_build_symptom_profile(q, priorities)
+    pain=symptom_profile["overall_state"]
     qcats=_reported_categories(q)
 
     program_counts=Counter()
@@ -383,37 +1348,43 @@ def generate_clinical_prescription_v21(screening_payload, exercise_library, rule
     for week in range(1,5):
         week_counts=Counter()
         sessions=[]
-        week_ids=set()
         priority_slots = _build_priority_slots(priorities)
         for day in range(1,4):
             selected=[]
             used=set()
 
-            # Reserve clinically relevant slots first. Variety is created inside the
-            # same priority family; unrelated novelty cannot displace a major deficit.
+            # Reserve measured movement priorities before general variety.
             for target_domain in priority_slots.get(day, []):
                 candidates=[]
                 for ex in exercise_library:
                     exact, mapped = _matches_priority(ex, target_domain)
                     if not (exact or mapped):
                         continue
-                    sc=_score_ex(ex,week,day,priorities,qcats,pain,experience,equipment,used,week_counts,program_counts,previous_week_ids,target_domain=target_domain)
+                    sc=_score_ex(
+                        ex,week,day,priorities,qcats,pain,experience,equipment,
+                        used,week_counts,program_counts,previous_week_ids,
+                        target_domain=target_domain,
+                    )
                     if sc <= -1e8:
                         continue
                     sc += 180 if exact else 45
-                    # Reward role variety within the target family.
-                    same_role = sum(1 for e in selected if e.get("intervention_role") == (ex.get("intervention_role") or "mobility"))
+                    same_role = sum(
+                        1 for e in selected
+                        if e.get("intervention_role") == (ex.get("intervention_role") or "mobility")
+                    )
                     sc -= same_role * 10
-                    # Strategic repetition of a top-priority anchor is acceptable,
-                    # but prefer a fresh exercise when equally suitable.
                     if ex.get("exercise_id") in previous_week_ids:
                         sc += 8 if target_domain == priorities[0]["id"] else 0
                     candidates.append((1 if exact else 0,sc,ex))
-                candidates.sort(key=lambda x:(x[0], x[1], str(x[2].get("exercise_id"))), reverse=True)
+                candidates.sort(
+                    key=lambda x:(x[0], x[1], str(x[2].get("exercise_id"))),
+                    reverse=True,
+                )
                 ex=next((x for exact_rank,sc,x in candidates if sc > -1e8),None)
                 if ex:
                     selected.append(_loc(ex,week,day,priorities,pain,experience,lang))
-                    eid=ex.get("exercise_id"); used.add(eid); week_counts[eid]+=1; program_counts[eid]+=1; week_ids.add(eid)
+                    eid=ex.get("exercise_id")
+                    used.add(eid); week_counts[eid]+=1; program_counts[eid]+=1
 
             role_targets = {
                 1:["mobility","mobility","activation","stability","integration","recovery"],
@@ -425,75 +1396,184 @@ def generate_clinical_prescription_v21(screening_payload, exercise_library, rule
                     break
                 candidates=[]
                 for ex in exercise_library:
-                    if (ex.get("intervention_role") or "mobility") != desired_role: continue
-                    sc=_score_ex(ex,week,day,priorities,qcats,pain,experience,equipment,used,week_counts,program_counts,previous_week_ids)
+                    if (ex.get("intervention_role") or "mobility") != desired_role:
+                        continue
+                    sc=_score_ex(
+                        ex,week,day,priorities,qcats,pain,experience,equipment,
+                        used,week_counts,program_counts,previous_week_ids,
+                    )
                     candidates.append((sc,ex))
                 candidates.sort(key=lambda x:(x[0], str(x[1].get("exercise_id"))), reverse=True)
                 ex=next((x for sc,x in candidates if sc > -1e8),None)
                 if ex:
                     selected.append(_loc(ex,week,day,priorities,pain,experience,lang))
-                    eid=ex.get("exercise_id"); used.add(eid); week_counts[eid]+=1; program_counts[eid]+=1; week_ids.add(eid)
+                    eid=ex.get("exercise_id")
+                    used.add(eid); week_counts[eid]+=1; program_counts[eid]+=1
 
-            # Recovery exposure adapts to the reported pain state instead of
-            # occupying corrective slots indiscriminately.
-            recovery_cap = {"no_pain": 1, "discomfort": 2, "pain": 3}[pain]
+            # Generic recovery remains limited to one exercise in a session.
+            # The targeted symptom strategy runs later and replaces this slot
+            # whenever possible rather than adding random recovery volume.
+            recovery_cap = 1
             if sum(1 for e in selected if e["intervention_role"]=="recovery") > recovery_cap:
                 kept=[]; recovery_seen=0
                 for e in selected:
                     if e["intervention_role"]=="recovery":
                         recovery_seen += 1
-                        if recovery_seen > recovery_cap: continue
+                        if recovery_seen > recovery_cap:
+                            eid=e.get("exercise_id") or e.get("id")
+                            if eid:
+                                week_counts[eid]=max(0,week_counts[eid]-1)
+                                program_counts[eid]=max(0,program_counts[eid]-1)
+                            continue
                     kept.append(e)
                 selected=kept
+                used={e.get("exercise_id") or e.get("id") for e in selected}
 
-            # Guarantee a complete 5-7 exercise session without filling it with random recovery drills.
+            # Complete the session without filling it with random recovery drills.
             while len(selected) < 6:
                 category_counts = Counter(e.get("category_code") for e in selected)
                 fallback=[]
                 for ex in exercise_library:
                     role = ex.get("intervention_role") or "mobility"
-                    recovery_cap = {"no_pain": 1, "discomfort": 2, "pain": 3}[pain]
-                    if role == "recovery" and sum(1 for e in selected if e.get("intervention_role")=="recovery") >= recovery_cap:
+                    if role == "recovery" and sum(
+                        1 for e in selected if e.get("intervention_role")=="recovery"
+                    ) >= recovery_cap:
                         continue
                     if category_counts.get(ex.get("category_code"), 0) >= 2:
                         continue
-                    sc=_score_ex(ex,week,day,priorities,qcats,pain,experience,equipment,used,week_counts,program_counts,previous_week_ids)
-                    if role in {"stability","integration"} and day in {2,3}: sc += 12
+                    sc=_score_ex(
+                        ex,week,day,priorities,qcats,pain,experience,equipment,
+                        used,week_counts,program_counts,previous_week_ids,
+                    )
+                    if role in {"stability","integration"} and day in {2,3}:
+                        sc += 12
                     fallback.append((sc,ex))
                 fallback.sort(key=lambda x:(x[0], str(x[1].get("exercise_id"))), reverse=True)
                 ex=next((x for sc,x in fallback if sc > -1e8),None)
-                if not ex: break
+                if not ex:
+                    break
                 selected.append(_loc(ex,week,day,priorities,pain,experience,lang))
-                eid=ex.get("exercise_id"); used.add(eid); week_counts[eid]+=1; program_counts[eid]+=1; week_ids.add(eid)
+                eid=ex.get("exercise_id")
+                used.add(eid); week_counts[eid]+=1; program_counts[eid]+=1
 
             sessions.append({
                 "day":day, "week":week,
                 "focus":focuses[day][0] if lang=="en" else focuses[day][1],
-                "session_model":"clinical_progression_engagement_v3",
+                "session_model":"priority_constrained_symptom_aware_v3_5",
                 "estimated_duration_minutes":min(30, 5+len(selected)*3),
                 "exercises":selected,
-                "clinical_balance":{"exercise_count":len(selected),"categories":sorted({e["category_code"] for e in selected})},
+                "clinical_balance":{
+                    "exercise_count":len(selected),
+                    "categories":sorted({e["category_code"] for e in selected}),
+                },
             })
+
+        # First repair strict direct-priority quotas, then add symptom-specific
+        # recovery only by replacing an unprotected complementary slot.
+        direct_audit = _enforce_direct_priority_quotas(
+            sessions, priorities, exercise_library, week, qcats, pain, experience,
+            equipment, week_counts, program_counts, previous_week_ids, lang,
+        )
+        recovery_audit = _enforce_targeted_discomfort_recovery(
+            sessions, priorities, exercise_library, week, symptom_profile, pain,
+            experience, equipment, week_counts, program_counts, lang,
+        )
+
+        # Re-audit after recovery insertion and refresh session metadata.
         exposure_counts = _priority_exposure_counts(sessions, priorities)
-        exposure_targets = {p["id"]: _priority_weekly_quota(p, rank) for rank,p in enumerate(priorities[:3])}
+        direct_exposure_counts = _direct_priority_exposure_counts(sessions, priorities)
+        exposure_targets = direct_audit["targets"]
+        priority_coverage_passed = all(
+            direct_exposure_counts.get(domain,0) >= target
+            for domain,target in exposure_targets.items()
+        )
+        for session in sessions:
+            session["clinical_balance"]={
+                "exercise_count":len(session.get("exercises",[])),
+                "categories":sorted({
+                    e.get("category_code") for e in session.get("exercises",[])
+                    if e.get("category_code")
+                }),
+                "targeted_recovery_count":sum(
+                    1 for e in session.get("exercises",[])
+                    if e.get("targeted_symptom_recovery")
+                ),
+            }
+            session["estimated_duration_minutes"]=min(
+                30, 5+len(session.get("exercises",[]))*3
+            )
+
         weeks.append({
             "week":week,
             "priority_exposure_targets": exposure_targets,
             "priority_exposure_counts": exposure_counts,
-            "priority_coverage_passed": all(exposure_counts.get(k,0) >= v for k,v in exposure_targets.items()),
+            "direct_priority_exposure_counts": direct_exposure_counts,
+            "direct_priority_quota_replacements": direct_audit["replacements"],
+            "priority_coverage_passed": priority_coverage_passed,
+            "targeted_discomfort_recovery": recovery_audit,
+            "targeted_symptom_recovery": recovery_audit,
             "phase":phases[week][0] if lang=="en" else phases[week][1],
             "objective":(
-                ["Learn pain-free movement foundations.","Develop active control and capacity.","Introduce resistance and stronger stability demands.","Integrate corrections into challenging functional movement."][week-1]
+                [
+                    "Learn comfortable movement foundations.",
+                    "Develop active control and capacity.",
+                    "Introduce resistance and stronger stability demands when appropriate.",
+                    "Integrate movement priorities into more challenging functional movement.",
+                ][week-1]
                 if lang=="en" else
-                ["Apprendre les bases du mouvement sans douleur.","Développer le contrôle actif et la capacité.","Introduire la résistance et renforcer la stabilité.","Intégrer les corrections dans des mouvements fonctionnels plus exigeants."][week-1]
+                [
+                    "Apprendre les bases du mouvement dans une zone confortable.",
+                    "Développer le contrôle actif et la capacité.",
+                    "Introduire la résistance et renforcer la stabilité lorsque cela est adapté.",
+                    "Intégrer les priorités de mouvement dans des tâches fonctionnelles plus exigeantes.",
+                ][week-1]
             ),
             "progression_logic":"Learn → control → load → integrate" if lang=="en" else "Apprendre → contrôler → charger → intégrer",
             "sessions":sessions,
         })
-        previous_week_ids=week_ids
+        previous_week_ids={
+            e.get("exercise_id") or e.get("id")
+            for session in sessions for e in session.get("exercises",[])
+            if e.get("exercise_id") or e.get("id")
+        }
 
     report=screening_payload.get("report",screening_payload) or {}
     movement_score=_num(report.get("flexilab_score", report.get("score",0)),0)
+    program_mode={
+        "no_pain":"movement_training",
+        "mild_discomfort":"discomfort_aware_training",
+        "moderate_non_sharp_pain":"gentle_pain_aware_training",
+        "high_risk_pain":"safety_limited_training",
+    }.get(pain,"movement_training")
+
+    safety_notes=[
+        "No exercise should increase symptoms.",
+        "Movement quality is more important than repetitions.",
+        "Reduce range or load if compensation appears.",
+    ] if lang=="en" else [
+        "Aucun exercice ne doit augmenter les symptômes.",
+        "La qualité du mouvement prime sur le nombre de répétitions.",
+        "Réduisez l’amplitude ou la charge si une compensation apparaît.",
+    ]
+    if pain=="mild_discomfort":
+        safety_notes.append(
+            "Targeted recovery should remain comfortable; stop if discomfort increases or becomes sharp."
+            if lang=="en" else
+            "La récupération ciblée doit rester confortable ; arrêtez si la gêne augmente ou devient vive."
+        )
+    elif pain=="moderate_non_sharp_pain":
+        safety_notes.append(
+            "Use only light pressure for targeted recovery and stop if pain increases, becomes sharp, radiates, or causes numbness or tingling."
+            if lang=="en" else
+            "Utilisez uniquement une pression légère pour la récupération ciblée et arrêtez si la douleur augmente, devient vive, irradie ou provoque un engourdissement ou des fourmillements."
+        )
+    elif pain=="high_risk_pain":
+        safety_notes.append(
+            "Targeted self-massage is excluded for high-risk symptoms. Seek qualified professional assessment when symptoms are significant, sharp, radiating, neurological, unstable, or linked to recent trauma."
+            if lang=="en" else
+            "L’auto-massage ciblé est exclu en présence de symptômes à risque. Demandez l’avis d’un professionnel qualifié si les symptômes sont importants, vifs, irradiants, neurologiques, instables ou liés à un traumatisme récent."
+        )
+
     program={
         "engine_version":ENGINE_VERSION,
         "created_at":datetime.now(timezone.utc).isoformat(),
@@ -501,11 +1581,18 @@ def generate_clinical_prescription_v21(screening_payload, exercise_library, rule
         "movement_score":movement_score,
         "movement_score_band":_band(movement_score,lang),
         "clinical_readiness":{
-            "pain_state":pain,
+            # Keep the legacy field stable for existing frontend consumers.
+            "pain_state":symptom_profile["legacy_pain_state"],
+            "symptom_state":pain,
             "training_experience":experience,
-            "program_mode":"corrective_training" if pain=="no_pain" else "pain_free_corrective",
-            "medical_advice_recommended": pain=="pain",
+            "program_mode":program_mode,
+            "medical_advice_recommended": pain=="high_risk_pain",
+            "moderate_non_sharp_recovery_enabled": (
+                pain=="moderate_non_sharp_pain"
+                and not symptom_profile.get("global_high_risk")
+            ),
         },
+        "symptom_profile":symptom_profile,
         "pre_screening_questionnaire":q,
         "movement_dna_summary":movement_dna or {},
         "clinical_priorities":priorities[:3],
@@ -515,37 +1602,41 @@ def generate_clinical_prescription_v21(screening_payload, exercise_library, rule
             "duration":"4 weeks" if lang=="en" else "4 semaines",
             "frequency":"3 sessions/week" if lang=="en" else "3 séances/semaine",
             "session_duration":"18-30 min",
-            "model":"stable clinical targets + varied progressive exercise journey",
+            "model":"stable movement priorities + varied progression + symptom-aware recovery",
         },
         "selection_strategy":{
             "principles":[
-                "stable clinical targets",
+                "stable movement priorities",
                 "anatomical subject separated from intervention role",
-                "explicit regression and progression links where clinically coherent",
+                "explicit regression and progression links where coherent",
                 "criteria-based progression rather than week number alone",
                 "priority exposure guaranteed before general session filling",
+                "strict direct-priority quotas audited after final generation",
+                "supporting and integration exercises excluded from direct quota counts",
+                "mild discomfort receives 1-2 area-specific filmed recovery exposures per week",
+                "moderate non-sharp pain receives a maximum of one gentle targeted recovery exposure per week",
+                "significant, sharp, radiating or neurological symptoms exclude targeted self-massage",
+                "targeted recovery never substitutes for direct priority work",
+                "maximum one targeted recovery exercise in a session",
+                "targeted recovery is placed at the end of the session",
                 "variety inside the same movement-priority family",
-                "strategic repetition when the demo library is scarce",
-                "exercise variation without randomness",
-                "questionnaire-driven loading and safety",
+                "strategic repetition when the filmed demo library is scarce",
+                "questionnaire and movement-clearance driven safety",
                 "exercise-specific dosage",
             ],
-            "progression_model":"priority_constrained_restore_control_stabilize_integrate_v5",
+            "progression_model":"direct_priority_quota_symptom_aware_recovery_restore_control_stabilize_integrate_v8",
             "available_equipment":sorted(equipment),
             "reported_category_preferences":qcats,
+            "symptom_recovery_strategy":{
+                "mild_discomfort_per_week":"1-2",
+                "moderate_non_sharp_pain_per_week":"maximum 1",
+                "high_risk_pain_per_week":"0",
+                "eligible_equipment":["foam_roller","massage_ball"],
+            },
         },
         "weeks":weeks,
-        "safety_notes":[
-            "No exercise should provoke or increase pain.",
-            "Movement quality is more important than repetitions.",
-            "Reduce range or load if compensation appears.",
-        ] if lang=="en" else [
-            "Aucun exercice ne doit provoquer ou augmenter la douleur.",
-            "La qualité du mouvement prime sur le nombre de répétitions.",
-            "Réduisez l’amplitude ou la charge si une compensation apparaît.",
-        ],
+        "safety_notes":safety_notes,
     }
     program["validation_flags"]=_quality(program,pain)
     return program
 
-generate_clinical_prescription = generate_clinical_prescription_v21
