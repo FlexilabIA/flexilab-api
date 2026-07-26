@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from collections import Counter, defaultdict
 import json, math, re
 
-ENGINE_VERSION = "FlexiLab Clinical Prescription Engine v3.1-explicit-progression"
+ENGINE_VERSION = "FlexiLab Clinical Prescription Engine v3.2-priority-constrained-variety"
 
 DOMAIN_TO_CATS = {
     "cervical_control": ["CC", "SH"],
@@ -151,8 +151,46 @@ def _load_allowed(ex, week, pain, experience, equipment):
 def _stage_allowed(ex, week):
     return int(_num(ex.get("progression_stage_v3", ex.get("min_week",1)),1)) <= week and int(_num(ex.get("difficulty_1_5",3),3)) <= {1:2,2:3,3:4,4:5}[week]
 
+def _matches_priority(ex, domain_id: str) -> Tuple[bool, bool]:
+    """Return (exact_domain_match, mapped_category_match)."""
+    domains = _exercise_domains(ex)
+    exact = domain_id in domains
+    mapped = str(ex.get("category_code") or "") in DOMAIN_TO_CATS.get(domain_id, [])
+    return exact, mapped
+
+def _priority_weekly_quota(priority: Dict[str, Any], rank: int) -> int:
+    """Minimum direct exposures. Rank and deficit determine dose, not library size."""
+    score = _num(priority.get("score"), 100)
+    if rank == 0:
+        return 4 if score < 60 else 3 if score < 70 else 2 if score < 80 else 1
+    if rank == 1:
+        return 3 if score < 60 else 2 if score < 80 else 1
+    return 2 if score < 70 else 1
+
+def _build_priority_slots(priorities: List[Dict[str, Any]]) -> Dict[int, List[str]]:
+    """Distribute priority exposures across three sessions while preserving variety."""
+    slots = {1: [], 2: [], 3: []}
+    for rank, priority in enumerate(priorities[:3]):
+        quota = _priority_weekly_quota(priority, rank)
+        # Stagger the starting day so secondary priorities do not always appear in Day 1.
+        start = rank % 3
+        for i in range(quota):
+            day = ((start + i) % 3) + 1
+            slots[day].append(priority["id"])
+    return slots
+
+def _priority_exposure_counts(sessions: List[Dict[str, Any]], priorities: List[Dict[str, Any]]) -> Dict[str, int]:
+    counts = Counter()
+    for session in sessions:
+        for ex in session.get("exercises", []):
+            domains = set(_csv(ex.get("screening_domains_improved")))
+            for p in priorities[:3]:
+                if p["id"] in domains:
+                    counts[p["id"]] += 1
+    return dict(counts)
+
 def _score_ex(ex, week, day, priorities, qcats, pain, experience, equipment,
-              session_used, week_counts, program_counts, previous_week_ids):
+              session_used, week_counts, program_counts, previous_week_ids, target_domain=None):
     eid = ex.get("exercise_id")
     if not eid or eid in session_used: return -1e9
     if not _stage_allowed(ex, week) or not _load_allowed(ex, week, pain, experience, equipment): return -1e9
@@ -167,7 +205,12 @@ def _score_ex(ex, week, day, priorities, qcats, pain, experience, equipment,
 
     weekly_cap = int(_num(ex.get("repeat_limit_per_week_v3"), 2))
     program_cap = int(_num(ex.get("repeat_limit_program_v3"), 5))
-    if week_counts[eid] >= weekly_cap or program_counts[eid] >= program_cap: return -1e9
+    exact_target = bool(target_domain and target_domain in _exercise_domains(ex))
+    # A scarce demo-library priority must not disappear in weeks 3-4 merely
+    # because a generic program-wide variety cap was reached. Weekly safety caps
+    # remain intact; direct-priority anchors receive a larger program allowance.
+    effective_program_cap = max(program_cap, 12) if exact_target else program_cap
+    if week_counts[eid] >= weekly_cap or program_counts[eid] >= effective_program_cap: return -1e9
 
     c = str(ex.get("category_code") or "")
     domains = _exercise_domains(ex)
@@ -202,9 +245,9 @@ def _score_ex(ex, week, day, priorities, qcats, pain, experience, equipment,
     if day == 3 and role == "integration": score += 26
     if week >= 3 and int(_num(ex.get("load_level_v3"),0)) >= 3: score += 22
     if week == 4 and role == "integration": score += 16
-    if eid in previous_week_ids: score -= 14
-    if week_counts[eid] > 0: score -= 22
-    if program_counts[eid] > 1: score -= 8 * program_counts[eid]
+    if eid in previous_week_ids: score -= 4 if exact_target else 14
+    if week_counts[eid] > 0: score -= 10 if exact_target else 22
+    if program_counts[eid] > 1: score -= (2 if exact_target else 8) * program_counts[eid]
     return score
 
 def _dose(ex, week, pain, experience, lang):
@@ -255,6 +298,7 @@ def _loc(ex, week, day, priorities, pain, experience, lang):
         "id":ex.get("exercise_id"), "exercise_id":ex.get("exercise_id"),
         "name":name, "name_en":ex.get("name_en"), "name_fr":ex.get("name_fr"),
         "category_code":ex.get("category_code"), "target":ex.get("category_en") if lang=="en" else ex.get("category_fr"),
+        "screening_domains_improved": _exercise_domains(ex),
         "primary_objective":ex.get("primary_objective"), "intervention_role":role,
         "clinical_subject":ex.get("clinical_subject_v4") or ex.get("category_en"),
         "clinical_intervention_role":ex.get("clinical_intervention_role_v4") or role,
@@ -298,12 +342,18 @@ def _quality(program, pain):
     if similarities and max(similarities) > .55: failures.append("within_week_session_similarity")
     if recovery > 8: failures.append("recovery_overuse")
     if pain=="no_pain" and loaded_by_week[3]+loaded_by_week[4] == 0: failures.append("missing_loaded_progression")
+    underexposed_weeks=[]
+    for week in program.get("weeks", []):
+        if not week.get("priority_coverage_passed", True):
+            underexposed_weeks.append(week.get("week"))
+    if underexposed_weeks: failures.append("priority_underexposure")
     return {
         "passed": not failures,
         "failures": failures,
         "max_within_week_similarity": round(max(similarities) if similarities else 0,2),
         "recovery_exposure_total": recovery,
         "loaded_exposures_by_week": dict(loaded_by_week),
+        "priority_underexposed_weeks": underexposed_weeks,
     }
 
 def generate_clinical_prescription_v21(screening_payload, exercise_library, rules=None, movement_dna=None, language="fr"):
@@ -334,15 +384,45 @@ def generate_clinical_prescription_v21(screening_payload, exercise_library, rule
         week_counts=Counter()
         sessions=[]
         week_ids=set()
+        priority_slots = _build_priority_slots(priorities)
         for day in range(1,4):
             selected=[]
             used=set()
+
+            # Reserve clinically relevant slots first. Variety is created inside the
+            # same priority family; unrelated novelty cannot displace a major deficit.
+            for target_domain in priority_slots.get(day, []):
+                candidates=[]
+                for ex in exercise_library:
+                    exact, mapped = _matches_priority(ex, target_domain)
+                    if not (exact or mapped):
+                        continue
+                    sc=_score_ex(ex,week,day,priorities,qcats,pain,experience,equipment,used,week_counts,program_counts,previous_week_ids,target_domain=target_domain)
+                    if sc <= -1e8:
+                        continue
+                    sc += 180 if exact else 45
+                    # Reward role variety within the target family.
+                    same_role = sum(1 for e in selected if e.get("intervention_role") == (ex.get("intervention_role") or "mobility"))
+                    sc -= same_role * 10
+                    # Strategic repetition of a top-priority anchor is acceptable,
+                    # but prefer a fresh exercise when equally suitable.
+                    if ex.get("exercise_id") in previous_week_ids:
+                        sc += 8 if target_domain == priorities[0]["id"] else 0
+                    candidates.append((1 if exact else 0,sc,ex))
+                candidates.sort(key=lambda x:(x[0], x[1], str(x[2].get("exercise_id"))), reverse=True)
+                ex=next((x for exact_rank,sc,x in candidates if sc > -1e8),None)
+                if ex:
+                    selected.append(_loc(ex,week,day,priorities,pain,experience,lang))
+                    eid=ex.get("exercise_id"); used.add(eid); week_counts[eid]+=1; program_counts[eid]+=1; week_ids.add(eid)
+
             role_targets = {
                 1:["mobility","mobility","activation","stability","integration","recovery"],
                 2:["activation","stability","stability","integration","mobility","integration"],
                 3:["integration","integration","stability","mobility","activation","recovery"],
             }[day]
             for desired_role in role_targets:
+                if len(selected) >= 6:
+                    break
                 candidates=[]
                 for ex in exercise_library:
                     if (ex.get("intervention_role") or "mobility") != desired_role: continue
@@ -394,8 +474,13 @@ def generate_clinical_prescription_v21(screening_payload, exercise_library, rule
                 "exercises":selected,
                 "clinical_balance":{"exercise_count":len(selected),"categories":sorted({e["category_code"] for e in selected})},
             })
+        exposure_counts = _priority_exposure_counts(sessions, priorities)
+        exposure_targets = {p["id"]: _priority_weekly_quota(p, rank) for rank,p in enumerate(priorities[:3])}
         weeks.append({
             "week":week,
+            "priority_exposure_targets": exposure_targets,
+            "priority_exposure_counts": exposure_counts,
+            "priority_coverage_passed": all(exposure_counts.get(k,0) >= v for k,v in exposure_targets.items()),
             "phase":phases[week][0] if lang=="en" else phases[week][1],
             "objective":(
                 ["Learn pain-free movement foundations.","Develop active control and capacity.","Introduce resistance and stronger stability demands.","Integrate corrections into challenging functional movement."][week-1]
@@ -438,11 +523,14 @@ def generate_clinical_prescription_v21(screening_payload, exercise_library, rule
                 "anatomical subject separated from intervention role",
                 "explicit regression and progression links where clinically coherent",
                 "criteria-based progression rather than week number alone",
+                "priority exposure guaranteed before general session filling",
+                "variety inside the same movement-priority family",
+                "strategic repetition when the demo library is scarce",
                 "exercise variation without randomness",
                 "questionnaire-driven loading and safety",
                 "exercise-specific dosage",
             ],
-            "progression_model":"restore_control_stabilize_integrate_v4",
+            "progression_model":"priority_constrained_restore_control_stabilize_integrate_v5",
             "available_equipment":sorted(equipment),
             "reported_category_preferences":qcats,
         },
