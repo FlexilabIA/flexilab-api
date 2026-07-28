@@ -68,7 +68,7 @@ PLAN_CONFIG = {
         "price_id": STRIPE_PRICE_TRAINER_PACK,
         "mode": "payment",
         "months": 12,
-        "trainer_tokens": 30,
+        "trainer_tokens": 15,
     },
 }
 
@@ -446,18 +446,18 @@ def create_stripe_router(supabase_client) -> APIRouter:
                 "cycle_end": _iso(end),
                 "grace_expires_at": _iso(end),
                 "credits_granted": int(
-                    PLAN_CONFIG[plan_code].get("trainer_tokens", 30)
+                    PLAN_CONFIG[plan_code].get("trainer_tokens", 15)
                 ),
                 "credits_used": 0,
             })
             .execute()
         )
         if not cycle_response.data:
-            raise RuntimeError("Unable to grant purchased Trainer tokens.")
+            raise RuntimeError("Unable to grant purchased Trainer screening credits.")
 
     def grant_referral_reward(*, client_user_id: str, source_payment_id: str) -> None:
         """
-        Grant two screening tokens to the original Trainer after the referred
+        Grant two screening credits to the original Trainer after the referred
         client completes their first successful paid FlexiLab purchase.
 
         The reward is intentionally granted once per Trainer/client pair, not
@@ -523,7 +523,7 @@ def create_stripe_router(supabase_client) -> APIRouter:
                 .execute()
             )
             if not cycle_response.data:
-                raise RuntimeError("Unable to grant Trainer referral tokens.")
+                raise RuntimeError("Unable to grant Trainer referral credits.")
 
         reward_response = (
             supabase_client.table("trainer_referral_rewards")
@@ -1005,7 +1005,7 @@ def create_stripe_router(supabase_client) -> APIRouter:
                 + "?payment=cancelled"
             ),
             # Display Stripe's secure promotion-code field for every
-            # client plan and the Trainer 30-token pack.
+            # client plan and the Trainer 15-credit pack.
             "allow_promotion_codes": not bool(upgrade_credit),
         }
         if upgrade_credit:
