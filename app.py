@@ -3009,6 +3009,9 @@ async def submit_analysis(
     capture_metadata_json: str = Form(None),
     authorization: str = Header(None),
 ):
+    total_started = time.perf_counter()
+    phases = {}
+
     if supabase is None:
         raise HTTPException(status_code=503, detail="Supabase is not configured on server.")
 
@@ -3074,7 +3077,10 @@ async def submit_analysis(
             "recovered": True,
         }
 
+    phase_started = time.perf_counter()
     img_bytes = await image.read()
+    phases["image_read_ms"] = round((time.perf_counter() - phase_started) * 1000, 1)
+    phases["image_bytes"] = len(img_bytes)
     if not img_bytes:
         raise HTTPException(status_code=422, detail="The uploaded image is empty.")
     if len(img_bytes) > 12 * 1024 * 1024:
