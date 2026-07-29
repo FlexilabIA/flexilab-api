@@ -375,7 +375,7 @@ async def request_timing_middleware(request, call_next):
 def health():
     return {
         "ok": True,
-        "patch_version": "V101.35.18-validation-overlay",
+        "patch_version": "V101.35.20-aslr-conditional-detection-recovery",
         "base_patch": "V101.28.4-aslr-thresholds-60-75",
         "exercise_library_mode": EXERCISE_LIBRARY_MODE,
         "exercise_library_path": EXERCISE_LIBRARY_PATH,
@@ -406,10 +406,10 @@ def health():
                 "green": ">75",
             },
             "source_orientation_requirement": "head_left_capture_protocol_internal_90_clockwise_inference",
-            "chain_strategy": "single_rotated_yolo_call_then_image_horizontal_primary_no_tracking_images",
-            "pose_passes": ["rotated_90_clockwise_single_fullbody_detection"],
-            "pose_model_inference_count": 1,
-            "detection_attempt_count": 1,
+            "chain_strategy": "rotated_full_image_then_conditional_focused_crop_for_coherent_chain",
+            "pose_passes": ["rotated_90_clockwise_full_image", "conditional_rotated_focused_crop_recovery"],
+            "pose_model_inference_count": "1 normally; 2 only when coherent chain recovery is required",
+            "detection_attempt_count": "1 normally; 2 conditionally",
             "tracked_image_processing": False,
             "aslr_inference_imgsz": 960,
             "measurement_anchor": "single_shared_pelvic_anchor_image_horizontal_to_true_raised_ankle",
@@ -2032,6 +2032,48 @@ def _aslr_pose_pass_quality(result):
     return round(float(quality), 6)
 
 
+
+def _aslr_same_side_chain_quality(xy, conf):
+    """Return the strongest coherent COCO hip-knee-ankle detection quality.
+
+    This is a detection selector only. It never computes or changes the ASLR
+    clinical angle. The measurement engine remains authoritative.
+    """
+    candidates = []
+    for label, hip_i, knee_i, ankle_i in (
+        ("H11-K13-A15", 11, 13, 15),
+        ("H12-K14-A16", 12, 14, 16),
+    ):
+        values = [float(conf[i]) if i < len(conf) else 0.0 for i in (hip_i, knee_i, ankle_i)]
+        minimum = min(values)
+        mean = sum(values) / 3.0
+        knee_extension = 0.0
+        try:
+            hip = np.asarray(xy[hip_i], dtype=float)
+            knee = np.asarray(xy[knee_i], dtype=float)
+            ankle = np.asarray(xy[ankle_i], dtype=float)
+            a = hip - knee
+            b = ankle - knee
+            denom = float(np.linalg.norm(a) * np.linalg.norm(b))
+            if denom > 1e-6:
+                cosine = max(-1.0, min(1.0, float(np.dot(a, b) / denom)))
+                knee_extension = float(math.degrees(math.acos(cosine)))
+        except Exception:
+            knee_extension = 0.0
+
+        geometry_factor = max(0.0, min(1.0, (knee_extension - 100.0) / 60.0))
+        score = mean * 0.55 + minimum * 0.35 + geometry_factor * 0.10
+        candidates.append({
+            "label": label,
+            "score": round(score, 6),
+            "minimum_confidence": round(minimum, 6),
+            "mean_confidence": round(mean, 6),
+            "knee_extension_deg": round(knee_extension, 3),
+            "valid_detection": minimum >= ASLR_KEYPOINT_MIN_CONF and mean >= ASLR_REQUIRED_MEAN_CONF,
+        })
+    candidates.sort(key=lambda item: item["score"], reverse=True)
+    return candidates[0], candidates
+
 def _relevant_pose_confidence(conf, test_type):
     test_type = str(test_type or "")
     if test_type.startswith("aslr"):
@@ -2567,24 +2609,27 @@ def run_yolo_analysis_from_bytes(img_bytes, test_type, capture_metadata=None):
             inference_imgsz=first_requested_imgsz,
         )
         (
-            first_boxes,
+            first_boxes_rotated,
             first_areas,
             first_box_confidences,
             first_main_idx,
-            first_xy,
+            first_xy_rotated,
             first_conf,
         ) = _pose_arrays(first_prediction)
         first_xy, first_boxes = _map_rotated_cw_pose_to_original(
-            first_xy,
-            first_boxes,
+            first_xy_rotated,
+            first_boxes_rotated,
             img.shape,
         )
         first_areas = np.array([
             max(0.0, float(box[2] - box[0])) * max(0.0, float(box[3] - box[1]))
             for box in first_boxes
         ], dtype=float)
+        first_chain_quality, first_chain_candidates = _aslr_same_side_chain_quality(
+            first_xy, first_conf
+        )
         aslr_single_rotated_pass = {
-            "name": "rotated_90_clockwise_single_inference",
+            "name": "rotated_90_clockwise_full_image",
             "xy": first_xy,
             "conf": first_conf,
             "boxes": first_boxes,
@@ -2592,7 +2637,70 @@ def run_yolo_analysis_from_bytes(img_bytes, test_type, capture_metadata=None):
             "main_idx": first_main_idx,
             "threshold": first_threshold,
             "imgsz": first_imgsz,
+            "chain_quality": first_chain_quality,
+            "chain_candidates": first_chain_candidates,
+            "pose_model_inference_count": 1,
+            "detection_attempt_count": 1,
         }
+
+        # V101.35.20: keep the fast one-call path when a coherent same-side
+        # hip-knee-ankle chain is reliable. Only weak/incomplete detections get
+        # one focused, higher-detail recovery pass.
+        if not bool(first_chain_quality.get("valid_detection")):
+            crop_img, crop_bounds = _expanded_person_crop(
+                rotated_pose_image,
+                first_boxes_rotated[first_main_idx],
+                aslr=True,
+            )
+            rotated_area = float(rotated_pose_image.shape[0] * rotated_pose_image.shape[1])
+            crop_is_useful = bool(
+                crop_img is not None
+                and crop_bounds is not None
+                and float(crop_bounds["width"] * crop_bounds["height"]) < rotated_area * 0.97
+            )
+            if crop_is_useful:
+                crop_prediction, crop_threshold, crop_imgsz = detect_aslr_pose_with_fallback(
+                    crop_img,
+                    inference_imgsz=1280,
+                )
+                (
+                    crop_boxes_local,
+                    _crop_areas,
+                    crop_box_confidences,
+                    crop_main_idx,
+                    crop_xy_local,
+                    crop_conf,
+                ) = _pose_arrays(crop_prediction)
+                crop_xy_rotated, crop_boxes_rotated = _map_crop_pose_to_full(
+                    crop_xy_local, crop_boxes_local, crop_bounds
+                )
+                crop_xy, crop_boxes = _map_rotated_cw_pose_to_original(
+                    crop_xy_rotated, crop_boxes_rotated, img.shape
+                )
+                crop_chain_quality, crop_chain_candidates = _aslr_same_side_chain_quality(
+                    crop_xy, crop_conf
+                )
+                crop_pass = {
+                    "name": "rotated_90_clockwise_focused_crop_recovery",
+                    "xy": crop_xy,
+                    "conf": crop_conf,
+                    "boxes": crop_boxes,
+                    "box_confidences": crop_box_confidences,
+                    "main_idx": crop_main_idx,
+                    "threshold": crop_threshold,
+                    "imgsz": crop_imgsz,
+                    "chain_quality": crop_chain_quality,
+                    "chain_candidates": crop_chain_candidates,
+                    "crop_bounds_rotated": crop_bounds,
+                    "pose_model_inference_count": 2,
+                    "detection_attempt_count": 2,
+                }
+                if (
+                    bool(crop_chain_quality.get("valid_detection"))
+                    or float(crop_chain_quality.get("score", 0.0))
+                    > float(first_chain_quality.get("score", 0.0)) + 0.02
+                ):
+                    aslr_single_rotated_pass = crop_pass
     else:
         first_prediction, first_threshold, first_imgsz = detect_pose_with_fallback(
             img,
@@ -2748,9 +2856,12 @@ def run_yolo_analysis_from_bytes(img_bytes, test_type, capture_metadata=None):
             "selected_pass": selected_pass_name,
             "source_orientation_required": False,
             "pose_passes": [selected_pass_name],
-            "pose_pass_count": 1,
-            "pose_model_inference_count": 1,
-            "detection_attempt_count": 1,
+            "pose_pass_count": int(selected_pass.get("detection_attempt_count", 1)),
+            "pose_model_inference_count": int(selected_pass.get("pose_model_inference_count", 1)),
+            "detection_attempt_count": int(selected_pass.get("detection_attempt_count", 1)),
+            "conditional_focused_crop_used": selected_pass_name.endswith("focused_crop_recovery"),
+            "selected_chain_detection_quality": selected_pass.get("chain_quality"),
+            "candidate_chain_detection_quality": selected_pass.get("chain_candidates"),
             "tracked_image_processing_enabled": False,
             "original_orientation_pose_inference_used": False,
             "rotated_pass_failure": None,
