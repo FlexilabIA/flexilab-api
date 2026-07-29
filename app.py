@@ -249,7 +249,7 @@ aslr_model = _load_aslr_pose_model()
 
 app = FastAPI(
     title="FlexiLab Movement Intelligence API",
-    version="101.35.4",
+    version="101.35.15",
 )
 app.include_router(create_account_router(supabase))
 app.include_router(create_stripe_router(supabase))
@@ -372,7 +372,7 @@ async def request_timing_middleware(request, call_next):
 def health():
     return {
         "ok": True,
-        "patch_version": "V101.35.14-aslr-one-call-no-tracked-images",
+        "patch_version": "V101.35.15-pipeline-stability",
         "base_patch": "V101.28.4-aslr-thresholds-60-75",
         "exercise_library_mode": EXERCISE_LIBRARY_MODE,
         "exercise_library_path": EXERCISE_LIBRARY_PATH,
@@ -2347,6 +2347,48 @@ def build_screening_row(user_email, user_id, session_id, test_type, result, inta
     return row
 
 
+def _is_transient_upstream_error(exc):
+    """Return True for temporary HTTP/socket failures from Supabase/PostgREST."""
+    if isinstance(exc, (
+        httpx.ReadError,
+        httpx.ConnectError,
+        httpx.ConnectTimeout,
+        httpx.ReadTimeout,
+        httpx.PoolTimeout,
+    )):
+        return True
+    text = str(exc or "").lower()
+    return (
+        "resource temporarily unavailable" in text
+        or "errno 11" in text
+        or "server disconnected" in text
+        or "connection reset" in text
+    )
+
+
+def _execute_with_transient_retry(operation, *, label, attempts=3):
+    """Retry a small Supabase operation without rerunning YOLO inference."""
+    last_exc = None
+    for attempt in range(1, max(1, int(attempts)) + 1):
+        try:
+            return operation()
+        except Exception as exc:
+            last_exc = exc
+            if not _is_transient_upstream_error(exc) or attempt >= attempts:
+                raise
+            delay = 0.20 * attempt
+            logger.warning(
+                "transient_upstream_retry label=%s attempt=%s/%s delay_s=%.2f error=%s",
+                label,
+                attempt,
+                attempts,
+                delay,
+                str(exc)[:240],
+            )
+            time.sleep(delay)
+    raise last_exc
+
+
 def _is_duplicate_screening_error(exc):
     text = str(exc or "").lower()
     return (
@@ -2359,14 +2401,17 @@ def _is_duplicate_screening_error(exc):
 def _find_existing_screening(session_id, test_type):
     if supabase is None:
         return None
-    response = (
-        supabase.table("screenings")
-        .select("*")
-        .eq("session_id", session_id)
-        .eq("test_type", test_type)
-        .order("created_at", desc=True)
-        .limit(1)
-        .execute()
+    response = _execute_with_transient_retry(
+        lambda: (
+            supabase.table("screenings")
+            .select("*")
+            .eq("session_id", session_id)
+            .eq("test_type", test_type)
+            .order("created_at", desc=True)
+            .limit(1)
+            .execute()
+        ),
+        label="find_existing_screening",
     )
     return response.data[0] if response.data else None
 
@@ -2416,7 +2461,10 @@ def _update_session_score_best_effort(session_id, session_update, *, job_id=None
     if not session_update:
         return
     try:
-        supabase.table("sessions").update(session_update).eq("id", session_id).execute()
+        _execute_with_transient_retry(
+            lambda: supabase.table("sessions").update(session_update).eq("id", session_id).execute(),
+            label="update_session_score",
+        )
     except Exception:
         # Session score columns are a cache. The authoritative result remains in
         # screenings, so a cache/schema mismatch must never invalidate a test.
@@ -2430,14 +2478,18 @@ def _update_session_score_best_effort(session_id, session_update, *, job_id=None
 
 
 def _complete_analysis_job(job_id, result_json, *, image_expires_at=None):
-    supabase.table("analysis_jobs").update({
+    payload = {
         "status": "completed",
         "completed_at": utc_now_iso(),
         "result_json": result_json,
         "error_message": None,
         "image_base64": None,
         "image_expires_at": image_expires_at,
-    }).eq("id", job_id).execute()
+    }
+    _execute_with_transient_retry(
+        lambda: supabase.table("analysis_jobs").update(payload).eq("id", job_id).execute(),
+        label="complete_analysis_job",
+    )
 
 
 def _public_analysis_error(exc):
@@ -2787,12 +2839,11 @@ def run_yolo_analysis_from_bytes(img_bytes, test_type, capture_metadata=None):
     }
 
     vision_qa_requested = bool((capture_metadata or {}).get("vision_qa_requested"))
-    if vision_qa_requested:
-        # Validation overlay requested by the screening UI. This is ephemeral:
-        # _without_ephemeral_vision_qa removes it before the authoritative
-        # screening result is persisted. For ASLR, the overlay uses the exact
-        # inverse-mapped YOLO landmarks and selected measurement geometry used
-        # by the scoring engine.
+    if vision_qa_requested and not is_aslr:
+        # Production stabilization: ASLR diagnostic composites are deliberately
+        # disabled. They are expensive, non-authoritative, and must not delay or
+        # destabilize the user-facing assessment. Other tests retain the existing
+        # opt-in QA behavior.
         result["metrics"]["vision_qa"] = build_vision_qa_payload(
             img,
             final_xy,
@@ -2802,6 +2853,8 @@ def run_yolo_analysis_from_bytes(img_bytes, test_type, capture_metadata=None):
             test_type,
             analysis_pass=analysis_pass,
         )
+    elif vision_qa_requested and is_aslr:
+        result["metrics"]["vision_qa_disabled_for_performance"] = True
 
     return result, session_update
 
@@ -2815,12 +2868,15 @@ def process_analysis_job(job_id: str):
     job = None
     try:
         phase_started = time.perf_counter()
-        resp = (
-            supabase.table("analysis_jobs")
-            .select("*")
-            .eq("id", job_id)
-            .limit(1)
-            .execute()
+        resp = _execute_with_transient_retry(
+            lambda: (
+                supabase.table("analysis_jobs")
+                .select("*")
+                .eq("id", job_id)
+                .limit(1)
+                .execute()
+            ),
+            label="analysis_job_fetch",
         )
 
         phases["job_fetch_ms"] = round((time.perf_counter() - phase_started) * 1000, 1)
@@ -2849,16 +2905,19 @@ def process_analysis_job(job_id: str):
                 return
 
         phase_started = time.perf_counter()
-        claim = (
-            supabase.table("analysis_jobs")
-            .update({
-                "status": "processing",
-                "started_at": utc_now_iso(),
-                "error_message": None,
-            })
-            .eq("id", job_id)
-            .eq("status", "queued")
-            .execute()
+        claim = _execute_with_transient_retry(
+            lambda: (
+                supabase.table("analysis_jobs")
+                .update({
+                    "status": "processing",
+                    "started_at": utc_now_iso(),
+                    "error_message": None,
+                })
+                .eq("id", job_id)
+                .eq("status", "queued")
+                .execute()
+            ),
+            label="analysis_job_claim",
         )
         phases["job_claim_ms"] = round((time.perf_counter() - phase_started) * 1000, 1)
         if not claim.data:
@@ -2930,7 +2989,10 @@ def process_analysis_job(job_id: str):
 
         phase_started = time.perf_counter()
         try:
-            supabase.table("screenings").insert(screening_row).execute()
+            _execute_with_transient_retry(
+                lambda: supabase.table("screenings").insert(screening_row).execute(),
+                label="screening_insert",
+            )
             result_json = _analysis_result_from_runtime(
                 user_email, session_id, test_type, result, intake_data
             )
@@ -2995,7 +3057,10 @@ def process_analysis_job(job_id: str):
             }
             if isinstance(exc, AnalysisWithDiagnosticsError):
                 failure_update["result_json"] = exc.diagnostic_result
-            supabase.table("analysis_jobs").update(failure_update).eq("id", job_id).execute()
+            _execute_with_transient_retry(
+                lambda: supabase.table("analysis_jobs").update(failure_update).eq("id", job_id).execute(),
+                label="analysis_job_failure_update",
+            )
         except Exception:
             logger.exception("analysis_job_failure_status_update_failed job_id=%s", job_id)
 
@@ -3157,12 +3222,15 @@ def job_status(
         raise HTTPException(status_code=503, detail="Supabase is not configured on server.")
 
     user = authenticated_user(supabase, authorization)
-    resp = (
-        supabase.table("analysis_jobs")
-        .select("*")
-        .eq("id", job_id)
-        .limit(1)
-        .execute()
+    resp = _execute_with_transient_retry(
+        lambda: (
+            supabase.table("analysis_jobs")
+            .select("*")
+            .eq("id", job_id)
+            .limit(1)
+            .execute()
+        ),
+        label="job_status_fetch",
     )
     if not resp.data:
         raise HTTPException(status_code=404, detail="Analysis job not found.")
@@ -3170,26 +3238,14 @@ def job_status(
     job = resp.data[0]
     require_owned_session(user, str(job.get("session_id") or ""))
     current_status = str(job.get("status") or "").lower()
-    should_restart = current_status == "queued"
 
-    if current_status == "processing":
-        started_raw = job.get("started_at")
-        try:
-            started_at = datetime.fromisoformat(str(started_raw).replace("Z", "+00:00"))
-        except Exception:
-            started_at = None
-        if started_at is None or (datetime.now(timezone.utc) - started_at).total_seconds() >= 120:
-            should_restart = True
-
-    if should_restart:
-        supabase.table("analysis_jobs").update({
-            "status": "queued",
-            "started_at": None,
-            "error_message": None,
-        }).eq("id", job_id).execute()
-        if ANALYSIS_INLINE_ENABLED:
-            background_tasks.add_task(process_analysis_job, job_id)
-        current_status = "queued"
+    # Polling must never reset a running analysis. The previous 120-second
+    # watchdog could requeue a valid slow ASLR request while its first inference
+    # was still active, producing competing attempts and misleading failures.
+    # Queued jobs may still be started safely; the atomic queued -> processing
+    # claim inside process_analysis_job prevents duplicate execution.
+    if current_status == "queued" and ANALYSIS_INLINE_ENABLED:
+        background_tasks.add_task(process_analysis_job, job_id)
 
     return {
         "job_id": job.get("id"),

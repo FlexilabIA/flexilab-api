@@ -1,0 +1,16 @@
+FlexiLab emergency assessment stabilization V101.35.15
+
+Replace in backend repository:
+1. app.py -> repository root/app.py
+2. tests/test_v101_35_15_pipeline_stability.py -> repository tests/test_v101_35_15_pipeline_stability.py
+
+No other file should be changed.
+
+Validation:
+python -m py_compile app.py
+pytest -q tests/test_v101_35_15_pipeline_stability.py
+
+Expected: 4 passed.
+
+This patch does NOT modify measurement formulas, shoulder bands, ASLR thresholds,
+ASLR model, inference count, rotation flow, program generation, credits, or caching.
