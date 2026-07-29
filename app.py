@@ -29,6 +29,7 @@ import math
 import os
 import json
 import base64
+import hashlib
 import logging
 import time
 import uuid
@@ -249,7 +250,7 @@ aslr_model = _load_aslr_pose_model()
 
 app = FastAPI(
     title="FlexiLab Movement Intelligence API",
-    version="101.35.15",
+    version="101.35.17",
 )
 app.include_router(create_account_router(supabase))
 app.include_router(create_stripe_router(supabase))
@@ -372,7 +373,7 @@ async def request_timing_middleware(request, call_next):
 def health():
     return {
         "ok": True,
-        "patch_version": "V101.35.15-pipeline-stability",
+        "patch_version": "V101.35.17-image-fingerprint-integrity",
         "base_patch": "V101.28.4-aslr-thresholds-60-75",
         "exercise_library_mode": EXERCISE_LIBRARY_MODE,
         "exercise_library_path": EXERCISE_LIBRARY_PATH,
@@ -2316,11 +2317,21 @@ def utc_now_iso():
 
 
 def build_screening_row(user_email, user_id, session_id, test_type, result, intake_data):
+    capture_fingerprint = ""
+    if isinstance(intake_data, dict):
+        capture_fingerprint = str(
+            intake_data.get("_flexilab_capture_fingerprint") or ""
+        ).strip().lower()
+    idempotency_key = (
+        f"{session_id}:{test_type}:{capture_fingerprint}"
+        if capture_fingerprint
+        else f"{session_id}:{test_type}"
+    )
     row = {
         "user_email": user_email,
         "user_id": user_id,
         "session_id": session_id,
-        "idempotency_key": f"{session_id}:{test_type}",
+        "idempotency_key": idempotency_key,
         "test_type": test_type,
         "score": float(result["score"]),
         "confidence": float(result["confidence"]),
@@ -3091,60 +3102,16 @@ async def submit_analysis(
         intake_json=intake_json,
         questionnaire_json=questionnaire_json,
     )
+    if not isinstance(intake_data, dict):
+        intake_data = {}
     try:
         capture_metadata = parse_capture_metadata(capture_metadata_json)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
-    try_save_session_intake(session_id, intake_data)
 
-    existing_jobs = (
-        supabase.table("analysis_jobs")
-        .select("id,status,created_at,result_json,error_message")
-        .eq("session_id", session_id)
-        .eq("test_type", test_type)
-        .order("created_at", desc=True)
-        .limit(3)
-        .execute()
-    )
-    for existing in existing_jobs.data or []:
-        existing_status = str(existing.get("status") or "").lower()
-        if existing_status in {"queued", "processing", "completed"}:
-            response = {
-                "job_id": existing.get("id"),
-                "status": existing_status,
-                "reused": True,
-            }
-            if existing_status == "completed" and existing.get("result_json"):
-                response["result"] = existing.get("result_json")
-            phases["total_ms"] = round((time.perf_counter() - total_started) * 1000, 1)
-            logger.info(
-                "analysis_submit_perf session_id=%s test_type=%s reused=true phases=%s",
-                session_id,
-                test_type,
-                json.dumps(phases, sort_keys=True),
-            )
-            return response
-
-    # A failed job may already have saved the screening before a later cache
-    # update failed. Reconcile it immediately instead of uploading/re-analysing.
-    existing_screening = _find_existing_screening(session_id, test_type)
-    if existing_screening and existing_jobs.data:
-        recovered_job_id = existing_jobs.data[0].get("id")
-        result_json = _analysis_result_from_screening(existing_screening, intake_data)
-        _update_session_score_best_effort(
-            session_id,
-            _session_score_update_for_test(test_type, result_json.get("score")),
-            job_id=recovered_job_id,
-            test_type=test_type,
-        )
-        _complete_analysis_job(recovered_job_id, result_json, image_expires_at=None)
-        return {
-            "job_id": recovered_job_id,
-            "status": "completed",
-            "reused": True,
-            "recovered": True,
-        }
-
+    # Read and fingerprint the actual upload before any reuse decision. Reusing
+    # by session_id + test_type alone can return a measurement produced from a
+    # different photo, which is unacceptable for assessment integrity.
     phase_started = time.perf_counter()
     img_bytes = await image.read()
     phases["image_read_ms"] = round((time.perf_counter() - phase_started) * 1000, 1)
@@ -3154,7 +3121,90 @@ async def submit_analysis(
     if len(img_bytes) > 12 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="The uploaded image is too large. Maximum size is 12 MB.")
 
-    image_path = f"{session_id}/{test_type}/{utc_now_iso().replace(':', '-')}.jpg"
+    image_fingerprint = hashlib.sha256(img_bytes).hexdigest()
+    intake_data["_flexilab_capture_fingerprint"] = image_fingerprint
+    try_save_session_intake(session_id, intake_data)
+    job_idempotency_key = f"{session_id}:{test_type}:{image_fingerprint}"
+
+    existing_jobs = _execute_with_transient_retry(
+        lambda: (
+            supabase.table("analysis_jobs")
+            .select("id,status,created_at,result_json,error_message,intake_json,idempotency_key")
+            .eq("session_id", session_id)
+            .eq("test_type", test_type)
+            .order("created_at", desc=True)
+            .limit(10)
+            .execute()
+        ),
+        label="analysis_existing_jobs_fetch",
+    )
+    matching_jobs = []
+    for existing in existing_jobs.data or []:
+        existing_intake = existing.get("intake_json")
+        existing_fingerprint = ""
+        if isinstance(existing_intake, dict):
+            existing_fingerprint = str(
+                existing_intake.get("_flexilab_capture_fingerprint") or ""
+            ).strip().lower()
+        if not existing_fingerprint:
+            key = str(existing.get("idempotency_key") or "")
+            prefix = f"{session_id}:{test_type}:"
+            if key.startswith(prefix):
+                existing_fingerprint = key[len(prefix):].strip().lower()
+        if existing_fingerprint == image_fingerprint:
+            matching_jobs.append(existing)
+
+    for existing in matching_jobs:
+        existing_status = str(existing.get("status") or "").lower()
+        if existing_status in {"queued", "processing", "completed"}:
+            response = {
+                "job_id": existing.get("id"),
+                "status": existing_status,
+                "reused": True,
+                "reuse_reason": "exact_image_match",
+                "image_fingerprint": image_fingerprint,
+            }
+            if existing_status == "completed" and existing.get("result_json"):
+                response["result"] = existing.get("result_json")
+            phases["total_ms"] = round((time.perf_counter() - total_started) * 1000, 1)
+            logger.info(
+                "analysis_submit_perf session_id=%s test_type=%s reused=true fingerprint=%s phases=%s",
+                session_id,
+                test_type,
+                image_fingerprint[:12],
+                json.dumps(phases, sort_keys=True),
+            )
+            return response
+
+    # Recover only a failed job for the exact same image. A screening generated
+    # from another image in the same session/test must never be substituted.
+    if matching_jobs:
+        existing_screening = _find_existing_screening(session_id, test_type)
+        screening_fingerprint = ""
+        if existing_screening and isinstance(existing_screening.get("intake_json"), dict):
+            screening_fingerprint = str(
+                existing_screening["intake_json"].get("_flexilab_capture_fingerprint") or ""
+            ).strip().lower()
+        if existing_screening and screening_fingerprint == image_fingerprint:
+            recovered_job_id = matching_jobs[0].get("id")
+            result_json = _analysis_result_from_screening(existing_screening, intake_data)
+            _update_session_score_best_effort(
+                session_id,
+                _session_score_update_for_test(test_type, result_json.get("score")),
+                job_id=recovered_job_id,
+                test_type=test_type,
+            )
+            _complete_analysis_job(recovered_job_id, result_json, image_expires_at=None)
+            return {
+                "job_id": recovered_job_id,
+                "status": "completed",
+                "reused": True,
+                "recovered": True,
+                "reuse_reason": "exact_image_match_recovery",
+                "image_fingerprint": image_fingerprint,
+            }
+
+    image_path = f"{session_id}/{test_type}/{utc_now_iso().replace(':', '-')}-{image_fingerprint[:12]}.jpg"
     image_base64_fallback = None
     phase_started = time.perf_counter()
     try:
@@ -3172,7 +3222,7 @@ async def submit_analysis(
         image_base64_fallback = base64.b64encode(img_bytes).decode("utf-8")
     phases["storage_upload_ms"] = round((time.perf_counter() - phase_started) * 1000, 1)
 
-    job_intake_data = dict(intake_data or {})
+    job_intake_data = dict(intake_data)
     if capture_metadata:
         job_intake_data["_flexilab_capture_metadata"] = capture_metadata
 
@@ -3180,7 +3230,7 @@ async def submit_analysis(
         "session_id": session_id,
         "session_uuid": session_id,
         "user_id": session.get("user_id"),
-        "idempotency_key": f"{session_id}:{test_type}",
+        "idempotency_key": job_idempotency_key,
         "user_email": authoritative_email,
         "test_type": test_type,
         "status": "queued",
@@ -3194,7 +3244,42 @@ async def submit_analysis(
     }
 
     phase_started = time.perf_counter()
-    resp = supabase.table("analysis_jobs").insert(job).execute()
+    try:
+        resp = _execute_with_transient_retry(
+            lambda: supabase.table("analysis_jobs").insert(job).execute(),
+            label="analysis_job_insert",
+        )
+    except Exception as exc:
+        # Concurrent double-submission of the exact same image can race between
+        # the initial lookup and insert. The unique idempotency key safely
+        # collapses that race back to the existing exact-image job.
+        if not _is_duplicate_screening_error(exc):
+            raise
+        resp = _execute_with_transient_retry(
+            lambda: (
+                supabase.table("analysis_jobs")
+                .select("id,status,result_json")
+                .eq("idempotency_key", job_idempotency_key)
+                .order("created_at", desc=True)
+                .limit(1)
+                .execute()
+            ),
+            label="analysis_duplicate_job_fetch",
+        )
+        if not resp.data:
+            raise
+        existing = resp.data[0]
+        response = {
+            "job_id": existing.get("id"),
+            "status": str(existing.get("status") or "queued").lower(),
+            "reused": True,
+            "reuse_reason": "exact_image_concurrent_submission",
+            "image_fingerprint": image_fingerprint,
+        }
+        if response["status"] == "completed" and existing.get("result_json"):
+            response["result"] = existing.get("result_json")
+        return response
+
     phases["job_insert_ms"] = round((time.perf_counter() - phase_started) * 1000, 1)
     if not resp.data:
         raise HTTPException(status_code=500, detail="Unable to queue the photo analysis.")
@@ -3204,12 +3289,19 @@ async def submit_analysis(
         background_tasks.add_task(process_analysis_job, job_id)
     phases["total_ms"] = round((time.perf_counter() - total_started) * 1000, 1)
     logger.info(
-        "analysis_submit_perf session_id=%s test_type=%s reused=false phases=%s",
+        "analysis_submit_perf session_id=%s test_type=%s reused=false fingerprint=%s phases=%s",
         session_id,
         test_type,
+        image_fingerprint[:12],
         json.dumps(phases, sort_keys=True),
     )
-    return {"job_id": job_id, "status": "queued", "reused": False}
+    return {
+        "job_id": job_id,
+        "status": "queued",
+        "reused": False,
+        "reuse_reason": "fresh_analysis",
+        "image_fingerprint": image_fingerprint,
+    }
 
 
 @app.get("/job_status/{job_id}")
