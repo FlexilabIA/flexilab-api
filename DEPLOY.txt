@@ -1,16 +1,30 @@
-FlexiLab emergency assessment stabilization V101.35.15
+FlexiLab ASLR selected-hip geometry patch V101.35.16
 
-Replace in backend repository:
-1. app.py -> repository root/app.py
-2. tests/test_v101_35_15_pipeline_stability.py -> repository tests/test_v101_35_15_pipeline_stability.py
+Backend repository: flexilab-api
 
-No other file should be changed.
+Replace exactly:
+  aslr_engine.py
 
-Validation:
-python -m py_compile app.py
-pytest -q tests/test_v101_35_15_pipeline_stability.py
+Add exactly:
+  tests/test_v101_35_16_aslr_selected_hip_geometry.py
 
-Expected: 4 passed.
+Do not replace app.py.
+Do not change operator files, shoulder logic, thresholds, caching, credits, or frontend files.
 
-This patch does NOT modify measurement formulas, shoulder bands, ASLR thresholds,
-ASLR model, inference count, rotation flow, program generation, credits, or caching.
+This patch preserves:
+- yolo11m-pose.pt
+- one rotated full-body inference
+- 960 px ASLR processing
+- original-image horizontal reference
+- current red/yellow/green ASLR thresholds
+- V101.35.15 pipeline-stability changes in app.py
+
+It changes only the ASLR measurement vertex and candidate geometry:
+- before: pelvis midpoint -> raised ankle
+- after: selected raised hip -> coherent raised knee -> raised ankle
+
+Validation command:
+  PYTHONPATH=. pytest -q tests/test_v101_35_16_aslr_selected_hip_geometry.py
+
+Expected:
+  2 passed
