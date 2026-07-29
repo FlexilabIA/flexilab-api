@@ -2787,18 +2787,21 @@ def run_yolo_analysis_from_bytes(img_bytes, test_type, capture_metadata=None):
     }
 
     vision_qa_requested = bool((capture_metadata or {}).get("vision_qa_requested"))
-    if vision_qa_requested and not is_aslr:
+    if vision_qa_requested:
+        # Validation overlay requested by the screening UI. This is ephemeral:
+        # _without_ephemeral_vision_qa removes it before the authoritative
+        # screening result is persisted. For ASLR, the overlay uses the exact
+        # inverse-mapped YOLO landmarks and selected measurement geometry used
+        # by the scoring engine.
         result["metrics"]["vision_qa"] = build_vision_qa_payload(
             img,
-            xy,
-            conf,
+            final_xy,
+            final_conf,
             final_boxes[final_main_idx],
             result,
             test_type,
             analysis_pass=analysis_pass,
         )
-    elif is_aslr:
-        result["metrics"]["vision_qa_disabled_for_performance"] = True
 
     return result, session_update
 
