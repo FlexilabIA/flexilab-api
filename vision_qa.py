@@ -1,9 +1,9 @@
 """Private, ephemeral Vision QA rendering for FlexiLab validation accounts.
 
-The generated composite is retained only for non-ASLR validation requests.
-ASLR composite generation is disabled in V101.35.14 to remove tracked-image
-rendering, JPEG encoding, and payload overhead. It is never written into the
-authoritative `screenings` row.
+The generated composite is returned only when explicitly requested by the
+validation UI. It is ephemeral and is never written into the authoritative
+`screenings` row. ASLR overlays show the exact inverse-mapped YOLO landmarks
+and measurement geometry used by the scoring engine.
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ import cv2
 import numpy as np
 
 
-VISION_QA_VERSION = "vision-qa-overlay-v2.6-aslr-disabled-performance"
+VISION_QA_VERSION = "vision-qa-overlay-v2.7-aslr-enabled-validation"
 
 COCO_NAMES = [
     "nose",
