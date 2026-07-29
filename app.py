@@ -29,7 +29,6 @@ import math
 import os
 import json
 import base64
-import hashlib
 import logging
 import time
 import uuid
@@ -103,12 +102,6 @@ ASLR_REQUIRED_MEAN_CONF = max(ASLR_KEYPOINT_MIN_CONF, min(0.90, float(os.environ
 ASLR_RAISED_KNEE_EXTENSION_MIN = max(135.0, min(175.0, float(os.environ.get("FLEXILAB_ASLR_RAISED_KNEE_EXTENSION_MIN", "155"))))
 ASLR_RESTING_KNEE_EXTENSION_MIN = max(135.0, min(175.0, float(os.environ.get("FLEXILAB_ASLR_RESTING_KNEE_EXTENSION_MIN", "150"))))
 ASLR_RESTING_LEG_MAX_ANGLE = max(8.0, min(30.0, float(os.environ.get("FLEXILAB_ASLR_RESTING_LEG_MAX_ANGLE", "20"))))
-ASLR_POSE_INFERENCE_IMGSZ = max(640, min(1280, int(os.environ.get("FLEXILAB_ASLR_POSE_IMGSZ", "960"))))
-SHOULDER_RED_MAX_DEG = max(120.0, min(174.0, float(os.environ.get("FLEXILAB_SHOULDER_RED_MAX_DEG", "160"))))
-SHOULDER_GREEN_MIN_DEG = max(
-    SHOULDER_RED_MAX_DEG + 1.0,
-    min(180.0, float(os.environ.get("FLEXILAB_SHOULDER_GREEN_MIN_DEG", "175"))),
-)
 
 MOVEMENT_PATTERNS_PATH = os.path.join(DATA_DIR, "movement_patterns_v1.json")
 PRESCRIPTION_RULES_PATH = os.path.join(DATA_DIR, "prescription_rules_v1.json")
@@ -256,7 +249,7 @@ aslr_model = _load_aslr_pose_model()
 
 app = FastAPI(
     title="FlexiLab Movement Intelligence API",
-    version="101.36.0",
+    version="101.35.4",
 )
 app.include_router(create_account_router(supabase))
 app.include_router(create_stripe_router(supabase))
@@ -379,7 +372,7 @@ async def request_timing_middleware(request, call_next):
 def health():
     return {
         "ok": True,
-        "patch_version": "V101.36.0-measurement-reliability-and-retake-fingerprint",
+        "patch_version": "V101.35.14-aslr-one-call-no-tracked-images",
         "base_patch": "V101.28.4-aslr-thresholds-60-75",
         "exercise_library_mode": EXERCISE_LIBRARY_MODE,
         "exercise_library_path": EXERCISE_LIBRARY_PATH,
@@ -391,12 +384,6 @@ def health():
         "pose_inference_imgsz": POSE_INFERENCE_IMGSZ,
         "aslr_pose_model_loaded": aslr_model is not None,
         "aslr_pose_model_name": ASLR_POSE_MODEL_NAME,
-        "aslr_pose_imgsz": ASLR_POSE_INFERENCE_IMGSZ,
-        "shoulder_screening_bands_deg": {
-            "red_below": SHOULDER_RED_MAX_DEG,
-            "yellow_from": SHOULDER_RED_MAX_DEG,
-            "green_from": SHOULDER_GREEN_MIN_DEG,
-        },
         "aslr_pose_model_error": ASLR_POSE_MODEL_LOAD_ERROR,
         "aslr_pose_model_reload_count": ASLR_POSE_MODEL_RELOAD_COUNT,
         "analysis_max_edge": ANALYSIS_MAX_EDGE,
@@ -416,13 +403,13 @@ def health():
                 "green": ">75",
             },
             "source_orientation_requirement": "head_left_capture_protocol_internal_90_clockwise_inference",
-            "chain_strategy": "single_rotated_yolo_call_then_selected_raised_leg_hip_to_ankle",
+            "chain_strategy": "single_rotated_yolo_call_then_image_horizontal_primary_no_tracking_images",
             "pose_passes": ["rotated_90_clockwise_single_fullbody_detection"],
             "pose_model_inference_count": 1,
             "detection_attempt_count": 1,
             "tracked_image_processing": False,
             "aslr_inference_imgsz": 960,
-            "measurement_anchor": "selected_raised_leg_hip_image_horizontal_to_true_raised_ankle",
+            "measurement_anchor": "single_shared_pelvic_anchor_image_horizontal_to_true_raised_ankle",
             "dedicated_pose_model": ASLR_POSE_MODEL_NAME,
             "general_model_fallback": False,
         },
@@ -430,8 +417,8 @@ def health():
             "version": VISION_QA_VERSION,
             "delivery": "ephemeral_job_result_only",
             "enabled_by_capture_metadata": True,
-            "aslr_enabled": True,
-            "aslr_tracking_images_removed_for_performance": False,
+            "aslr_enabled": False,
+            "aslr_tracking_images_removed_for_performance": True,
         },
         "runtime_versions": RUNTIME_PACKAGE_VERSIONS,
     }
@@ -440,7 +427,7 @@ def health():
 @app.get("/library_status")
 def library_status():
     return {
-        "patch_version": "V101.36.0-measurement-reliability-and-retake-fingerprint",
+        "patch_version": "V101.35.14-aslr-one-call-no-tracked-images",
         "exercise_library_mode": EXERCISE_LIBRARY_MODE,
         "exercise_library_path": EXERCISE_LIBRARY_PATH,
         "exercise_library_count": len(EXERCISE_LIBRARY or []),
@@ -490,45 +477,12 @@ def parse_capture_metadata(capture_metadata_json=None):
 
 
 def _split_job_intake_and_capture_metadata(value):
-    """Separate public intake data from private analysis-job metadata."""
     intake = dict(value or {}) if isinstance(value, dict) else {}
     capture_metadata = intake.pop("_flexilab_capture_metadata", {})
-    intake.pop("_flexilab_capture_fingerprint", None)
-    intake.pop("_flexilab_force_reanalysis", None)
     if not isinstance(capture_metadata, dict):
         capture_metadata = {}
     return intake, capture_metadata
 
-
-def _analysis_job_private_metadata(value):
-    payload = dict(value or {}) if isinstance(value, dict) else {}
-    fingerprint = str(payload.get("_flexilab_capture_fingerprint") or "").strip().lower()
-    return {
-        "capture_fingerprint": fingerprint,
-        "force_reanalysis": bool(payload.get("_flexilab_force_reanalysis")),
-    }
-
-
-
-
-def _analysis_job_action(existing_jobs, capture_fingerprint):
-    """Return the deterministic idempotency action for one submitted image."""
-    retake_job = None
-    for existing in existing_jobs or []:
-        existing_status = str(existing.get("status") or "").lower()
-        private = _analysis_job_private_metadata(existing.get("intake_json"))
-        same_capture = private["capture_fingerprint"] == capture_fingerprint
-        if same_capture and existing_status in {"queued", "processing", "completed"}:
-            return {"action": "reuse", "job": existing, "same_capture": True}
-        if existing_status in {"queued", "processing"} and not same_capture:
-            return {"action": "conflict", "job": existing, "same_capture": False}
-        if existing_status == "completed" and not same_capture and retake_job is None:
-            retake_job = existing
-    return {
-        "action": "retake" if retake_job is not None else "new",
-        "job": retake_job,
-        "same_capture": False,
-    }
 
 def parse_intake_payload(intake_json=None, questionnaire_json=None):
     """
@@ -668,46 +622,22 @@ def angle_to_vertical(p1, p2):
 
 
 def analyze_posture(xy, conf):
-    """Side-posture analysis with explicit landmark quality gates."""
     L_EAR, R_EAR = 3, 4
     L_SH, R_SH = 5, 6
     L_HIP, R_HIP = 11, 12
 
-    chains = {
-        "LEFT": (L_EAR, L_SH, L_HIP),
-        "RIGHT": (R_EAR, R_SH, R_HIP),
-    }
-    candidates = []
-    for side, (ear_i, shoulder_i, hip_i) in chains.items():
-        values = [float(conf[ear_i]), float(conf[shoulder_i]), float(conf[hip_i])]
-        mean_conf = float(np.mean(values))
-        min_conf = min(values)
-        if min_conf < 0.20 or mean_conf < 0.35:
-            continue
-        candidates.append({
-            "side": side,
-            "indices": {"ear": ear_i, "shoulder": shoulder_i, "hip": hip_i},
-            "ear": xy[ear_i],
-            "shoulder": xy[shoulder_i],
-            "hip": xy[hip_i],
-            "mean_conf": mean_conf,
-            "min_conf": min_conf,
-            "keypoint_confidence": {
-                "ear": values[0],
-                "shoulder": values[1],
-                "hip": values[2],
-            },
-        })
+    left_score = float(conf[L_EAR] + conf[L_SH] + conf[L_HIP])
+    right_score = float(conf[R_EAR] + conf[R_SH] + conf[R_HIP])
 
-    if not candidates:
-        raise ValueError(
-            "The ear, shoulder and hip were not detected reliably. Keep the full side profile visible and retake the photo."
-        )
+    if right_score >= left_score:
+        ear, shoulder, hip = xy[R_EAR], xy[R_SH], xy[R_HIP]
+        side = "RIGHT"
+        quality = right_score / 3.0
+    else:
+        ear, shoulder, hip = xy[L_EAR], xy[L_SH], xy[L_HIP]
+        side = "LEFT"
+        quality = left_score / 3.0
 
-    selected = max(candidates, key=lambda item: item["mean_conf"])
-    ear = selected["ear"]
-    shoulder = selected["shoulder"]
-    hip = selected["hip"]
     neck_angle = angle_to_vertical(shoulder, ear)
     thoracic_angle = angle_to_vertical(hip, shoulder)
     pelvic_proxy_angle = thoracic_angle
@@ -715,16 +645,18 @@ def analyze_posture(xy, conf):
     def penalty(angle, optimal, severe, w=1.0):
         if angle <= optimal:
             return 0.0
-        value = min(float(angle), float(severe))
-        ratio = (value - float(optimal)) / (float(severe) - float(optimal))
-        return float(w) * 30.0 * (ratio ** 2)
+        a = min(float(angle), float(severe))
+        t = (a - float(optimal)) / (float(severe) - float(optimal))
+        return float(w) * 30.0 * (t ** 2)
 
     total_pen = (
-        penalty(neck_angle, 10, 55, 1.2)
-        + penalty(thoracic_angle, 5, 45, 1.0)
-        + penalty(pelvic_proxy_angle, 5, 40, 0.8)
+        penalty(neck_angle, 10, 55, 1.2) +
+        penalty(thoracic_angle, 5, 45, 1.0) +
+        penalty(pelvic_proxy_angle, 5, 40, 0.8)
     )
+
     score = max(0.0, 100.0 - total_pen)
+    conf_out = max(0.6, min(1.0, float(quality)))
 
     neck_thr = make_thresholds(
         "deg", 0, 60,
@@ -733,8 +665,9 @@ def analyze_posture(xy, conf):
             {"label": "Yellow", "min": 10, "max": 20, "color": "yellow"},
             {"label": "Red", "min": 20, "max": 60, "color": "red"},
         ],
-        neck_angle,
+        neck_angle
     )
+
     thor_thr = make_thresholds(
         "deg", 0, 45,
         [
@@ -742,8 +675,9 @@ def analyze_posture(xy, conf):
             {"label": "Yellow", "min": 5, "max": 15, "color": "yellow"},
             {"label": "Red", "min": 15, "max": 45, "color": "red"},
         ],
-        thoracic_angle,
+        thoracic_angle
     )
+
     pelvis_thr = make_thresholds(
         "deg", 0, 45,
         [
@@ -751,300 +685,173 @@ def analyze_posture(xy, conf):
             {"label": "Yellow", "min": 5, "max": 15, "color": "yellow"},
             {"label": "Red", "min": 15, "max": 45, "color": "red"},
         ],
-        pelvic_proxy_angle,
+        pelvic_proxy_angle
     )
 
     return {
         "score": round(score, 1),
-        "confidence": round(float(selected["mean_conf"]), 3),
+        "confidence": round(conf_out, 3),
         "metrics": {
             "neck_angle": round(neck_angle, 2),
             "thoracic_angle": round(thoracic_angle, 2),
             "pelvic_proxy_angle": round(pelvic_proxy_angle, 2),
-            "side_used": selected["side"],
-            "selected_source_indices": selected["indices"],
-            "keypoint_confidence": {
-                key: round(float(value), 3)
-                for key, value in selected["keypoint_confidence"].items()
-            },
-            "measurement_engine_version": "posture-side-quality-gated-v2",
+            "side_used": side,
         },
         "thresholds": {
             "neck_angle": neck_thr,
             "thoracic_angle": thor_thr,
-            "pelvic_proxy_angle": pelvis_thr,
-        },
+            "pelvic_proxy_angle": pelvis_thr
+        }
     }
+
 
 def analyze_shoulder(xy, conf, side="RIGHT"):
-    """Measure active shoulder flexion from the humerus relative to the trunk.
-
-    The primary arm vector is shoulder -> elbow because shoulder flexion is a
-    humeral elevation measurement. The wrist is used only to validate elbow
-    extension and as a fallback when the elbow is not reliable. COCO left/right
-    labels can swap in side-view photographs, so the requested side is preferred
-    only when its chain quality is comparable with the best visible chain.
-
-    FlexiLab reference bands are screening bands, not diagnostic cutoffs:
-      red < 160°, yellow 160° to < 175°, green >= 175°.
     """
-    side = str(side or "RIGHT").upper()
-    if side not in {"LEFT", "RIGHT"}:
-        side = "RIGHT"
+    Robust overhead shoulder mobility analysis — V16 complementary angle fix.
 
-    chains = {
-        "LEFT": (5, 7, 9, 11),
-        "RIGHT": (6, 8, 10, 12),
-    }
-    min_required_conf = 0.22
-    candidates = []
+    Main change vs previous version:
+    - Uses shoulder -> wrist as the primary arm vector instead of shoulder -> elbow.
+      This is more stable for overhead mobility, because a slightly bent elbow can
+      artificially reduce the angle if we only use the elbow.
+    - Falls back to shoulder -> elbow only if wrist confidence is poor.
+    - Uses hip -> shoulder as trunk reference and arm direction shoulder -> wrist/elbow.
+    - Keeps the same FlexiLab thresholds:
+        <160° = red
+        160–170° = yellow
+        >=170° = green
+    """
 
-    for coco_side, (sh_i, el_i, wr_i, hip_i) in chains.items():
-        sh = np.asarray(xy[sh_i], dtype=float)
-        el = np.asarray(xy[el_i], dtype=float)
-        wr = np.asarray(xy[wr_i], dtype=float)
-        hip = np.asarray(xy[hip_i], dtype=float)
-        sh_c = float(conf[sh_i])
-        el_c = float(conf[el_i])
-        wr_c = float(conf[wr_i])
-        hip_c = float(conf[hip_i])
+    L_SH, R_SH = 5, 6
+    L_EL, R_EL = 7, 8
+    L_WR, R_WR = 9, 10
+    L_HIP, R_HIP = 11, 12
 
-        if min(sh_c, hip_c) < min_required_conf:
-            continue
+    MIN_KP_CONF = 0.25
 
-        if el_c >= min_required_conf:
-            arm_point = el
-            arm_point_used = "ELBOW_PRIMARY"
-            arm_c = el_c
-        elif wr_c >= min_required_conf:
-            arm_point = wr
-            arm_point_used = "WRIST_FALLBACK"
-            arm_c = wr_c
-        else:
-            continue
+    if side == "RIGHT":
+        sh_i, el_i, wr_i, hip_i = R_SH, R_EL, R_WR, R_HIP
+    else:
+        sh_i, el_i, wr_i, hip_i = L_SH, L_EL, L_WR, L_HIP
 
-        trunk = sh - hip
-        upper_arm = arm_point - sh
-        trunk_length = float(np.linalg.norm(trunk))
-        arm_length = float(np.linalg.norm(upper_arm))
-        denom = trunk_length * arm_length
-        if denom < 1e-6:
-            continue
+    sh = xy[sh_i]
+    el = xy[el_i]
+    wr = xy[wr_i]
+    hip = xy[hip_i]
 
-        cosine = float(np.dot(trunk, upper_arm) / denom)
-        cosine = max(-1.0, min(1.0, cosine))
-        raw_angle = float(math.degrees(math.acos(cosine)))
-        flexion = max(0.0, min(180.0, 180.0 - raw_angle))
+    sh_c = float(conf[sh_i])
+    el_c = float(conf[el_i])
+    wr_c = float(conf[wr_i])
+    hip_c = float(conf[hip_i])
 
-        elbow_extension = None
-        if wr_c >= min_required_conf and el_c >= min_required_conf:
-            v1 = sh - el
-            v2 = wr - el
-            elbow_denom = float(np.linalg.norm(v1) * np.linalg.norm(v2))
-            if elbow_denom > 1e-6:
-                elbow_cos = float(np.dot(v1, v2) / elbow_denom)
-                elbow_cos = max(-1.0, min(1.0, elbow_cos))
-                elbow_extension = float(math.degrees(math.acos(elbow_cos)))
+    # Use wrist when possible. If wrist is unreliable, fallback to elbow.
+    if wr_c >= MIN_KP_CONF:
+        arm_point = wr
+        arm_point_used = "WRIST"
+        arm_c = wr_c
+    else:
+        arm_point = el
+        arm_point_used = "ELBOW_FALLBACK"
+        arm_c = el_c
 
-        mean_conf = float(np.mean([sh_c, hip_c, arm_c]))
-        length_quality = min(1.0, max(0.0, trunk_length / 90.0)) * 0.5 + min(
-            1.0, max(0.0, arm_length / 90.0)
-        ) * 0.5
-        elbow_quality = (
-            min(1.0, max(0.0, (elbow_extension - 130.0) / 45.0))
-            if elbow_extension is not None
-            else 0.65
-        )
-        quality = mean_conf * 0.72 + length_quality * 0.18 + elbow_quality * 0.10
-        candidates.append({
-            "coco_side": coco_side,
-            "indices": {"shoulder": sh_i, "elbow": el_i, "wrist": wr_i, "hip": hip_i},
-            "shoulder": sh,
-            "elbow": el,
-            "wrist": wr,
-            "hip": hip,
-            "flexion": flexion,
-            "raw_angle": raw_angle,
-            "elbow_extension": elbow_extension,
-            "arm_point_used": arm_point_used,
-            "confidence": mean_conf,
-            "quality": quality,
-            "keypoint_confidence": {
-                "shoulder": sh_c,
-                "elbow": el_c,
-                "wrist": wr_c,
-                "hip": hip_c,
-            },
-        })
+    c = float(sh_c + arm_c + hip_c) / 3.0
 
-    if not candidates:
-        raise ValueError(
-            "The shoulder, elbow and hip were not detected reliably. Keep the full arm and pelvis visible, then retake the photo."
-        )
+    # If shoulder or hip are not detected well, keep output but mark lower confidence.
+    # The frontend can later display "photo quality low" if confidence is low.
+    v_trunk = sh - hip          # hip -> shoulder
+    v_arm = arm_point - sh      # shoulder -> wrist/elbow
 
-    candidates.sort(key=lambda item: item["quality"], reverse=True)
-    best = candidates[0]
-    requested = next((item for item in candidates if item["coco_side"] == side), None)
-    selected = requested if requested and requested["quality"] >= best["quality"] - 0.08 else best
+    denom = np.linalg.norm(v_trunk) * np.linalg.norm(v_arm)
 
-    shoulder_flexion = float(selected["flexion"])
-    target_green = SHOULDER_GREEN_MIN_DEG
-    deficit = max(0.0, target_green - shoulder_flexion)
-    score = max(0.0, min(100.0, 100.0 - deficit * 2.0))
+    if denom < 1e-6:
+        shoulder_flexion = 0.0
+    else:
+        cosang = float(np.dot(v_trunk, v_arm) / denom)
+        cosang = max(-1.0, min(1.0, cosang))
+        raw_angle = float(math.degrees(math.acos(cosang)))
+
+        # raw_angle is the small geometric angle between trunk direction and arm direction.
+        # For overhead mobility we need the complementary value:
+        # example raw_angle 10° => shoulder flexion 170°.
+        shoulder_flexion = 180.0 - raw_angle
+
+    shoulder_flexion = max(0.0, min(180.0, shoulder_flexion))
+
+    deficit = max(0.0, 170.0 - shoulder_flexion)
+    score = max(0.0, 100.0 - deficit * 2.0)
+    conf_out = max(0.0, min(1.0, float(c)))
 
     shoulder_thr = make_thresholds(
         "deg", 0, 180,
         [
-            {"label": "Red", "min": 0, "max": SHOULDER_RED_MAX_DEG, "color": "red"},
-            {"label": "Yellow", "min": SHOULDER_RED_MAX_DEG, "max": SHOULDER_GREEN_MIN_DEG, "color": "yellow"},
-            {"label": "Green", "min": SHOULDER_GREEN_MIN_DEG, "max": 180, "color": "green"},
+            {"label": "Red", "min": 0, "max": 160, "color": "red"},
+            {"label": "Yellow", "min": 160, "max": 170, "color": "yellow"},
+            {"label": "Green", "min": 170, "max": 180, "color": "green"},
         ],
-        shoulder_flexion,
-    )
-    shoulder_thr["boundary_policy"] = {
-        "red": f"<{SHOULDER_RED_MAX_DEG:g}",
-        "yellow": f"{SHOULDER_RED_MAX_DEG:g}_to_less_than_{SHOULDER_GREEN_MIN_DEG:g}",
-        "green": f">={SHOULDER_GREEN_MIN_DEG:g}",
-    }
-    shoulder_thr["evidence_status"] = (
-        "flexilab_screening_reference_bands_informed_by_active_rom_normative_data_not_diagnostic_cutoffs"
+        shoulder_flexion
     )
 
     return {
         "score": round(score, 1),
-        "confidence": round(max(0.0, min(1.0, float(selected["quality"]))), 3),
+        "confidence": round(conf_out, 3),
         "metrics": {
             "shoulder_flexion_angle": round(shoulder_flexion, 2),
             "side": side,
-            "requested_side": side,
-            "detected_coco_side": selected["coco_side"],
-            "side_identity_method": "requested_side_preferred_with_geometry_quality_override",
-            "angle_method": "hip_to_shoulder_trunk_vs_shoulder_to_elbow_humerus",
-            "arm_point_used": selected["arm_point_used"],
-            "raw_trunk_arm_angle": round(float(selected["raw_angle"]), 2),
-            "elbow_extension_angle": (
-                round(float(selected["elbow_extension"]), 2)
-                if selected["elbow_extension"] is not None
-                else None
-            ),
-            "selected_source_indices": selected["indices"],
-            "selected_limb_points": {
-                "hip": {"x": round(float(selected["hip"][0]), 2), "y": round(float(selected["hip"][1]), 2)},
-                "shoulder": {"x": round(float(selected["shoulder"][0]), 2), "y": round(float(selected["shoulder"][1]), 2)},
-                "elbow": {"x": round(float(selected["elbow"][0]), 2), "y": round(float(selected["elbow"][1]), 2)},
-                "wrist": {"x": round(float(selected["wrist"][0]), 2), "y": round(float(selected["wrist"][1]), 2)},
-            },
+            "arm_point_used": arm_point_used,
             "keypoint_confidence": {
-                key: round(float(value), 3)
-                for key, value in selected["keypoint_confidence"].items()
-            },
-            "measurement_engine_version": "shoulder-humerus-geometry-v17",
-            "threshold_evidence_status": "screening_reference_not_diagnostic",
-            "threshold_configuration": {
-                "red_max_deg": SHOULDER_RED_MAX_DEG,
-                "green_min_deg": SHOULDER_GREEN_MIN_DEG,
-            },
+                "shoulder": round(sh_c, 3),
+                "elbow": round(el_c, 3),
+                "wrist": round(wr_c, 3),
+                "hip": round(hip_c, 3)
+            }
         },
-        "thresholds": {"shoulder_flexion": shoulder_thr},
+        "thresholds": {
+            "shoulder_flexion": shoulder_thr
+        }
     }
 
 
 def analyze_squat(xy, conf):
-    """Side-view squat analysis using one coherent visible-side chain."""
-    chains = {
-        "LEFT": (5, 11, 13, 15),
-        "RIGHT": (6, 12, 14, 16),
-    }
-    candidates = []
-    for side, (shoulder_i, hip_i, knee_i, ankle_i) in chains.items():
-        confidence_values = [
-            float(conf[shoulder_i]),
-            float(conf[hip_i]),
-            float(conf[knee_i]),
-            float(conf[ankle_i]),
-        ]
-        mean_conf = float(np.mean(confidence_values))
-        min_conf = min(confidence_values)
-        if min_conf < 0.20 or mean_conf < 0.35:
-            continue
+    L_HIP, R_HIP = 11, 12
+    L_KNEE, R_KNEE = 13, 14
+    L_ANK, R_ANK = 15, 16
+    L_SH, R_SH = 5, 6
 
-        shoulder = np.asarray(xy[shoulder_i], dtype=float)
-        hip = np.asarray(xy[hip_i], dtype=float)
-        knee = np.asarray(xy[knee_i], dtype=float)
-        ankle = np.asarray(xy[ankle_i], dtype=float)
-        thigh_length = float(np.linalg.norm(hip - knee))
-        shank_length = float(np.linalg.norm(ankle - knee))
-        trunk_length = float(np.linalg.norm(shoulder - hip))
-        if min(thigh_length, shank_length, trunk_length) < 15.0:
-            continue
+    hip = (xy[L_HIP] + xy[R_HIP]) / 2
+    knee = (xy[L_KNEE] + xy[R_KNEE]) / 2
+    ankle = (xy[L_ANK] + xy[R_ANK]) / 2
+    shoulder = (xy[L_SH] + xy[R_SH]) / 2
 
-        v1 = hip - knee
-        v2 = ankle - knee
-        denominator = float(np.linalg.norm(v1) * np.linalg.norm(v2))
-        if denominator < 1e-6:
-            continue
-        cosine = float(np.dot(v1, v2) / denominator)
-        cosine = max(-1.0, min(1.0, cosine))
-        knee_angle = float(math.degrees(math.acos(cosine)))
+    v1 = hip - knee
+    v2 = ankle - knee
 
-        trunk_dx = float(shoulder[0] - hip[0])
-        trunk_dy = float(hip[1] - shoulder[1])
-        trunk_angle = abs(float(math.degrees(math.atan2(trunk_dx, trunk_dy))))
-        if trunk_angle > 90.0:
-            trunk_angle = 180.0 - trunk_angle
+    knee_angle = abs(
+        math.degrees(math.atan2(v2[1], v2[0]) - math.atan2(v1[1], v1[0]))
+    )
+    if knee_angle > 180:
+        knee_angle = 360 - knee_angle
 
-        segment_ratio = thigh_length / max(shank_length, 1e-6)
-        ratio_quality = max(0.0, min(1.0, 1.0 - abs(math.log(max(segment_ratio, 1e-6))) / math.log(3.5)))
-        quality = mean_conf * 0.86 + ratio_quality * 0.14
-        candidates.append({
-            "side": side,
-            "indices": {
-                "shoulder": shoulder_i,
-                "hip": hip_i,
-                "knee": knee_i,
-                "ankle": ankle_i,
-            },
-            "points": {"shoulder": shoulder, "hip": hip, "knee": knee, "ankle": ankle},
-            "knee_angle": knee_angle,
-            "trunk_angle": trunk_angle,
-            "mean_conf": mean_conf,
-            "min_conf": min_conf,
-            "quality": quality,
-            "segment_ratio": segment_ratio,
-            "keypoint_confidence": {
-                "shoulder": confidence_values[0],
-                "hip": confidence_values[1],
-                "knee": confidence_values[2],
-                "ankle": confidence_values[3],
-            },
-        })
+    trunk_dx = float(shoulder[0] - hip[0])
+    trunk_dy = float(hip[1] - shoulder[1])
+    trunk_angle = abs(math.degrees(math.atan2(trunk_dx, trunk_dy)))
 
-    if not candidates:
-        raise ValueError(
-            "The shoulder, hip, knee and ankle were not detected reliably. Keep the full side-view squat visible and retake the photo."
-        )
-
-    selected = max(candidates, key=lambda item: item["quality"])
-    knee_angle = float(selected["knee_angle"])
-    trunk_angle = float(selected["trunk_angle"])
-
+    depth_pen = 0.0
     if knee_angle > 120:
-        depth_pen = 35.0
+        depth_pen = 35
     elif knee_angle > 100:
-        depth_pen = 20.0
+        depth_pen = 20
     elif knee_angle > 85:
-        depth_pen = 10.0
-    else:
-        depth_pen = 0.0
+        depth_pen = 10
 
+    trunk_pen = 0.0
     if trunk_angle > 25:
-        trunk_pen = 20.0
+        trunk_pen = 20
     elif trunk_angle > 15:
-        trunk_pen = 10.0
-    else:
-        trunk_pen = 0.0
+        trunk_pen = 10
 
     score = max(0.0, 100.0 - depth_pen - trunk_pen)
+    c = float(np.mean(conf))
+    conf_out = max(0.6, min(1.0, c))
+
     trunk_thr = make_thresholds(
         "deg", 0, 60,
         [
@@ -1052,8 +859,9 @@ def analyze_squat(xy, conf):
             {"label": "Yellow", "min": 15, "max": 25, "color": "yellow"},
             {"label": "Red", "min": 25, "max": 60, "color": "red"},
         ],
-        trunk_angle,
+        trunk_angle
     )
+
     knee_thr = make_thresholds(
         "deg", 60, 180,
         [
@@ -1061,33 +869,24 @@ def analyze_squat(xy, conf):
             {"label": "Yellow", "min": 95, "max": 110, "color": "yellow"},
             {"label": "Red", "min": 110, "max": 180, "color": "red"},
         ],
-        knee_angle,
+        knee_angle
     )
 
     return {
         "score": round(score, 1),
-        "confidence": round(float(selected["quality"]), 3),
+        "confidence": round(conf_out, 3),
         "metrics": {
-            "knee_angle": round(knee_angle, 2),
-            "trunk_lean": round(trunk_angle, 2),
-            "side_used": selected["side"],
-            "selected_source_indices": selected["indices"],
-            "selected_limb_points": {
-                name: {"x": round(float(point[0]), 2), "y": round(float(point[1]), 2)}
-                for name, point in selected["points"].items()
-            },
-            "keypoint_confidence": {
-                key: round(float(value), 3)
-                for key, value in selected["keypoint_confidence"].items()
-            },
-            "thigh_to_shank_ratio": round(float(selected["segment_ratio"]), 3),
-            "measurement_engine_version": "squat-visible-side-chain-v2",
+            "knee_angle": round(float(knee_angle), 2),
+            "trunk_lean": round(float(trunk_angle), 2),
         },
         "thresholds": {
             "knee_angle": knee_thr,
-            "trunk_lean": trunk_thr,
-        },
+            "trunk_lean": trunk_thr
+        }
     }
+
+
+
 
 def analyze_aslr(xy, conf, side="RIGHT", img=None, body_xy=None, body_conf=None):
     """ASLR hybrid analysis.
@@ -2256,19 +2055,9 @@ def _attach_measurement_points(result, test_type, xy):
             },
         }
     elif test_type in {"shoulder_right", "shoulder_left"}:
-        selected_indices = metrics.get("selected_source_indices") or {}
-        if isinstance(selected_indices, dict) and all(
-            key in selected_indices for key in ("shoulder", "elbow", "wrist", "hip")
-        ):
-            shoulder_i = int(selected_indices["shoulder"])
-            elbow_i = int(selected_indices["elbow"])
-            wrist_i = int(selected_indices["wrist"])
-            hip_i = int(selected_indices["hip"])
-        else:
-            side = str(metrics.get("side") or "RIGHT").upper()
-            shoulder_i, elbow_i, wrist_i, hip_i = (
-                (6, 8, 10, 12) if side == "RIGHT" else (5, 7, 9, 11)
-            )
+        side = str(metrics.get("side") or "RIGHT").upper()
+        indices = (6, 8, 10, 12) if side == "RIGHT" else (5, 7, 9, 11)
+        shoulder_i, elbow_i, wrist_i, hip_i = indices
         metrics["measurement_points"] = {
             "indices": {
                 "shoulder": shoulder_i,
@@ -2284,28 +2073,12 @@ def _attach_measurement_points(result, test_type, xy):
             },
         }
     elif test_type == "squat":
-        selected_indices = metrics.get("selected_source_indices") or {}
-        if isinstance(selected_indices, dict) and all(
-            key in selected_indices for key in ("shoulder", "hip", "knee", "ankle")
-        ):
-            shoulder_i = int(selected_indices["shoulder"])
-            hip_i = int(selected_indices["hip"])
-            knee_i = int(selected_indices["knee"])
-            ankle_i = int(selected_indices["ankle"])
-            shoulder = xy[shoulder_i]
-            hip = xy[hip_i]
-            knee = xy[knee_i]
-            ankle = xy[ankle_i]
-            method = "selected_visible_side_chain"
-        else:
-            shoulder = (xy[5] + xy[6]) / 2
-            hip = (xy[11] + xy[12]) / 2
-            knee = (xy[13] + xy[14]) / 2
-            ankle = (xy[15] + xy[16]) / 2
-            method = "bilateral_midpoints_fallback"
+        shoulder = (xy[5] + xy[6]) / 2
+        hip = (xy[11] + xy[12]) / 2
+        knee = (xy[13] + xy[14]) / 2
+        ankle = (xy[15] + xy[16]) / 2
         metrics["measurement_points"] = {
-            "method": method,
-            "indices": selected_indices if isinstance(selected_indices, dict) else {},
+            "method": "bilateral_midpoints_current_engine",
             "points": {
                 "shoulder": {"x": round(float(shoulder[0]), 2), "y": round(float(shoulder[1]), 2)},
                 "hip": {"x": round(float(hip[0]), 2), "y": round(float(hip[1]), 2)},
@@ -2709,14 +2482,10 @@ def decode_and_normalize_analysis_image(img_bytes):
 
 
 def run_yolo_analysis_from_bytes(img_bytes, test_type, capture_metadata=None):
-    engine_started = time.perf_counter()
-    phase_started = time.perf_counter()
     img, image_quality = decode_and_normalize_analysis_image(img_bytes)
-    normalize_ms = round((time.perf_counter() - phase_started) * 1000, 1)
     is_aslr = str(test_type).startswith("aslr")
-    pose_started = time.perf_counter()
 
-    first_requested_imgsz = ASLR_POSE_INFERENCE_IMGSZ if is_aslr else None
+    first_requested_imgsz = max(POSE_INFERENCE_IMGSZ, 960) if is_aslr else None
     aslr_single_rotated_pass = None
 
     if is_aslr:
@@ -2864,9 +2633,6 @@ def run_yolo_analysis_from_bytes(img_bytes, test_type, capture_metadata=None):
                 "relevant_keypoint_mean_confidence_after_crop": round(crop_relevant_conf, 4),
             }
 
-    pose_inference_ms = round((time.perf_counter() - pose_started) * 1000, 1)
-    geometry_started = time.perf_counter()
-
     aslr_precomputed_result = None
     aslr_precomputed_error = None
     if is_aslr:
@@ -2924,7 +2690,7 @@ def run_yolo_analysis_from_bytes(img_bytes, test_type, capture_metadata=None):
             "visual_endpoint_allowed": False,
             "endpoint_policy": "raised_true_yolo_ankle_required_floor_leg_optional_validation_only",
             "chain_policy": "raised_ankle_first_then_original_image_horizontal",
-            "body_reference_policy": "original_image_horizontal_through_selected_raised_leg_hip_shoulders_and_floor_leg_excluded",
+            "body_reference_policy": "original_image_horizontal_through_pelvis_always_primary_shoulders_and_floor_leg_excluded",
             "person_coverage": round(person_coverage, 4),
             "adaptive_crop_used": False,
         }
@@ -3002,7 +2768,6 @@ def run_yolo_analysis_from_bytes(img_bytes, test_type, capture_metadata=None):
     else:
         raise ValueError("Invalid test_type")
 
-    geometry_ms = round((time.perf_counter() - geometry_started) * 1000, 1)
     _attach_measurement_points(result, test_type, xy)
     result.setdefault("metrics", {})["detection_confidence_threshold"] = detection_threshold
     result["metrics"]["person_detection"] = {
@@ -3022,7 +2787,6 @@ def run_yolo_analysis_from_bytes(img_bytes, test_type, capture_metadata=None):
     }
 
     vision_qa_requested = bool((capture_metadata or {}).get("vision_qa_requested"))
-    qa_started = time.perf_counter()
     if vision_qa_requested:
         # Validation overlay requested by the screening UI. This is ephemeral:
         # _without_ephemeral_vision_qa removes it before the authoritative
@@ -3038,14 +2802,6 @@ def run_yolo_analysis_from_bytes(img_bytes, test_type, capture_metadata=None):
             test_type,
             analysis_pass=analysis_pass,
         )
-    vision_qa_ms = round((time.perf_counter() - qa_started) * 1000, 1)
-    result["metrics"]["performance_timing_ms"] = {
-        "normalize": normalize_ms,
-        "pose_inference": pose_inference_ms,
-        "geometry_and_quality_gates": geometry_ms,
-        "vision_qa_render": vision_qa_ms,
-        "total_engine": round((time.perf_counter() - engine_started) * 1000, 1),
-    }
 
     return result, session_update
 
@@ -3112,19 +2868,15 @@ def process_analysis_job(job_id: str):
         test_type = job.get("test_type")
         user_email = job.get("user_email")
         session_id = job.get("session_id")
-        private_job_metadata = _analysis_job_private_metadata(job.get("intake_json"))
         intake_data, capture_metadata = _split_job_intake_and_capture_metadata(
             job.get("intake_json")
         )
-        force_reanalysis = bool(private_job_metadata["force_reanalysis"])
-        capture_fingerprint = private_job_metadata["capture_fingerprint"]
 
-        # Recovery path applies only to the same capture. A deliberate retake
-        # must run YOLO again and replace the previous screening result.
+        # Recovery path: a previous attempt may have inserted the authoritative
+        # screening row and then failed while updating a non-authoritative cache.
         existing_screening = _find_existing_screening(session_id, test_type)
-        if existing_screening and not force_reanalysis:
+        if existing_screening:
             result_json = _analysis_result_from_screening(existing_screening, intake_data)
-            result_json.update({"recovered": True, "same_capture": True})
             _update_session_score_best_effort(
                 session_id,
                 _session_score_update_for_test(test_type, result_json.get("score")),
@@ -3165,8 +2917,6 @@ def process_analysis_job(job_id: str):
             capture_metadata=capture_metadata,
         )
         phases["analysis_engine_ms"] = round((time.perf_counter() - phase_started) * 1000, 1)
-        result.setdefault("metrics", {})["capture_fingerprint"] = capture_fingerprint[:16]
-        result["metrics"]["force_reanalysis"] = force_reanalysis
 
         persistent_result = _without_ephemeral_vision_qa(result)
         screening_row = build_screening_row(
@@ -3179,34 +2929,18 @@ def process_analysis_job(job_id: str):
         )
 
         phase_started = time.perf_counter()
-        if force_reanalysis and existing_screening:
-            update_row = dict(screening_row)
-            update_row.pop("idempotency_key", None)
-            updated_screening = (
-                supabase.table("screenings")
-                .update(update_row)
-                .eq("session_id", session_id)
-                .eq("test_type", test_type)
-                .execute()
-            )
-            if not updated_screening.data:
-                raise ValueError("The retake result could not replace the previous screening.")
+        try:
+            supabase.table("screenings").insert(screening_row).execute()
             result_json = _analysis_result_from_runtime(
                 user_email, session_id, test_type, result, intake_data
             )
-        else:
-            try:
-                supabase.table("screenings").insert(screening_row).execute()
-                result_json = _analysis_result_from_runtime(
-                    user_email, session_id, test_type, result, intake_data
-                )
-            except Exception as exc:
-                if not _is_duplicate_screening_error(exc):
-                    raise
-                existing_screening = _find_existing_screening(session_id, test_type)
-                if not existing_screening:
-                    raise
-                result_json = _analysis_result_from_screening(existing_screening, intake_data)
+        except Exception as exc:
+            if not _is_duplicate_screening_error(exc):
+                raise
+            existing_screening = _find_existing_screening(session_id, test_type)
+            if not existing_screening:
+                raise
+            result_json = _analysis_result_from_screening(existing_screening, intake_data)
         phases["screening_save_ms"] = round((time.perf_counter() - phase_started) * 1000, 1)
 
         # Failure to update denormalized session score columns must not convert a
@@ -3278,13 +3012,6 @@ async def submit_analysis(
     capture_metadata_json: str = Form(None),
     authorization: str = Header(None),
 ):
-    """Queue one image analysis and safely support a genuine retake.
-
-    Idempotency is image-aware. Repeated network submissions of the same bytes
-    reuse the existing job, while a different image for a completed test queues
-    a controlled reanalysis of the same database job and replaces the existing
-    screening result after successful processing.
-    """
     total_started = time.perf_counter()
     phases = {}
 
@@ -3305,6 +3032,54 @@ async def submit_analysis(
         raise HTTPException(status_code=422, detail=str(exc))
     try_save_session_intake(session_id, intake_data)
 
+    existing_jobs = (
+        supabase.table("analysis_jobs")
+        .select("id,status,created_at,result_json,error_message")
+        .eq("session_id", session_id)
+        .eq("test_type", test_type)
+        .order("created_at", desc=True)
+        .limit(3)
+        .execute()
+    )
+    for existing in existing_jobs.data or []:
+        existing_status = str(existing.get("status") or "").lower()
+        if existing_status in {"queued", "processing", "completed"}:
+            response = {
+                "job_id": existing.get("id"),
+                "status": existing_status,
+                "reused": True,
+            }
+            if existing_status == "completed" and existing.get("result_json"):
+                response["result"] = existing.get("result_json")
+            phases["total_ms"] = round((time.perf_counter() - total_started) * 1000, 1)
+            logger.info(
+                "analysis_submit_perf session_id=%s test_type=%s reused=true phases=%s",
+                session_id,
+                test_type,
+                json.dumps(phases, sort_keys=True),
+            )
+            return response
+
+    # A failed job may already have saved the screening before a later cache
+    # update failed. Reconcile it immediately instead of uploading/re-analysing.
+    existing_screening = _find_existing_screening(session_id, test_type)
+    if existing_screening and existing_jobs.data:
+        recovered_job_id = existing_jobs.data[0].get("id")
+        result_json = _analysis_result_from_screening(existing_screening, intake_data)
+        _update_session_score_best_effort(
+            session_id,
+            _session_score_update_for_test(test_type, result_json.get("score")),
+            job_id=recovered_job_id,
+            test_type=test_type,
+        )
+        _complete_analysis_job(recovered_job_id, result_json, image_expires_at=None)
+        return {
+            "job_id": recovered_job_id,
+            "status": "completed",
+            "reused": True,
+            "recovered": True,
+        }
+
     phase_started = time.perf_counter()
     img_bytes = await image.read()
     phases["image_read_ms"] = round((time.perf_counter() - phase_started) * 1000, 1)
@@ -3313,55 +3088,6 @@ async def submit_analysis(
         raise HTTPException(status_code=422, detail="The uploaded image is empty.")
     if len(img_bytes) > 12 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="The uploaded image is too large. Maximum size is 12 MB.")
-
-    capture_fingerprint = hashlib.sha256(img_bytes).hexdigest()
-    existing_jobs = (
-        supabase.table("analysis_jobs")
-        .select("id,status,created_at,result_json,error_message,intake_json,image_path")
-        .eq("session_id", session_id)
-        .eq("test_type", test_type)
-        .order("created_at", desc=True)
-        .limit(3)
-        .execute()
-    )
-
-    job_action = _analysis_job_action(existing_jobs.data or [], capture_fingerprint)
-    action = job_action["action"]
-    action_job = job_action.get("job") or {}
-    if action == "reuse":
-        existing_status = str(action_job.get("status") or "").lower()
-        response = {
-            "job_id": action_job.get("id"),
-            "status": existing_status,
-            "reused": True,
-            "same_capture": True,
-        }
-        if existing_status == "completed" and action_job.get("result_json"):
-            response["result"] = action_job.get("result_json")
-        phases["total_ms"] = round((time.perf_counter() - total_started) * 1000, 1)
-        logger.info(
-            "analysis_submit_perf session_id=%s test_type=%s reused=same_capture phases=%s",
-            session_id,
-            test_type,
-            json.dumps(phases, sort_keys=True),
-        )
-        return response
-    if action == "conflict":
-        raise HTTPException(
-            status_code=409,
-            detail={
-                "code": "ANALYSIS_ALREADY_RUNNING",
-                "message": "A different photo for this test is already being analysed. Wait for it to finish before retaking.",
-                "job_id": action_job.get("id"),
-            },
-        )
-    retake_job = action_job if action == "retake" else None
-
-    # If an authoritative screening already exists and the bytes do not match a
-    # known completed job, this submission is a genuine retake. It must be
-    # analysed again rather than recovering the old result.
-    existing_screening = _find_existing_screening(session_id, test_type)
-    is_reanalysis = existing_screening is not None
 
     image_path = f"{session_id}/{test_type}/{utc_now_iso().replace(':', '-')}.jpg"
     image_base64_fallback = None
@@ -3376,6 +3102,7 @@ async def submit_analysis(
             },
         )
     except Exception:
+        # Compatibility fallback while the private Storage bucket is being deployed.
         image_path = None
         image_base64_fallback = base64.b64encode(img_bytes).decode("utf-8")
     phases["storage_upload_ms"] = round((time.perf_counter() - phase_started) * 1000, 1)
@@ -3383,56 +3110,6 @@ async def submit_analysis(
     job_intake_data = dict(intake_data or {})
     if capture_metadata:
         job_intake_data["_flexilab_capture_metadata"] = capture_metadata
-    job_intake_data["_flexilab_capture_fingerprint"] = capture_fingerprint
-    job_intake_data["_flexilab_force_reanalysis"] = bool(is_reanalysis)
-
-    image_expires_at = (
-        datetime.now(timezone.utc)
-        + timedelta(hours=max(6, DIAGNOSTIC_RETENTION_HOURS))
-    ).isoformat()
-
-    if retake_job is not None:
-        job_id = retake_job.get("id")
-        previous_image_path = str(retake_job.get("image_path") or "").strip()
-        update_payload = {
-            "status": "queued",
-            "started_at": None,
-            "completed_at": None,
-            "result_json": None,
-            "error_message": None,
-            "image_path": image_path,
-            "image_base64": image_base64_fallback,
-            "image_expires_at": image_expires_at,
-            "intake_json": job_intake_data,
-        }
-        updated = (
-            supabase.table("analysis_jobs")
-            .update(update_payload)
-            .eq("id", job_id)
-            .execute()
-        )
-        if not updated.data:
-            raise HTTPException(status_code=500, detail="Unable to queue the retake analysis.")
-        if previous_image_path and previous_image_path != image_path:
-            try:
-                supabase.storage.from_(ANALYSIS_STORAGE_BUCKET).remove([previous_image_path])
-            except Exception:
-                pass
-        if ANALYSIS_INLINE_ENABLED:
-            background_tasks.add_task(process_analysis_job, job_id)
-        phases["total_ms"] = round((time.perf_counter() - total_started) * 1000, 1)
-        logger.info(
-            "analysis_submit_perf session_id=%s test_type=%s retake=true phases=%s",
-            session_id,
-            test_type,
-            json.dumps(phases, sort_keys=True),
-        )
-        return {
-            "job_id": job_id,
-            "status": "queued",
-            "reused": False,
-            "reanalysis": True,
-        }
 
     job = {
         "session_id": session_id,
@@ -3444,7 +3121,10 @@ async def submit_analysis(
         "status": "queued",
         "image_path": image_path,
         "image_base64": image_base64_fallback,
-        "image_expires_at": image_expires_at,
+        "image_expires_at": (
+            datetime.now(timezone.utc)
+            + timedelta(hours=max(6, DIAGNOSTIC_RETENTION_HOURS))
+        ).isoformat(),
         "intake_json": job_intake_data,
     }
 
@@ -3465,6 +3145,7 @@ async def submit_analysis(
         json.dumps(phases, sort_keys=True),
     )
     return {"job_id": job_id, "status": "queued", "reused": False}
+
 
 @app.get("/job_status/{job_id}")
 def job_status(

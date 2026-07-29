@@ -15,7 +15,7 @@ import cv2
 import numpy as np
 
 
-VISION_QA_VERSION = "vision-qa-overlay-v2.8-selected-hip-validation"
+VISION_QA_VERSION = "vision-qa-overlay-v2.7-aslr-enabled-validation"
 
 COCO_NAMES = [
     "nose",
@@ -146,23 +146,20 @@ def _draw_skeleton(
 
 def _draw_shoulder_measurement(image: np.ndarray, metrics: Mapping[str, Any]) -> None:
     side = str(metrics.get("side") or "RIGHT").upper()
+    indices = (6, 8, 10, 12) if side == "RIGHT" else (5, 7, 9, 11)
+    shoulder_idx, elbow_idx, wrist_idx, hip_idx = indices
     geometry = metrics.get("measurement_points") or {}
     if not isinstance(geometry, Mapping):
         return
     points = geometry.get("points") or {}
-    indices = geometry.get("indices") or {}
     if not isinstance(points, Mapping):
         return
-    shoulder_idx = int(indices.get("shoulder", 6 if side == "RIGHT" else 5))
-    elbow_idx = int(indices.get("elbow", 8 if side == "RIGHT" else 7))
-    wrist_idx = int(indices.get("wrist", 10 if side == "RIGHT" else 9))
-    hip_idx = int(indices.get("hip", 12 if side == "RIGHT" else 11))
     shoulder = _point(points.get("shoulder", (0, 0)))
     elbow = _point(points.get("elbow", (0, 0)))
     wrist = _point(points.get("wrist", (0, 0)))
     hip = _point(points.get("hip", (0, 0)))
     arm_used = str(metrics.get("arm_point_used") or "WRIST")
-    arm_point = wrist if "WRIST" in arm_used else elbow
+    arm_point = wrist if arm_used == "WRIST" else elbow
     cv2.line(image, hip, shoulder, (255, 190, 60), 5, cv2.LINE_AA)
     cv2.line(image, shoulder, arm_point, (90, 235, 225), 5, cv2.LINE_AA)
     cv2.circle(image, shoulder, 9, (255, 255, 255), -1, cv2.LINE_AA)
@@ -216,8 +213,8 @@ def _draw_squat_measurement(image: np.ndarray, metrics: Mapping[str, Any]) -> No
 def _draw_aslr_measurement(image: np.ndarray, metrics: Mapping[str, Any]) -> None:
     """Draw the deterministic image-horizontal reference and raised leg.
 
-    Pink: original-image horizontal through the selected raised-leg hip.
-    Yellow: the selected raised-leg hip to the true raised YOLO ankle.
+    Pink: original-image horizontal through the shared pelvic anchor.
+    Yellow: the same pelvic anchor to the true raised YOLO ankle.
     Shoulder and floor-leg landmarks are excluded from the angle.
     """
     selected_points = metrics.get("selected_limb_points") or {}
@@ -258,14 +255,14 @@ def _draw_aslr_measurement(image: np.ndarray, metrics: Mapping[str, Any]) -> Non
         cv2.line(image, reference_start, reference_end, (230, 100, 240), 6, cv2.LINE_AA)
         cv2.circle(image, reference_start, 9, (230, 100, 240), -1, cv2.LINE_AA)
         cv2.circle(image, reference_end, 7, (230, 100, 240), -1, cv2.LINE_AA)
-        _put_label(image, "Selected raised-leg hip", (reference_start[0] + 10, reference_start[1] - 10), 0.42)
+        _put_label(image, "Pelvic anchor", (reference_start[0] + 10, reference_start[1] - 10), 0.42)
         _put_label(image, reference_label, (reference_end[0] + 10, reference_end[1] - 10), 0.40)
 
     if raised_hip is not None and raised_ankle is not None:
         cv2.line(image, raised_hip, raised_ankle, (40, 235, 250), 7, cv2.LINE_AA)
         cv2.circle(image, raised_hip, 10, (40, 235, 250), -1, cv2.LINE_AA)
         cv2.circle(image, raised_ankle, 10, (40, 235, 250), -1, cv2.LINE_AA)
-        _put_label(image, "Selected raised-leg hip", (raised_hip[0] + 10, raised_hip[1] - 10), 0.45)
+        _put_label(image, "Pelvic anchor", (raised_hip[0] + 10, raised_hip[1] - 10), 0.45)
         _put_label(image, "Raised ankle (YOLO)", (raised_ankle[0] + 10, raised_ankle[1] - 10), 0.45)
 
     if resting_knee is not None:
