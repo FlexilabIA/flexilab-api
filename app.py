@@ -2249,8 +2249,13 @@ async def analyze(
     if supabase is None:
         raise HTTPException(status_code=503, detail="Supabase is not configured on server.")
 
+    total_started = time.perf_counter()
+    phases = {}
+
+    phase_started = time.perf_counter()
     user = authenticated_user(supabase, authorization)
     session = require_owned_session(user, session_id)
+    phases["auth_session_ms"] = round((time.perf_counter() - phase_started) * 1000, 1)
     authoritative_email = str(session.get("user_email") or user["email"]).strip().lower()
     intake_data = parse_intake_payload(intake_json=intake_json, questionnaire_json=questionnaire_json)
     try:
@@ -2259,7 +2264,10 @@ async def analyze(
         raise HTTPException(status_code=422, detail=str(exc))
     try_save_session_intake(session_id, intake_data)
 
+    phase_started = time.perf_counter()
     img_bytes = await image.read()
+    phases["image_read_ms"] = round((time.perf_counter() - phase_started) * 1000, 1)
+    phases["image_bytes"] = len(img_bytes)
     if not img_bytes:
         raise HTTPException(status_code=422, detail="The uploaded image is empty.")
 
@@ -2799,8 +2807,11 @@ def process_analysis_job(job_id: str):
     if supabase is None:
         return
 
+    total_started = time.perf_counter()
+    phases = {}
     job = None
     try:
+        phase_started = time.perf_counter()
         resp = (
             supabase.table("analysis_jobs")
             .select("*")
@@ -2809,6 +2820,7 @@ def process_analysis_job(job_id: str):
             .execute()
         )
 
+        phases["job_fetch_ms"] = round((time.perf_counter() - phase_started) * 1000, 1)
         if not resp.data:
             return
 
@@ -2833,6 +2845,7 @@ def process_analysis_job(job_id: str):
             ):
                 return
 
+        phase_started = time.perf_counter()
         claim = (
             supabase.table("analysis_jobs")
             .update({
@@ -2844,6 +2857,7 @@ def process_analysis_job(job_id: str):
             .eq("status", "queued")
             .execute()
         )
+        phases["job_claim_ms"] = round((time.perf_counter() - phase_started) * 1000, 1)
         if not claim.data:
             # Another web process or worker claimed this job first.
             return
@@ -2876,6 +2890,7 @@ def process_analysis_job(job_id: str):
                     pass
             return
 
+        phase_started = time.perf_counter()
         image_path = str(job.get("image_path") or "").strip()
         img_b64 = job.get("image_base64")
         if image_path:
@@ -2889,12 +2904,16 @@ def process_analysis_job(job_id: str):
             img_bytes = base64.b64decode(img_b64)
         else:
             raise ValueError("Missing queued image")
+        phases["image_load_ms"] = round((time.perf_counter() - phase_started) * 1000, 1)
+        phases["image_bytes"] = len(img_bytes)
 
+        phase_started = time.perf_counter()
         result, session_update = run_yolo_analysis_from_bytes(
             img_bytes,
             test_type,
             capture_metadata=capture_metadata,
         )
+        phases["analysis_engine_ms"] = round((time.perf_counter() - phase_started) * 1000, 1)
 
         persistent_result = _without_ephemeral_vision_qa(result)
         screening_row = build_screening_row(
@@ -2906,6 +2925,7 @@ def process_analysis_job(job_id: str):
             intake_data=intake_data
         )
 
+        phase_started = time.perf_counter()
         try:
             supabase.table("screenings").insert(screening_row).execute()
             result_json = _analysis_result_from_runtime(
@@ -2918,6 +2938,7 @@ def process_analysis_job(job_id: str):
             if not existing_screening:
                 raise
             result_json = _analysis_result_from_screening(existing_screening, intake_data)
+        phases["screening_save_ms"] = round((time.perf_counter() - phase_started) * 1000, 1)
 
         # Failure to update denormalized session score columns must not convert a
         # successfully saved screening into a failed job.
@@ -2933,10 +2954,20 @@ def process_analysis_job(job_id: str):
             datetime.now(timezone.utc) + timedelta(hours=DIAGNOSTIC_RETENTION_HOURS)
         ).isoformat() if keep_diagnostic_image else None
 
+        phase_started = time.perf_counter()
         _complete_analysis_job(
             job_id,
             result_json,
             image_expires_at=diagnostic_expiry,
+        )
+        phases["job_complete_ms"] = round((time.perf_counter() - phase_started) * 1000, 1)
+        phases["total_ms"] = round((time.perf_counter() - total_started) * 1000, 1)
+        logger.info(
+            "analysis_perf job_id=%s session_id=%s test_type=%s phases=%s",
+            job_id,
+            session_id,
+            test_type,
+            json.dumps(phases, sort_keys=True),
         )
 
         if image_path and not keep_diagnostic_image:
@@ -2997,7 +3028,7 @@ async def submit_analysis(
 
     existing_jobs = (
         supabase.table("analysis_jobs")
-        .select("id,status,created_at")
+        .select("id,status,created_at,result_json,error_message")
         .eq("session_id", session_id)
         .eq("test_type", test_type)
         .order("created_at", desc=True)
@@ -3007,11 +3038,21 @@ async def submit_analysis(
     for existing in existing_jobs.data or []:
         existing_status = str(existing.get("status") or "").lower()
         if existing_status in {"queued", "processing", "completed"}:
-            return {
+            response = {
                 "job_id": existing.get("id"),
                 "status": existing_status,
                 "reused": True,
             }
+            if existing_status == "completed" and existing.get("result_json"):
+                response["result"] = existing.get("result_json")
+            phases["total_ms"] = round((time.perf_counter() - total_started) * 1000, 1)
+            logger.info(
+                "analysis_submit_perf session_id=%s test_type=%s reused=true phases=%s",
+                session_id,
+                test_type,
+                json.dumps(phases, sort_keys=True),
+            )
+            return response
 
     # A failed job may already have saved the screening before a later cache
     # update failed. Reconcile it immediately instead of uploading/re-analysing.
@@ -3041,6 +3082,7 @@ async def submit_analysis(
 
     image_path = f"{session_id}/{test_type}/{utc_now_iso().replace(':', '-')}.jpg"
     image_base64_fallback = None
+    phase_started = time.perf_counter()
     try:
         supabase.storage.from_(ANALYSIS_STORAGE_BUCKET).upload(
             image_path,
@@ -3054,6 +3096,7 @@ async def submit_analysis(
         # Compatibility fallback while the private Storage bucket is being deployed.
         image_path = None
         image_base64_fallback = base64.b64encode(img_bytes).decode("utf-8")
+    phases["storage_upload_ms"] = round((time.perf_counter() - phase_started) * 1000, 1)
 
     job_intake_data = dict(intake_data or {})
     if capture_metadata:
@@ -3076,13 +3119,22 @@ async def submit_analysis(
         "intake_json": job_intake_data,
     }
 
+    phase_started = time.perf_counter()
     resp = supabase.table("analysis_jobs").insert(job).execute()
+    phases["job_insert_ms"] = round((time.perf_counter() - phase_started) * 1000, 1)
     if not resp.data:
         raise HTTPException(status_code=500, detail="Unable to queue the photo analysis.")
 
     job_id = resp.data[0]["id"]
     if ANALYSIS_INLINE_ENABLED:
         background_tasks.add_task(process_analysis_job, job_id)
+    phases["total_ms"] = round((time.perf_counter() - total_started) * 1000, 1)
+    logger.info(
+        "analysis_submit_perf session_id=%s test_type=%s reused=false phases=%s",
+        session_id,
+        test_type,
+        json.dumps(phases, sort_keys=True),
+    )
     return {"job_id": job_id, "status": "queued", "reused": False}
 
 
