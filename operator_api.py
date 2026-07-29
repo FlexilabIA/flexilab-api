@@ -857,17 +857,59 @@ def create_operator_router(
             db_error = str(exc)
         db_latency_ms = round((time.perf_counter() - started) * 1000, 1)
         extra = health_provider() if health_provider else {}
+        now = _now()
+        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        last_24h_start = now - timedelta(hours=24)
+
+        # Queue values are live. Completion/failure values use rolling windows so
+        # historical development tests do not permanently degrade platform health.
         queued = table_count("analysis_jobs", [("eq", "status", "queued")])
         processing = table_count("analysis_jobs", [("eq", "status", "processing")])
-        failed = table_count("analysis_jobs", [("eq", "status", "failed")])
+        completed_today = table_count(
+            "analysis_jobs",
+            [("eq", "status", "completed"), ("gte", "created_at", _iso(today_start))],
+        )
+        failed_today = table_count(
+            "analysis_jobs",
+            [("eq", "status", "failed"), ("gte", "created_at", _iso(today_start))],
+        )
+        completed_last_24h = table_count(
+            "analysis_jobs",
+            [("eq", "status", "completed"), ("gte", "created_at", _iso(last_24h_start))],
+        )
+        failed_last_24h = table_count(
+            "analysis_jobs",
+            [("eq", "status", "failed"), ("gte", "created_at", _iso(last_24h_start))],
+        )
+        analysed_last_24h = completed_last_24h + failed_last_24h
+        success_rate_last_24h = (
+            round((completed_last_24h / analysed_last_24h) * 100, 1)
+            if analysed_last_24h
+            else 100.0
+        )
+
         import_queued = table_count("bulk_import_jobs", [("in_", "status", ["queued", "processing"])])
-        status = "healthy" if db_ok and failed < 10 else "degraded"
+        if not db_ok:
+            status = "down"
+        elif failed_last_24h >= 3:
+            status = "degraded"
+        else:
+            status = "healthy"
+
         return {
             "status": status,
-            "checked_at": _iso(),
+            "checked_at": _iso(now),
             "app_version": APP_VERSION,
             "database": {"ok": db_ok, "latency_ms": db_latency_ms, "error": db_error},
-            "analysis_queue": {"queued": queued, "processing": processing, "failed": failed},
+            "analysis_queue": {
+                "queued": queued,
+                "processing": processing,
+                "completed_today": completed_today,
+                "failed_today": failed_today,
+                "completed_last_24h": completed_last_24h,
+                "failed_last_24h": failed_last_24h,
+                "success_rate_last_24h": success_rate_last_24h,
+            },
             "corporate_import_queue": {"queued_or_processing": import_queued},
             "integrations": {
                 "stripe_secret_configured": bool(STRIPE_SECRET_KEY),
