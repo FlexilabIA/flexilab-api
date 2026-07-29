@@ -375,7 +375,7 @@ async def request_timing_middleware(request, call_next):
 def health():
     return {
         "ok": True,
-        "patch_version": "V101.35.20-aslr-conditional-detection-recovery",
+        "patch_version": "V101.35.21-aslr-side-specific-rotation",
         "base_patch": "V101.28.4-aslr-thresholds-60-75",
         "exercise_library_mode": EXERCISE_LIBRARY_MODE,
         "exercise_library_path": EXERCISE_LIBRARY_PATH,
@@ -406,8 +406,8 @@ def health():
                 "green": ">75",
             },
             "source_orientation_requirement": "head_left_capture_protocol_internal_90_clockwise_inference",
-            "chain_strategy": "rotated_full_image_then_conditional_focused_crop_for_coherent_chain",
-            "pose_passes": ["rotated_90_clockwise_full_image", "conditional_rotated_focused_crop_recovery"],
+            "chain_strategy": "right_clockwise_left_counterclockwise_then_conditional_focused_crop",
+            "pose_passes": ["right_90_clockwise_or_left_90_counterclockwise_full_image", "conditional_same_direction_focused_crop_recovery"],
             "pose_model_inference_count": "1 normally; 2 only when coherent chain recovery is required",
             "detection_attempt_count": "1 normally; 2 conditionally",
             "tracked_image_processing": False,
@@ -1991,6 +1991,35 @@ def _map_rotated_cw_pose_to_original(xy, boxes, original_shape):
     return mapped_xy, np.array(mapped_boxes, dtype=float)
 
 
+def _map_rotated_ccw_pose_to_original(xy, boxes, original_shape):
+    """Map 90-degree-counterclockwise inference coordinates back to source image."""
+    original_height, original_width = original_shape[:2]
+    mapped_xy = np.array(xy, dtype=float, copy=True)
+    rotated_x = mapped_xy[:, 0].copy()
+    rotated_y = mapped_xy[:, 1].copy()
+    mapped_xy[:, 0] = float(original_width - 1) - rotated_y
+    mapped_xy[:, 1] = rotated_x
+
+    mapped_boxes = []
+    for box in np.array(boxes, dtype=float):
+        x1, y1, x2, y2 = [float(value) for value in box[:4]]
+        corners = np.array(
+            [[x1, y1], [x2, y1], [x2, y2], [x1, y2]],
+            dtype=float,
+        )
+        source_x = float(original_width - 1) - corners[:, 1]
+        source_y = corners[:, 0]
+        mapped_boxes.append(
+            [
+                float(np.min(source_x)),
+                float(np.min(source_y)),
+                float(np.max(source_x)),
+                float(np.max(source_y)),
+            ]
+        )
+    return mapped_xy, np.array(mapped_boxes, dtype=float)
+
+
 def _aslr_pose_pass_quality(result):
     """Score pose-pass reliability without selecting the largest clinical angle."""
     metrics = result.get("metrics") or {}
@@ -2599,11 +2628,27 @@ def run_yolo_analysis_from_bytes(img_bytes, test_type, capture_metadata=None):
     aslr_single_rotated_pass = None
 
     if is_aslr:
-        # V101.35.14: ASLR performs exactly one pose-model inference and no tracked-image rendering. The full
-        # normalized image is rotated 90° clockwise privately so YOLO sees an
-        # upright person. All selected coordinates are then inverse-mapped to
-        # the untouched original image for scoring and display.
-        rotated_pose_image = cv2.rotate(img, cv2.ROTATE_90_CLOCKWISE)
+        # V101.35.21: use the stable right-side protocol for both tests, mirrored
+        # at capture. Right ASLR (head left) rotates clockwise. Left ASLR
+        # (head right) rotates counterclockwise. Coordinates are inverse-mapped
+        # to the untouched source image before measurement and display.
+        rotate_counterclockwise = str(test_type) == "aslr_left"
+        rotation_code = (
+            cv2.ROTATE_90_COUNTERCLOCKWISE
+            if rotate_counterclockwise
+            else cv2.ROTATE_90_CLOCKWISE
+        )
+        rotation_name = (
+            "rotated_90_counterclockwise"
+            if rotate_counterclockwise
+            else "rotated_90_clockwise"
+        )
+        map_rotated_pose_to_original = (
+            _map_rotated_ccw_pose_to_original
+            if rotate_counterclockwise
+            else _map_rotated_cw_pose_to_original
+        )
+        rotated_pose_image = cv2.rotate(img, rotation_code)
         first_prediction, first_threshold, first_imgsz = detect_aslr_pose_with_fallback(
             rotated_pose_image,
             inference_imgsz=first_requested_imgsz,
@@ -2616,7 +2661,7 @@ def run_yolo_analysis_from_bytes(img_bytes, test_type, capture_metadata=None):
             first_xy_rotated,
             first_conf,
         ) = _pose_arrays(first_prediction)
-        first_xy, first_boxes = _map_rotated_cw_pose_to_original(
+        first_xy, first_boxes = map_rotated_pose_to_original(
             first_xy_rotated,
             first_boxes_rotated,
             img.shape,
@@ -2629,7 +2674,7 @@ def run_yolo_analysis_from_bytes(img_bytes, test_type, capture_metadata=None):
             first_xy, first_conf
         )
         aslr_single_rotated_pass = {
-            "name": "rotated_90_clockwise_full_image",
+            "name": f"{rotation_name}_full_image",
             "xy": first_xy,
             "conf": first_conf,
             "boxes": first_boxes,
@@ -2641,6 +2686,8 @@ def run_yolo_analysis_from_bytes(img_bytes, test_type, capture_metadata=None):
             "chain_candidates": first_chain_candidates,
             "pose_model_inference_count": 1,
             "detection_attempt_count": 1,
+            "rotation_direction": "counterclockwise" if rotate_counterclockwise else "clockwise",
+            "capture_protocol": "head_right" if rotate_counterclockwise else "head_left",
         }
 
         # V101.35.20: keep the fast one-call path when a coherent same-side
@@ -2674,14 +2721,14 @@ def run_yolo_analysis_from_bytes(img_bytes, test_type, capture_metadata=None):
                 crop_xy_rotated, crop_boxes_rotated = _map_crop_pose_to_full(
                     crop_xy_local, crop_boxes_local, crop_bounds
                 )
-                crop_xy, crop_boxes = _map_rotated_cw_pose_to_original(
+                crop_xy, crop_boxes = map_rotated_pose_to_original(
                     crop_xy_rotated, crop_boxes_rotated, img.shape
                 )
                 crop_chain_quality, crop_chain_candidates = _aslr_same_side_chain_quality(
                     crop_xy, crop_conf
                 )
                 crop_pass = {
-                    "name": "rotated_90_clockwise_focused_crop_recovery",
+                    "name": f"{rotation_name}_focused_crop_recovery",
                     "xy": crop_xy,
                     "conf": crop_conf,
                     "boxes": crop_boxes,
@@ -2694,6 +2741,8 @@ def run_yolo_analysis_from_bytes(img_bytes, test_type, capture_metadata=None):
                     "crop_bounds_rotated": crop_bounds,
                     "pose_model_inference_count": 2,
                     "detection_attempt_count": 2,
+                    "rotation_direction": "counterclockwise" if rotate_counterclockwise else "clockwise",
+                    "capture_protocol": "head_right" if rotate_counterclockwise else "head_left",
                 }
                 if (
                     bool(crop_chain_quality.get("valid_detection"))
@@ -2854,7 +2903,9 @@ def run_yolo_analysis_from_bytes(img_bytes, test_type, capture_metadata=None):
         analysis_pass = {
             "mode": "aslr_one_yolo_call_image_horizontal_primary_no_tracking_images",
             "selected_pass": selected_pass_name,
-            "source_orientation_required": False,
+            "rotation_direction": selected_pass.get("rotation_direction"),
+            "capture_protocol": selected_pass.get("capture_protocol"),
+            "source_orientation_required": True,
             "pose_passes": [selected_pass_name],
             "pose_pass_count": int(selected_pass.get("detection_attempt_count", 1)),
             "pose_model_inference_count": int(selected_pass.get("pose_model_inference_count", 1)),

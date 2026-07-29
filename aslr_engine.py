@@ -17,7 +17,7 @@ from typing import Any, Dict, Mapping, Sequence, Tuple
 
 import numpy as np
 
-ASLR_ENGINE_VERSION = "aslr-dedicated-yolo11m-coherent-hip-knee-ankle-one-call-v27"
+ASLR_ENGINE_VERSION = "aslr-dedicated-yolo11m-coherent-chain-side-specific-rotation-v28"
 ASLR_THRESHOLD_EVIDENCE_STATUS = (
     "provisional_flexilab_reference_bands_not_diagnostic_cutoffs"
 )
@@ -1428,9 +1428,17 @@ def analyze_aslr_rotated_fullbody(
             "side_identity_method": "workflow_label_for_reporting_geometry_for_raised_chain_selection",
             "measurement_engine_version": ASLR_ENGINE_VERSION,
             "angle_method": "angle_between_original_image_horizontal_at_selected_raised_hip_and_same_side_true_yolo_ankle",
-            "source_orientation_requirement": "full_image_rotated_90_clockwise_for_inference_then_landmarks_mapped_back",
+            "source_orientation_requirement": (
+                "head_right_capture_rotated_90_counterclockwise_for_inference_then_mapped_back"
+                if requested_side == "LEFT"
+                else "head_left_capture_rotated_90_clockwise_for_inference_then_mapped_back"
+            ),
             "display_orientation": "original_normal_horizontal_image",
-            "display_rotation_applied": "90_degrees_anticlockwise_equivalent_via_coordinate_inverse_mapping",
+            "display_rotation_applied": (
+                "inverse_map_from_90_counterclockwise_inference"
+                if requested_side == "LEFT"
+                else "inverse_map_from_90_clockwise_inference"
+            ),
             "reference_axis": "original_image_horizontal_through_selected_raised_hip",
             "reference_source": "image_horizontal_primary",
             "resting_reference_fallback_used": False,
