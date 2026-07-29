@@ -15,7 +15,7 @@ import cv2
 import numpy as np
 
 
-VISION_QA_VERSION = "vision-qa-overlay-v2.7-aslr-enabled-validation"
+VISION_QA_VERSION = "vision-qa-overlay-v2.8-all-tests-validation"
 
 COCO_NAMES = [
     "nose",
@@ -210,7 +210,12 @@ def _draw_squat_measurement(image: np.ndarray, metrics: Mapping[str, Any]) -> No
     )
 
 
-def _draw_aslr_measurement(image: np.ndarray, metrics: Mapping[str, Any]) -> None:
+def _draw_aslr_measurement(
+    image: np.ndarray,
+    metrics: Mapping[str, Any],
+    xy: Sequence[Sequence[float]] | None = None,
+    conf: Sequence[float] | None = None,
+) -> None:
     """Draw the deterministic image-horizontal reference and raised leg.
 
     Pink: original-image horizontal through the shared pelvic anchor.
@@ -245,6 +250,25 @@ def _draw_aslr_measurement(image: np.ndarray, metrics: Mapping[str, Any]) -> Non
     reference_end = _point(reference_end_value) if reference_end_value else None
     reference_source = str(metrics.get("reference_source") or baseline.get("reference_source") or "unknown")
 
+    # Explicitly show both anatomical COCO hip landmarks so validation can
+    # distinguish the model's left/right labels from the shared pelvic anchor.
+    if xy is not None and conf is not None:
+        for hip_index, hip_name, color in (
+            (11, "COCO left hip", (255, 170, 70)),
+            (12, "COCO right hip", (80, 170, 255)),
+        ):
+            if hip_index < len(xy) and hip_index < len(conf):
+                hip_conf = float(conf[hip_index])
+                if hip_conf >= 0.08:
+                    hip_point = _point(xy[hip_index])
+                    cv2.circle(image, hip_point, 10, color, -1, cv2.LINE_AA)
+                    _put_label(
+                        image,
+                        f"{hip_name} #{hip_index} conf {hip_conf:.2f}",
+                        (hip_point[0] + 10, hip_point[1] - 12),
+                        0.38,
+                    )
+
     reference_labels = {
         "image_horizontal_primary": "Image-horizontal reference",
         "body_axis_primary": "Body-axis reference (legacy)",
@@ -255,14 +279,14 @@ def _draw_aslr_measurement(image: np.ndarray, metrics: Mapping[str, Any]) -> Non
         cv2.line(image, reference_start, reference_end, (230, 100, 240), 6, cv2.LINE_AA)
         cv2.circle(image, reference_start, 9, (230, 100, 240), -1, cv2.LINE_AA)
         cv2.circle(image, reference_end, 7, (230, 100, 240), -1, cv2.LINE_AA)
-        _put_label(image, "Pelvic anchor", (reference_start[0] + 10, reference_start[1] - 10), 0.42)
+        _put_label(image, "SELECTED shared pelvic anchor", (reference_start[0] + 10, reference_start[1] - 10), 0.42)
         _put_label(image, reference_label, (reference_end[0] + 10, reference_end[1] - 10), 0.40)
 
     if raised_hip is not None and raised_ankle is not None:
         cv2.line(image, raised_hip, raised_ankle, (40, 235, 250), 7, cv2.LINE_AA)
         cv2.circle(image, raised_hip, 10, (40, 235, 250), -1, cv2.LINE_AA)
         cv2.circle(image, raised_ankle, 10, (40, 235, 250), -1, cv2.LINE_AA)
-        _put_label(image, "Pelvic anchor", (raised_hip[0] + 10, raised_hip[1] - 10), 0.45)
+        _put_label(image, "Measurement vertex: shared pelvis", (raised_hip[0] + 10, raised_hip[1] - 10), 0.45)
         _put_label(image, "Raised ankle (YOLO)", (raised_ankle[0] + 10, raised_ankle[1] - 10), 0.45)
 
     if resting_knee is not None:
@@ -285,7 +309,7 @@ def _draw_aslr_measurement(image: np.ndarray, metrics: Mapping[str, Any]) -> Non
     reference_text = reference_source.replace("_", " ")
     _put_label(
         image,
-        f"ASLR {metrics.get('requested_side', '')}: {float(metrics.get('aslr_angle', 0)):.1f} deg | ref image horizontal | knee {knee_text} deg | pass {selected_pass} | model {model_name}",
+        f"ASLR requested {metrics.get('requested_side', '')} | detected chain {metrics.get('detected_coco_side', 'unknown')} | {float(metrics.get('aslr_angle', 0)):.1f} deg | knee {knee_text} deg | anchor {metrics.get('measurement_vertex_policy', 'unknown')} | model {model_name}",
         (18, 34),
         0.52,
     )
@@ -294,6 +318,8 @@ def _draw_measurement(
     image: np.ndarray,
     test_type: str,
     result: Mapping[str, Any],
+    xy: Sequence[Sequence[float]] | None = None,
+    conf: Sequence[float] | None = None,
 ) -> np.ndarray:
     output = image.copy()
     metrics = result.get("metrics") or {}
@@ -304,7 +330,7 @@ def _draw_measurement(
     elif test_type == "squat":
         _draw_squat_measurement(output, metrics)
     elif str(test_type).startswith("aslr"):
-        _draw_aslr_measurement(output, metrics)
+        _draw_aslr_measurement(output, metrics, xy=xy, conf=conf)
     return output
 
 
@@ -332,7 +358,7 @@ def build_vision_qa_payload(
         "YOLO SKELETON + CONFIDENCE",
     )
     measurement_panel = _draw_header(
-        _fit_panel(_draw_measurement(image, test_type, result)),
+        _fit_panel(_draw_measurement(image, test_type, result, xy=xy, conf=conf)),
         "FLEXILAB ANGLE SELECTION",
     )
 
@@ -362,6 +388,9 @@ def build_vision_qa_payload(
         "normalized_width": int(image.shape[1]),
         "normalized_height": int(image.shape[0]),
         "analysis_pass": dict(analysis_pass or {}),
+        "test_type": str(test_type),
+        "measurement_engine_version": str((result.get("metrics") or {}).get("measurement_engine_version") or "unknown"),
+        "model_runtime": dict((result.get("metrics") or {}).get("model_runtime") or {}),
         "keypoints": keypoints,
-        "notice": "Validation-only visualization. Landmark placement must be reviewed before clinical interpretation.",
+        "notice": "Validation-only visualization. Landmark placement must be reviewed before interpretation.",
     }

@@ -98,6 +98,8 @@ ANALYSIS_INLINE_ENABLED = os.environ.get("FLEXILAB_INLINE_ANALYSIS", "true").str
 ANALYSIS_MAX_EDGE = max(640, min(1920, int(os.environ.get("FLEXILAB_ANALYSIS_MAX_EDGE", "960"))))
 POSE_INFERENCE_IMGSZ = max(320, min(1280, int(os.environ.get("FLEXILAB_POSE_IMGSZ", "640"))))
 DIAGNOSTIC_RETENTION_HOURS = max(0, min(168, int(os.environ.get("FLEXILAB_DIAGNOSTIC_RETENTION_HOURS", "0"))))
+VISION_QA_MODE = os.environ.get("FLEXILAB_VISION_QA_MODE", "off").strip().lower()
+VISION_QA_VALIDATION_ENABLED = VISION_QA_MODE in {"1", "true", "yes", "on", "enabled", "validation"}
 ASLR_KEYPOINT_MIN_CONF = max(0.05, min(0.80, float(os.environ.get("FLEXILAB_ASLR_KEYPOINT_MIN_CONF", "0.20"))))
 ASLR_REQUIRED_MEAN_CONF = max(ASLR_KEYPOINT_MIN_CONF, min(0.90, float(os.environ.get("FLEXILAB_ASLR_REQUIRED_MEAN_CONF", "0.35"))))
 ASLR_RAISED_KNEE_EXTENSION_MIN = max(135.0, min(175.0, float(os.environ.get("FLEXILAB_ASLR_RAISED_KNEE_EXTENSION_MIN", "155"))))
@@ -373,7 +375,7 @@ async def request_timing_middleware(request, call_next):
 def health():
     return {
         "ok": True,
-        "patch_version": "V101.35.17-image-fingerprint-integrity",
+        "patch_version": "V101.35.18-validation-overlay",
         "base_patch": "V101.28.4-aslr-thresholds-60-75",
         "exercise_library_mode": EXERCISE_LIBRARY_MODE,
         "exercise_library_path": EXERCISE_LIBRARY_PATH,
@@ -417,9 +419,12 @@ def health():
         "vision_qa": {
             "version": VISION_QA_VERSION,
             "delivery": "ephemeral_job_result_only",
+            "mode": VISION_QA_MODE,
+            "validation_enabled": VISION_QA_VALIDATION_ENABLED,
             "enabled_by_capture_metadata": True,
-            "aslr_enabled": False,
-            "aslr_tracking_images_removed_for_performance": True,
+            "all_tests_enabled_in_validation_mode": True,
+            "aslr_enabled": VISION_QA_VALIDATION_ENABLED,
+            "persisted_to_screenings": False,
         },
         "runtime_versions": RUNTIME_PACKAGE_VERSIONS,
     }
@@ -2812,9 +2817,8 @@ def run_yolo_analysis_from_bytes(img_bytes, test_type, capture_metadata=None):
                 "metrics": rejection_metrics,
                 "thresholds": {},
             }
-            # ASLR tracked-image composites are disabled for performance.
-            # Other tests may still request Vision QA.
-            if (not is_aslr) and bool((capture_metadata or {}).get("vision_qa_requested")):
+            vision_qa_requested = bool((capture_metadata or {}).get("vision_qa_requested"))
+            if VISION_QA_VALIDATION_ENABLED or vision_qa_requested:
                 rejected_result["metrics"]["vision_qa"] = build_vision_qa_payload(
                     img,
                     xy,
@@ -2850,11 +2854,7 @@ def run_yolo_analysis_from_bytes(img_bytes, test_type, capture_metadata=None):
     }
 
     vision_qa_requested = bool((capture_metadata or {}).get("vision_qa_requested"))
-    if vision_qa_requested and not is_aslr:
-        # Production stabilization: ASLR diagnostic composites are deliberately
-        # disabled. They are expensive, non-authoritative, and must not delay or
-        # destabilize the user-facing assessment. Other tests retain the existing
-        # opt-in QA behavior.
+    if VISION_QA_VALIDATION_ENABLED or vision_qa_requested:
         result["metrics"]["vision_qa"] = build_vision_qa_payload(
             img,
             final_xy,
@@ -2864,8 +2864,9 @@ def run_yolo_analysis_from_bytes(img_bytes, test_type, capture_metadata=None):
             test_type,
             analysis_pass=analysis_pass,
         )
-    elif vision_qa_requested and is_aslr:
-        result["metrics"]["vision_qa_disabled_for_performance"] = True
+        result["metrics"]["vision_qa_mode"] = "validation" if VISION_QA_VALIDATION_ENABLED else "requested"
+    else:
+        result["metrics"]["vision_qa_mode"] = "off"
 
     return result, session_update
 
