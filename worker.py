@@ -13,7 +13,11 @@ import os
 import time
 from datetime import datetime, timezone
 
-from app import ANALYSIS_STORAGE_BUCKET, process_analysis_job, supabase
+# Must be set before importing app so analysis execution is cryptographically
+# separated by process role rather than relying on a boolean Render variable.
+os.environ["FLEXILAB_PROCESS_ROLE"] = "worker"
+
+from app import ANALYSIS_STORAGE_BUCKET, PROCESS_ROLE, process_analysis_job, supabase
 
 POLL_SECONDS = max(1, int(os.environ.get("ANALYSIS_WORKER_POLL_SECONDS", "2")))
 CLEANUP_INTERVAL_SECONDS = max(
@@ -59,7 +63,7 @@ def cleanup_expired_images() -> None:
         supabase.table("analysis_jobs").update(changes).eq("id", row["id"]).execute()
 
 
-print("FlexiLab analysis worker started", flush=True)
+print(f"FlexiLab analysis worker started role={PROCESS_ROLE} bucket={ANALYSIS_STORAGE_BUCKET}", flush=True)
 last_cleanup = 0.0
 while True:
     try:

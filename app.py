@@ -94,7 +94,10 @@ if SUPABASE_URL and SUPABASE_SERVICE_KEY:
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(BASE_DIR, "data")
 ANALYSIS_STORAGE_BUCKET = os.environ.get("FLEXILAB_ANALYSIS_BUCKET", "screening-private").strip() or "screening-private"
-ANALYSIS_INLINE_ENABLED = os.environ.get("FLEXILAB_INLINE_ANALYSIS", "true").strip().lower() in {"1", "true", "yes", "on"}
+PROCESS_ROLE = os.environ.get("FLEXILAB_PROCESS_ROLE", "api").strip().lower() or "api"
+# Kept for health/backward compatibility only. The web API is queue-only and can
+# never execute analysis jobs, even if an old Render variable is misconfigured.
+ANALYSIS_INLINE_ENABLED = False
 ANALYSIS_MAX_EDGE = max(640, min(1920, int(os.environ.get("FLEXILAB_ANALYSIS_MAX_EDGE", "960"))))
 POSE_INFERENCE_IMGSZ = max(320, min(1280, int(os.environ.get("FLEXILAB_POSE_IMGSZ", "640"))))
 DIAGNOSTIC_RETENTION_HOURS = max(0, min(168, int(os.environ.get("FLEXILAB_DIAGNOSTIC_RETENTION_HOURS", "0"))))
@@ -398,10 +401,13 @@ async def request_timing_middleware(request, call_next):
 def health():
     return {
         "ok": True,
-        "patch_version": "V101.35.29-analysis-job-terminal-failsafe",
+        "patch_version": "V101.35.32-worker-only-analysis-enforcement",
         "base_patch": "V101.35.31-aslr-left-image-mirror-before-yolo",
         "release_policy": "launch_stable_formulas_frozen_validation_overlays_disabled",
         "production_formula_changes_allowed": False,
+        "process_role": PROCESS_ROLE,
+        "analysis_execution_policy": "worker_only",
+        "inline_analysis_enabled": False,
         "exercise_library_mode": EXERCISE_LIBRARY_MODE,
         "exercise_library_path": EXERCISE_LIBRARY_PATH,
         "exercise_library_count": len(EXERCISE_LIBRARY or []),
@@ -2570,6 +2576,11 @@ async def analyze(
     capture_metadata_json: str = Form(None),
     authorization: str = Header(None),
 ):
+    raise HTTPException(
+        status_code=410,
+        detail="Synchronous analysis is disabled. Use /submit_analysis and the dedicated worker.",
+    )
+
     if supabase is None:
         raise HTTPException(status_code=503, detail="Supabase is not configured on server.")
 
@@ -3304,6 +3315,13 @@ def run_yolo_analysis_from_bytes(img_bytes, test_type, capture_metadata=None):
 
 
 def process_analysis_job(job_id: str):
+    if PROCESS_ROLE != "worker":
+        logger.error(
+            "analysis_execution_blocked process_role=%s job_id=%s",
+            PROCESS_ROLE,
+            job_id,
+        )
+        return
     if supabase is None:
         return
 
@@ -3518,7 +3536,6 @@ def process_analysis_job(job_id: str):
 
 @app.post("/submit_analysis")
 async def submit_analysis(
-    background_tasks: BackgroundTasks,
     image: UploadFile = File(...),
     user_email: str = Form(...),
     test_type: str = Form(...),
@@ -3725,8 +3742,6 @@ async def submit_analysis(
         raise HTTPException(status_code=500, detail="Unable to queue the photo analysis.")
 
     job_id = resp.data[0]["id"]
-    if ANALYSIS_INLINE_ENABLED:
-        background_tasks.add_task(process_analysis_job, job_id)
     phases["total_ms"] = round((time.perf_counter() - total_started) * 1000, 1)
     logger.info(
         "analysis_submit_perf session_id=%s test_type=%s reused=false fingerprint=%s phases=%s",
@@ -3747,7 +3762,6 @@ async def submit_analysis(
 @app.get("/job_status/{job_id}")
 def job_status(
     job_id: str,
-    background_tasks: BackgroundTasks,
     authorization: str = Header(None),
 ):
     if supabase is None:
@@ -3824,13 +3838,8 @@ def job_status(
             except Exception:
                 logger.exception("analysis_job_stale_fail_update_failed job_id=%s", job_id)
 
-    # Polling must never reset a running analysis. The previous 120-second
-    # watchdog could requeue a valid slow ASLR request while its first inference
-    # was still active, producing competing attempts and misleading failures.
-    # Queued jobs may still be started safely; the atomic queued -> processing
-    # claim inside process_analysis_job prevents duplicate execution.
-    if current_status == "queued" and ANALYSIS_INLINE_ENABLED:
-        background_tasks.add_task(process_analysis_job, job_id)
+    # Queue consumption is exclusively owned by the dedicated worker.
+    # Polling is read-only and must never execute or schedule YOLO.
 
     return {
         "job_id": job.get("id"),
