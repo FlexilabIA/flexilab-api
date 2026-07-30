@@ -401,7 +401,7 @@ async def request_timing_middleware(request, call_next):
 def health():
     return {
         "ok": True,
-        "patch_version": "V101.35.34-adaptive-worker-queue",
+        "patch_version": "V101.35.36-completed-session-history-only",
         "base_patch": "V101.35.31-aslr-left-image-mirror-before-yolo",
         "release_policy": "launch_stable_formulas_frozen_validation_overlays_disabled",
         "production_formula_changes_allowed": False,
@@ -1650,6 +1650,12 @@ def screening_history(
     for session in sessions_resp.data or []:
         session_id = session.get("id")
         if not session_id:
+            continue
+
+        # Progress/history must represent finalized assessments only. A session
+        # can contain six screening rows while still being abandoned, resumed,
+        # or otherwise unfinished; completeness of rows alone is not enough.
+        if str(session.get("status") or "").strip().lower() != "completed":
             continue
 
         screenings_resp = (

@@ -492,7 +492,7 @@ def create_trainer_router(supabase_client) -> APIRouter:
                 .eq("user_id", user["id"])
                 .eq("performed_by_user_id", user["id"])
                 .is_("trainer_client_link_id", "null")
-                .in_("status", ["in_progress", "completed"])
+                .eq("status", "completed")
                 .order("created_at", desc=True)
                 .limit(6)
                 .execute()
