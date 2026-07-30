@@ -99,7 +99,7 @@ ANALYSIS_MAX_EDGE = max(640, min(1920, int(os.environ.get("FLEXILAB_ANALYSIS_MAX
 POSE_INFERENCE_IMGSZ = max(320, min(1280, int(os.environ.get("FLEXILAB_POSE_IMGSZ", "640"))))
 DIAGNOSTIC_RETENTION_HOURS = max(0, min(168, int(os.environ.get("FLEXILAB_DIAGNOSTIC_RETENTION_HOURS", "0"))))
 VISION_QA_MODE = os.environ.get("FLEXILAB_VISION_QA_MODE", "off").strip().lower()
-VISION_QA_VALIDATION_ENABLED = VISION_QA_MODE in {"1", "true", "yes", "on", "enabled", "validation"}
+VISION_QA_VALIDATION_ENABLED = False  # Hotfix: disable composite QA overlay generation to reduce non-essential image processing.
 ASLR_KEYPOINT_MIN_CONF = max(0.05, min(0.80, float(os.environ.get("FLEXILAB_ASLR_KEYPOINT_MIN_CONF", "0.20"))))
 ASLR_REQUIRED_MEAN_CONF = max(ASLR_KEYPOINT_MIN_CONF, min(0.90, float(os.environ.get("FLEXILAB_ASLR_REQUIRED_MEAN_CONF", "0.35"))))
 ASLR_RAISED_KNEE_EXTENSION_MIN = max(135.0, min(175.0, float(os.environ.get("FLEXILAB_ASLR_RAISED_KNEE_EXTENSION_MIN", "155"))))
@@ -375,9 +375,9 @@ async def request_timing_middleware(request, call_next):
 def health():
     return {
         "ok": True,
-        "patch_version": "V101.35.26-launch-stable-validation-freeze",
+        "patch_version": "V101.35.27-aslr-mirror-fix-no-qa-overlays",
         "base_patch": "V101.28.4-aslr-thresholds-60-75",
-        "release_policy": "launch_stable_formulas_frozen_validation_overlays_enabled",
+        "release_policy": "launch_stable_formulas_frozen_validation_overlays_disabled",
         "production_formula_changes_allowed": False,
         "exercise_library_mode": EXERCISE_LIBRARY_MODE,
         "exercise_library_path": EXERCISE_LIBRARY_PATH,
@@ -3150,8 +3150,7 @@ def run_yolo_analysis_from_bytes(img_bytes, test_type, capture_metadata=None):
                 "metrics": rejection_metrics,
                 "thresholds": {},
             }
-            vision_qa_requested = bool((capture_metadata or {}).get("vision_qa_requested"))
-            if VISION_QA_VALIDATION_ENABLED or vision_qa_requested:
+            if VISION_QA_VALIDATION_ENABLED:
                 rejected_result["metrics"]["vision_qa"] = build_vision_qa_payload(
                     img,
                     xy,
@@ -3187,8 +3186,7 @@ def run_yolo_analysis_from_bytes(img_bytes, test_type, capture_metadata=None):
         "reload_count": ASLR_POSE_MODEL_RELOAD_COUNT if is_aslr else POSE_MODEL_RELOAD_COUNT,
     }
 
-    vision_qa_requested = bool((capture_metadata or {}).get("vision_qa_requested"))
-    if VISION_QA_VALIDATION_ENABLED or vision_qa_requested:
+    if VISION_QA_VALIDATION_ENABLED:
         result["metrics"]["vision_qa"] = build_vision_qa_payload(
             img,
             final_xy,

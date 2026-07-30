@@ -17,7 +17,7 @@ from typing import Any, Dict, Mapping, Sequence, Tuple
 
 import numpy as np
 
-ASLR_ENGINE_VERSION = "aslr-dedicated-yolo11m-coherent-chain-side-specific-rotation-v28"
+ASLR_ENGINE_VERSION = "aslr-dedicated-yolo11m-horizontal-mirror-compatible-v29"
 ASLR_THRESHOLD_EVIDENCE_STATUS = (
     "provisional_flexilab_reference_bands_not_diagnostic_cutoffs"
 )
@@ -695,7 +695,11 @@ def analyze_aslr_v2(
         selected_endpoint = new_selected_endpoint
         selected = new_selected
 
-    final_angle = float(selected_endpoint["body_relative_angle"])
+    # Launch-stable hotfix: use the image-horizontal estimator through the selected
+    # raised hip as the public ASLR angle. This keeps right and left tests mirror-
+    # compatible when the same photo is horizontally flipped, which is the desired
+    # product behaviour for a side-agnostic supine capture.
+    final_angle = float(selected_endpoint["horizontal_angle"])
 
     if final_angle < 18.0:
         raise ASLRQualityError(
@@ -838,12 +842,12 @@ def analyze_aslr_v2(
             "requested_side": requested_side,
             "side": requested_side,
             "detected_coco_side": selected_endpoint["ankle_label"].replace("_ANKLE", ""),
-            "side_identity_method": "workflow_label_plus_ankle_first_geometry",
+            "side_identity_method": "workflow_label_plus_ankle_first_geometry_mirror_compatible",
             "measurement_engine_version": ASLR_ENGINE_VERSION,
-            "angle_method": "common_raised_hip_vertex_ear_or_shoulder_reference_to_true_yolo_ankle",
+            "angle_method": "image_horizontal_through_selected_hip_to_true_yolo_ankle",
             "source_orientation_requirement": "none_dual_orientation_pose_detection",
-            "reference_axis": "ear_to_selected_hip_or_shoulder_fallback_extended_toward_resting_foot",
-            "measurement_vertex_policy": "pink_reference_uses_same_selected_hip_vertex_as_yellow_leg_line",
+            "reference_axis": "image_horizontal_through_selected_hip",
+            "measurement_vertex_policy": "image_horizontal_reference_and_leg_line_share_the_selected_hip_vertex",
             "body_baseline": body_baseline_payload,
             "endpoint_source": "true_yolo_ankle_keypoint",
             "endpoint_policy": "ankle_indices_15_or_16_only_no_toe_no_skin_endpoint",
@@ -852,6 +856,7 @@ def analyze_aslr_v2(
             "chain_reconstruction_method": "raised_ankle_first_then_best_hip_knee_combination",
             "measurement_reliability": round(reliability, 3),
             "quality_label": "good" if reliability >= 0.72 and not flags else "moderate",
+            "mirror_compatibility_policy": "left_and_right_public_angles_use_the_same_image_horizontal_formula",
             "diagnostic_flags": flags,
             "selected_limb": selected_endpoint["ankle_label"],
             "selected_endpoint_type": "ankle",
@@ -886,13 +891,15 @@ def analyze_aslr_v2(
             "ankle_endpoint_separation_px": round(ankle_separation, 2) if ankle_separation is not None else None,
             "skin_shape_endpoint": None,
             "angle_estimators": {
-                "body_axis_to_true_ankle": round(final_angle, 2),
+                "body_axis_to_true_ankle": round(selected_endpoint["body_relative_angle"], 2),
                 "image_horizontal_to_true_ankle": round(selected_endpoint["horizontal_angle"], 2),
-                "spread": round(abs(final_angle - selected_endpoint["horizontal_angle"]), 2),
+                "selected_public_angle": round(final_angle, 2),
+                "spread": round(abs(selected_endpoint["body_relative_angle"] - selected_endpoint["horizontal_angle"]), 2),
             },
             "angle_estimators_deg": {
-                "body_axis_to_true_ankle": round(final_angle, 2),
+                "body_axis_to_true_ankle": round(selected_endpoint["body_relative_angle"], 2),
                 "image_horizontal_to_true_ankle": round(selected_endpoint["horizontal_angle"], 2),
+                "selected_public_angle": round(final_angle, 2),
             },
             "quality_gate_config": {
                 "keypoint_min_conf": keypoint_min_conf,
