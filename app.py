@@ -375,7 +375,7 @@ async def request_timing_middleware(request, call_next):
 def health():
     return {
         "ok": True,
-        "patch_version": "V101.35.23-screening-soft-warnings-all-landmarks",
+        "patch_version": "V101.35.24-conditional-focused-pose-recovery",
         "base_patch": "V101.28.4-aslr-thresholds-60-75",
         "exercise_library_mode": EXERCISE_LIBRARY_MODE,
         "exercise_library_path": EXERCISE_LIBRARY_PATH,
@@ -716,119 +716,130 @@ def analyze_posture(xy, conf):
     }
 
 
+def _shoulder_chain_candidates(xy, conf):
+    """Rank both COCO arm chains by confidence and anatomical coherence.
+
+    Side-view photographs frequently swap the visible anatomical side. The
+    requested test side remains the reporting label, while the actual landmarks
+    are selected from the arm chain that best follows the raised arm.
+    """
+    candidates = []
+    for label, sh_i, el_i, wr_i, hip_i in (
+        ("COCO_LEFT_H5_E7_W9", 5, 7, 9, 11),
+        ("COCO_RIGHT_H6_E8_W10", 6, 8, 10, 12),
+    ):
+        sh = np.asarray(xy[sh_i], dtype=float)
+        el = np.asarray(xy[el_i], dtype=float)
+        wr = np.asarray(xy[wr_i], dtype=float)
+        hip = np.asarray(xy[hip_i], dtype=float)
+        values = [float(conf[i]) for i in (sh_i, el_i, wr_i, hip_i)]
+        mean_conf = float(np.mean(values))
+        min_conf = float(min(values))
+
+        upper = sh - el
+        lower = wr - el
+        elbow_denom = float(np.linalg.norm(upper) * np.linalg.norm(lower))
+        elbow_extension = 0.0
+        if elbow_denom > 1e-6:
+            cosine = max(-1.0, min(1.0, float(np.dot(upper, lower) / elbow_denom)))
+            elbow_extension = float(math.degrees(math.acos(cosine)))
+
+        upper_len = float(np.linalg.norm(el - sh))
+        fore_len = float(np.linalg.norm(wr - el))
+        ratio = upper_len / max(fore_len, 1e-6)
+        ratio_quality = max(0.0, 1.0 - abs(math.log(max(ratio, 1e-6))) / math.log(3.5))
+        raised_height = max(0.0, float(sh[1] - wr[1]))
+        trunk_length = max(30.0, float(np.linalg.norm(sh - hip)))
+        overhead_quality = max(0.0, min(1.0, raised_height / trunk_length))
+        straightness = max(0.0, min(1.0, (elbow_extension - 115.0) / 65.0))
+        score = mean_conf * 0.42 + min_conf * 0.18 + overhead_quality * 0.20 + straightness * 0.12 + ratio_quality * 0.08
+        candidates.append({
+            "label": label,
+            "indices": {"shoulder": sh_i, "elbow": el_i, "wrist": wr_i, "hip": hip_i},
+            "score": round(score, 6),
+            "mean_confidence": round(mean_conf, 6),
+            "minimum_confidence": round(min_conf, 6),
+            "elbow_extension_angle": round(elbow_extension, 3),
+            "overhead_quality": round(overhead_quality, 6),
+            "segment_ratio": round(ratio, 4),
+            "valid_detection": min_conf >= 0.20 and mean_conf >= 0.35 and overhead_quality >= 0.20,
+        })
+    candidates.sort(key=lambda item: item["score"], reverse=True)
+    return candidates
+
+
+def _shoulder_chain_quality(xy, conf):
+    candidates = _shoulder_chain_candidates(xy, conf)
+    best = candidates[0]
+    margin = best["score"] - candidates[1]["score"] if len(candidates) > 1 else best["score"]
+    return {
+        **best,
+        "selection_margin": round(float(margin), 6),
+        "uncertain": (not bool(best["valid_detection"])) or float(margin) < 0.035 or float(best["minimum_confidence"]) < 0.32,
+    }, candidates
+
+
 def analyze_shoulder(xy, conf, side="RIGHT"):
-    """
-    Robust overhead shoulder mobility analysis — V16 complementary angle fix.
+    """Estimate overhead shoulder mobility using the most coherent visible arm chain."""
+    candidates = _shoulder_chain_candidates(xy, conf)
+    selected = candidates[0]
+    indices = selected["indices"]
+    sh_i, el_i, wr_i, hip_i = indices["shoulder"], indices["elbow"], indices["wrist"], indices["hip"]
 
-    Main change vs previous version:
-    - Uses shoulder -> wrist as the primary arm vector instead of shoulder -> elbow.
-      This is more stable for overhead mobility, because a slightly bent elbow can
-      artificially reduce the angle if we only use the elbow.
-    - Falls back to shoulder -> elbow only if wrist confidence is poor.
-    - Uses hip -> shoulder as trunk reference and arm direction shoulder -> wrist/elbow.
-    - Keeps the same FlexiLab thresholds:
-        <160° = red
-        160–170° = yellow
-        >=170° = green
-    """
+    sh = np.asarray(xy[sh_i], dtype=float)
+    el = np.asarray(xy[el_i], dtype=float)
+    wr = np.asarray(xy[wr_i], dtype=float)
+    hip = np.asarray(xy[hip_i], dtype=float)
+    sh_c, el_c, wr_c, hip_c = [float(conf[i]) for i in (sh_i, el_i, wr_i, hip_i)]
 
-    L_SH, R_SH = 5, 6
-    L_EL, R_EL = 7, 8
-    L_WR, R_WR = 9, 10
-    L_HIP, R_HIP = 11, 12
-
-    MIN_KP_CONF = 0.25
-
-    if side == "RIGHT":
-        sh_i, el_i, wr_i, hip_i = R_SH, R_EL, R_WR, R_HIP
-    else:
-        sh_i, el_i, wr_i, hip_i = L_SH, L_EL, L_WR, L_HIP
-
-    sh = xy[sh_i]
-    el = xy[el_i]
-    wr = xy[wr_i]
-    hip = xy[hip_i]
-
-    sh_c = float(conf[sh_i])
-    el_c = float(conf[el_i])
-    wr_c = float(conf[wr_i])
-    hip_c = float(conf[hip_i])
-
-    # Use wrist when possible. If wrist is unreliable, fallback to elbow.
-    if wr_c >= MIN_KP_CONF:
-        arm_point = wr
-        arm_point_used = "WRIST"
-        arm_c = wr_c
-    else:
-        arm_point = el
-        arm_point_used = "ELBOW_FALLBACK"
-        arm_c = el_c
-
-    c = float(sh_c + arm_c + hip_c) / 3.0
-
-    # If shoulder or hip are not detected well, keep output but mark lower confidence.
-    # The frontend can later display "photo quality low" if confidence is low.
-    v_trunk = sh - hip          # hip -> shoulder
-    v_arm = arm_point - sh      # shoulder -> wrist/elbow
-
-    denom = np.linalg.norm(v_trunk) * np.linalg.norm(v_arm)
-
-    if denom < 1e-6:
-        shoulder_flexion = 0.0
-    else:
-        cosang = float(np.dot(v_trunk, v_arm) / denom)
-        cosang = max(-1.0, min(1.0, cosang))
-        raw_angle = float(math.degrees(math.acos(cosang)))
-
-        # raw_angle is the small geometric angle between trunk direction and arm direction.
-        # For overhead mobility we need the complementary value:
-        # example raw_angle 10° => shoulder flexion 170°.
-        shoulder_flexion = 180.0 - raw_angle
-
+    arm_point = wr if wr_c >= 0.25 else el
+    arm_point_used = "WRIST" if wr_c >= 0.25 else "ELBOW_FALLBACK"
+    arm_c = wr_c if wr_c >= 0.25 else el_c
+    v_trunk = sh - hip
+    v_arm = arm_point - sh
+    denom = float(np.linalg.norm(v_trunk) * np.linalg.norm(v_arm))
+    shoulder_flexion = 0.0
+    if denom > 1e-6:
+        cosang = max(-1.0, min(1.0, float(np.dot(v_trunk, v_arm) / denom)))
+        shoulder_flexion = 180.0 - float(math.degrees(math.acos(cosang)))
     shoulder_flexion = max(0.0, min(180.0, shoulder_flexion))
 
-    deficit = max(0.0, 170.0 - shoulder_flexion)
+    elbow_extension = float(selected["elbow_extension_angle"])
+    confidence = max(0.0, min(1.0, float((sh_c + arm_c + hip_c) / 3.0)))
+    deficit = max(0.0, 175.0 - shoulder_flexion)
     score = max(0.0, 100.0 - deficit * 2.0)
-    conf_out = max(0.0, min(1.0, float(c)))
-
-    upper_arm = sh - el
-    forearm = wr - el
-    elbow_denom = np.linalg.norm(upper_arm) * np.linalg.norm(forearm)
-    if elbow_denom < 1e-6:
-        elbow_extension = None
-    else:
-        elbow_cos = float(np.dot(upper_arm, forearm) / elbow_denom)
-        elbow_cos = max(-1.0, min(1.0, elbow_cos))
-        elbow_extension = float(math.degrees(math.acos(elbow_cos)))
+    margin = float(selected["score"] - candidates[1]["score"]) if len(candidates) > 1 else float(selected["score"])
 
     shoulder_thr = make_thresholds(
         "deg", 0, 180,
         [
             {"label": "Red", "min": 0, "max": 160, "color": "red"},
-            {"label": "Yellow", "min": 160, "max": 170, "color": "yellow"},
-            {"label": "Green", "min": 170, "max": 180, "color": "green"},
+            {"label": "Yellow", "min": 160, "max": 175, "color": "yellow"},
+            {"label": "Green", "min": 175, "max": 180, "color": "green"},
         ],
-        shoulder_flexion
+        shoulder_flexion,
     )
 
     return {
         "score": round(score, 1),
-        "confidence": round(conf_out, 3),
+        "confidence": round(confidence, 3),
         "metrics": {
             "shoulder_flexion_angle": round(shoulder_flexion, 2),
             "side": side,
+            "requested_side": side,
+            "detected_coco_chain": selected["label"],
+            "chain_selection_method": "highest_confidence_anatomically_coherent_overhead_arm_chain",
+            "chain_selection_margin": round(margin, 4),
+            "selected_source_indices": indices,
             "arm_point_used": arm_point_used,
-            "elbow_extension_angle": round(elbow_extension, 2) if elbow_extension is not None else None,
+            "elbow_extension_angle": round(elbow_extension, 2),
             "keypoint_confidence": {
-                "shoulder": round(sh_c, 3),
-                "elbow": round(el_c, 3),
-                "wrist": round(wr_c, 3),
-                "hip": round(hip_c, 3)
-            }
+                "shoulder": round(sh_c, 3), "elbow": round(el_c, 3),
+                "wrist": round(wr_c, 3), "hip": round(hip_c, 3),
+            },
+            "shoulder_chain_candidates": candidates,
         },
-        "thresholds": {
-            "shoulder_flexion": shoulder_thr
-        }
+        "thresholds": {"shoulder_flexion": shoulder_thr},
     }
 
 
@@ -967,6 +978,15 @@ def _attach_screening_soft_warnings(result, test_type):
                 "Precision may be slightly reduced.",
             )
     elif test_type in {"shoulder_right", "shoulder_left"}:
+        margin = float(metrics.get("chain_selection_margin", 1.0) or 0.0)
+        if margin < 0.05:
+            add(
+                "shoulder_chain_selection_uncertain",
+                "Le repère d’épaule est estimé avec une incertitude modérée.",
+                "The shoulder landmark has moderate estimation uncertainty.",
+                "L’amplitude peut varier légèrement selon le repère sélectionné.",
+                "The range may vary slightly depending on the selected landmark.",
+            )
         elbow = metrics.get("elbow_extension_angle")
         if elbow is not None and float(elbow) < 160.0:
             add(
@@ -1000,10 +1020,10 @@ def _attach_screening_soft_warnings(result, test_type):
         if knee is not None and float(knee) < preferred:
             add(
                 "aslr_raised_knee_flexion",
-                "Le genou levé est légèrement fléchi.",
-                "The raised knee is slightly bent.",
-                "L’amplitude ASLR peut être légèrement surestimée.",
-                "The ASLR range may be slightly overestimated.",
+                "Le repère détecté du genou suggère une possible légère flexion.",
+                "The detected knee landmark suggests possible slight flexion.",
+                "Cela peut provenir du placement estimé du repère et légèrement influencer l’amplitude.",
+                "This may reflect landmark estimation and slightly influence the measured range.",
             )
 
     metrics["screening_validation"] = {
@@ -2233,9 +2253,15 @@ def _attach_measurement_points(result, test_type, xy):
             },
         }
     elif test_type in {"shoulder_right", "shoulder_left"}:
-        side = str(metrics.get("side") or "RIGHT").upper()
-        indices = (6, 8, 10, 12) if side == "RIGHT" else (5, 7, 9, 11)
-        shoulder_i, elbow_i, wrist_i, hip_i = indices
+        selected = metrics.get("selected_source_indices") or {}
+        if selected:
+            shoulder_i = int(selected.get("shoulder"))
+            elbow_i = int(selected.get("elbow"))
+            wrist_i = int(selected.get("wrist"))
+            hip_i = int(selected.get("hip"))
+        else:
+            side = str(metrics.get("side") or "RIGHT").upper()
+            shoulder_i, elbow_i, wrist_i, hip_i = (6, 8, 10, 12) if side == "RIGHT" else (5, 7, 9, 11)
         metrics["measurement_points"] = {
             "indices": {
                 "shoulder": shoulder_i,
@@ -2794,7 +2820,12 @@ def run_yolo_analysis_from_bytes(img_bytes, test_type, capture_metadata=None):
         # V101.35.20: keep the fast one-call path when a coherent same-side
         # hip-knee-ankle chain is reliable. Only weak/incomplete detections get
         # one focused, higher-detail recovery pass.
-        if not bool(first_chain_quality.get("valid_detection")):
+        first_knee_uncertain = (
+            float(first_chain_quality.get("knee_extension_deg", 0.0)) < 155.0
+            or float(first_chain_quality.get("minimum_confidence", 0.0)) < 0.45
+            or float(first_chain_quality.get("score", 0.0)) < 0.72
+        )
+        if (not bool(first_chain_quality.get("valid_detection"))) or first_knee_uncertain:
             crop_img, crop_bounds = _expanded_person_crop(
                 rotated_pose_image,
                 first_boxes_rotated[first_main_idx],
@@ -2845,11 +2876,19 @@ def run_yolo_analysis_from_bytes(img_bytes, test_type, capture_metadata=None):
                     "rotation_direction": "counterclockwise" if rotate_counterclockwise else "clockwise",
                     "capture_protocol": "head_right" if rotate_counterclockwise else "head_left",
                 }
-                if (
+                crop_score = float(crop_chain_quality.get("score", 0.0))
+                first_score = float(first_chain_quality.get("score", 0.0))
+                crop_knee = float(crop_chain_quality.get("knee_extension_deg", 0.0))
+                first_knee = float(first_chain_quality.get("knee_extension_deg", 0.0))
+                crop_min_conf = float(crop_chain_quality.get("minimum_confidence", 0.0))
+                first_min_conf = float(first_chain_quality.get("minimum_confidence", 0.0))
+                crop_improves_uncertain_knee = (
                     bool(crop_chain_quality.get("valid_detection"))
-                    or float(crop_chain_quality.get("score", 0.0))
-                    > float(first_chain_quality.get("score", 0.0)) + 0.02
-                ):
+                    and crop_knee >= first_knee + 3.0
+                    and crop_min_conf >= first_min_conf - 0.05
+                    and crop_score >= first_score - 0.015
+                )
+                if crop_score > first_score + 0.02 or crop_improves_uncertain_knee:
                     aslr_single_rotated_pass = crop_pass
     else:
         first_prediction, first_threshold, first_imgsz = detect_pose_with_fallback(
@@ -2897,12 +2936,19 @@ def run_yolo_analysis_from_bytes(img_bytes, test_type, capture_metadata=None):
     # A body-focused pass is used only when the subject is small or lower-body
     # landmarks are weak. Portrait ASLR and desktop webcam frames are therefore
     # supported without imposing any source orientation.
+    shoulder_first_quality = None
+    if str(test_type).startswith("shoulder"):
+        shoulder_first_quality, _ = _shoulder_chain_quality(first_xy, first_conf)
+
     should_use_crop_pass = bool(
         not is_aslr
         and crop_img is not None
         and crop_bounds is not None
-        and person_coverage < 0.24
-        and (crop_bounds["width"] * crop_bounds["height"]) < image_area * 0.94
+        and (crop_bounds["width"] * crop_bounds["height"]) < image_area * 0.97
+        and (
+            person_coverage < 0.24
+            or (shoulder_first_quality is not None and bool(shoulder_first_quality.get("uncertain")))
+        )
     )
 
     final_boxes = first_boxes
@@ -2921,7 +2967,7 @@ def run_yolo_analysis_from_bytes(img_bytes, test_type, capture_metadata=None):
     }
 
     if should_use_crop_pass:
-        crop_imgsz = max(POSE_INFERENCE_IMGSZ, 768 if is_aslr else POSE_INFERENCE_IMGSZ)
+        crop_imgsz = 1280 if str(test_type).startswith("shoulder") else max(POSE_INFERENCE_IMGSZ, 768 if is_aslr else POSE_INFERENCE_IMGSZ)
         crop_prediction, crop_threshold, crop_imgsz = detect_pose_with_fallback(
             crop_img,
             test_type,
@@ -2938,10 +2984,21 @@ def run_yolo_analysis_from_bytes(img_bytes, test_type, capture_metadata=None):
         mapped_xy, mapped_boxes = _map_crop_pose_to_full(crop_xy, crop_boxes, crop_bounds)
         crop_relevant_conf = _relevant_pose_confidence(crop_conf, test_type)
 
-        # Prefer the focused pass when it preserves or improves the relevant
-        # landmarks. A small tolerance avoids switching back because of harmless
-        # confidence noise.
-        if crop_relevant_conf >= first_relevant_conf - 0.03:
+        crop_shoulder_quality = None
+        if str(test_type).startswith("shoulder"):
+            crop_shoulder_quality, _ = _shoulder_chain_quality(mapped_xy, crop_conf)
+        prefer_crop = crop_relevant_conf >= first_relevant_conf - 0.03
+        if shoulder_first_quality is not None and crop_shoulder_quality is not None:
+            prefer_crop = (
+                bool(crop_shoulder_quality.get("valid_detection"))
+                and float(crop_shoulder_quality.get("score", 0.0))
+                >= float(shoulder_first_quality.get("score", 0.0)) + 0.015
+            ) or (
+                bool(shoulder_first_quality.get("uncertain"))
+                and float(crop_shoulder_quality.get("score", 0.0))
+                >= float(shoulder_first_quality.get("score", 0.0)) - 0.01
+            )
+        if prefer_crop:
             final_boxes = mapped_boxes
             final_box_confidences = crop_box_confidences
             final_main_idx = crop_main_idx
@@ -2957,6 +3014,8 @@ def run_yolo_analysis_from_bytes(img_bytes, test_type, capture_metadata=None):
                 "crop_bounds": crop_bounds,
                 "relevant_keypoint_mean_confidence_before_crop": round(first_relevant_conf, 4),
                 "relevant_keypoint_mean_confidence_after_crop": round(crop_relevant_conf, 4),
+                "shoulder_chain_quality_before_crop": shoulder_first_quality,
+                "shoulder_chain_quality_after_crop": crop_shoulder_quality,
             }
 
     aslr_precomputed_result = None
