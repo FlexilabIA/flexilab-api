@@ -375,7 +375,7 @@ async def request_timing_middleware(request, call_next):
 def health():
     return {
         "ok": True,
-        "patch_version": "V101.35.24-conditional-focused-pose-recovery",
+        "patch_version": "V101.35.25-bounded-job-polling",
         "base_patch": "V101.28.4-aslr-thresholds-60-75",
         "exercise_library_mode": EXERCISE_LIBRARY_MODE,
         "exercise_library_path": EXERCISE_LIBRARY_PATH,
@@ -3654,6 +3654,40 @@ def job_status(
     job = resp.data[0]
     require_owned_session(user, str(job.get("session_id") or ""))
     current_status = str(job.get("status") or "").lower()
+
+    # A processing job must not remain immortal. We never requeue it because
+    # that can create competing YOLO runs. Once it is clearly stale, mark it
+    # failed so the client stops polling and a deliberate retry can create a
+    # fresh fingerprint-matched job.
+    if current_status == "processing":
+        started_raw = job.get("started_at")
+        try:
+            started_at = datetime.fromisoformat(str(started_raw).replace("Z", "+00:00"))
+        except Exception:
+            started_at = None
+        if started_at is not None and (datetime.now(timezone.utc) - started_at).total_seconds() >= 180:
+            stale_message = "Analysis timed out before completion. Please retry the photo once."
+            try:
+                _execute_with_transient_retry(
+                    lambda: (
+                        supabase.table("analysis_jobs")
+                        .update({
+                            "status": "failed",
+                            "completed_at": utc_now_iso(),
+                            "error_message": stale_message,
+                        })
+                        .eq("id", job_id)
+                        .eq("status", "processing")
+                        .execute()
+                    ),
+                    label="analysis_job_stale_fail",
+                )
+                current_status = "failed"
+                job["status"] = "failed"
+                job["completed_at"] = utc_now_iso()
+                job["error_message"] = stale_message
+            except Exception:
+                logger.exception("analysis_job_stale_fail_update_failed job_id=%s", job_id)
 
     # Polling must never reset a running analysis. The previous 120-second
     # watchdog could requeue a valid slow ASLR request while its first inference
