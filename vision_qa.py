@@ -219,10 +219,8 @@ def _draw_aslr_measurement(
     """Draw the deterministic image-horizontal reference and raised leg.
 
     Pink: original-image horizontal through the selected raised-leg hip.
-    Its direction is flipped for left ASLR so the reference points toward the
-    expected resting-leg side. Yellow: selected raised-leg hip to the true
-    raised YOLO ankle. Shoulder and floor-leg landmarks are excluded from the
-    angle itself.
+    Yellow: selected raised-leg hip to the true raised YOLO ankle.
+    Shoulder and floor-leg landmarks are excluded from the angle.
     """
     selected_points = metrics.get("selected_limb_points") or {}
     resting_points = metrics.get("resting_limb_points") or {}
@@ -253,7 +251,7 @@ def _draw_aslr_measurement(
     reference_source = str(metrics.get("reference_source") or baseline.get("reference_source") or "unknown")
 
     # Explicitly show both anatomical COCO hip landmarks so validation can
-    # distinguish the model's left/right labels from the shared pelvic anchor.
+    # distinguish the model's left/right labels from the selected raised-leg hip.
     if xy is not None and conf is not None:
         for hip_index, hip_name, color in (
             (11, "COCO left hip", (255, 170, 70)),
@@ -281,9 +279,9 @@ def _draw_aslr_measurement(
         cv2.line(image, reference_start, reference_end, (230, 100, 240), 6, cv2.LINE_AA)
         cv2.circle(image, reference_start, 9, (230, 100, 240), -1, cv2.LINE_AA)
         cv2.circle(image, reference_end, 7, (230, 100, 240), -1, cv2.LINE_AA)
-        direction_text = "toward left resting side" if float((baseline.get("direction") or {}).get("x", 1.0)) < 0 else "toward right resting side"
-        _put_label(image, "Selected raised-leg hip", (reference_start[0] + 10, reference_start[1] - 10), 0.42)
-        _put_label(image, f"{reference_label} ({direction_text})", (reference_end[0] + 10, reference_end[1] - 10), 0.40)
+        origin_label = str(baseline.get("reference_origin_label") or "selected raised-leg hip")
+        _put_label(image, f"REFERENCE ORIGIN: {origin_label}", (reference_start[0] + 10, reference_start[1] - 10), 0.42)
+        _put_label(image, reference_label, (reference_end[0] + 10, reference_end[1] - 10), 0.40)
 
     if raised_hip is not None and raised_ankle is not None:
         cv2.line(image, raised_hip, raised_ankle, (40, 235, 250), 7, cv2.LINE_AA)

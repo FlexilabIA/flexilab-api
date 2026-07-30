@@ -17,7 +17,7 @@ from typing import Any, Dict, Mapping, Sequence, Tuple
 
 import numpy as np
 
-ASLR_ENGINE_VERSION = "aslr-dedicated-yolo11m-coherent-hip-knee-ankle-one-call-v28"
+ASLR_ENGINE_VERSION = "aslr-dedicated-yolo11m-coherent-chain-side-specific-rotation-v28"
 ASLR_THRESHOLD_EVIDENCE_STATUS = (
     "provisional_flexilab_reference_bands_not_diagnostic_cutoffs"
 )
@@ -1334,7 +1334,7 @@ def analyze_aslr_rotated_fullbody(
     display_length = max(135.0, raised_length * 0.98)
     reference_direction_x = -1.0 if requested_side == "LEFT" else 1.0
     reference_start = measurement_hip
-    reference_end = (measurement_hip[0] + (display_length * reference_direction_x), measurement_hip[1])
+    reference_end = (measurement_hip[0] + display_length * reference_direction_x, measurement_hip[1])
     overlay_angle = _acute_angle_between_vectors(
         _vector(reference_start, reference_end),
         raised_vector,
@@ -1365,14 +1365,13 @@ def analyze_aslr_rotated_fullbody(
         flags.append("coco_left_right_labels_ignored_for_raised_chain")
 
     body_baseline_payload = {
-        "method": "original_image_horizontal_through_selected_raised_hip_toward_requested_resting_side",
+        "method": "original_image_horizontal_through_selected_raised_hip",
         "side": "IMAGE_HORIZONTAL_PRIMARY",
         "ear": None,
         "shoulder": None,
         "pelvis": _rounded_point(pelvis),
         "reference_origin": _rounded_point(measurement_hip),
         "reference_origin_label": "selected raised-leg hip",
-        "reference_direction_policy": "requested_side_resting_direction",
         "source_fit_line_start": _rounded_point(reference_start),
         "source_fit_line_end": _rounded_point(reference_end),
         "line_start": _rounded_point(reference_start),
@@ -1380,6 +1379,7 @@ def analyze_aslr_rotated_fullbody(
         "measurement_vertex": _rounded_point(measurement_hip),
         "common_vertex_policy": "coherent_same_side_raised_hip_knee_ankle",
         "reference_source": "image_horizontal_primary",
+            "reference_direction_x": reference_direction_x,
         "distal_reference_point": _rounded_point(reference_end),
         "distal_reference_index": None,
         "distal_reference_confidence": 1.0,
@@ -1387,7 +1387,7 @@ def analyze_aslr_rotated_fullbody(
         "image_angle_deg": 0.0,
         "confidence": round(measurement_hip_confidence, 3),
         "collinearity": 1.0,
-        "anchors_used": ["selected_raised_leg_hip", "original_image_horizontal", "requested_side_reference_direction"],
+        "anchors_used": ["selected_raised_leg_hip", "original_image_horizontal"],
         "source_indices": {
             "ear": None,
             "shoulder": None,
@@ -1430,12 +1430,19 @@ def analyze_aslr_rotated_fullbody(
             "side_identity_method": "workflow_label_for_reporting_geometry_for_raised_chain_selection",
             "measurement_engine_version": ASLR_ENGINE_VERSION,
             "angle_method": "angle_between_original_image_horizontal_at_selected_raised_hip_and_same_side_true_yolo_ankle",
-            "source_orientation_requirement": "full_image_rotated_90_clockwise_for_inference_then_landmarks_mapped_back",
+            "source_orientation_requirement": (
+                "head_right_capture_rotated_90_counterclockwise_for_inference_then_mapped_back"
+                if requested_side == "LEFT"
+                else "head_left_capture_rotated_90_clockwise_for_inference_then_mapped_back"
+            ),
             "display_orientation": "original_normal_horizontal_image",
-            "display_rotation_applied": "90_degrees_anticlockwise_equivalent_via_coordinate_inverse_mapping",
-            "reference_axis": "original_image_horizontal_through_selected_raised_hip_toward_requested_resting_side",
+            "display_rotation_applied": (
+                "inverse_map_from_90_counterclockwise_inference"
+                if requested_side == "LEFT"
+                else "inverse_map_from_90_clockwise_inference"
+            ),
+            "reference_axis": "original_image_horizontal_through_selected_raised_hip",
             "reference_source": "image_horizontal_primary",
-            "reference_direction_x": reference_direction_x,
             "resting_reference_fallback_used": False,
             "resting_leg_used_for_measurement": False,
             "resting_leg_verified": False,
