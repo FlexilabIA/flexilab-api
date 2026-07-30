@@ -399,7 +399,7 @@ def health():
     return {
         "ok": True,
         "patch_version": "V101.35.29-analysis-job-terminal-failsafe",
-        "base_patch": "V101.35.30-aslr-left-mirror-right-parity",
+        "base_patch": "V101.35.31-aslr-left-image-mirror-before-yolo",
         "release_policy": "launch_stable_formulas_frozen_validation_overlays_disabled",
         "production_formula_changes_allowed": False,
         "exercise_library_mode": EXERCISE_LIBRARY_MODE,
@@ -458,7 +458,7 @@ def health():
 @app.get("/library_status")
 def library_status():
     return {
-        "patch_version": "V101.35.30-aslr-left-mirror-right-parity",
+        "patch_version": "V101.35.31-aslr-left-image-mirror-before-yolo",
         "exercise_library_mode": EXERCISE_LIBRARY_MODE,
         "exercise_library_path": EXERCISE_LIBRARY_PATH,
         "exercise_library_count": len(EXERCISE_LIBRARY or []),
@@ -1006,10 +1006,10 @@ def _relabel_aslr_result_for_left(result):
     metrics["source_orientation_requirement"] = (
         "left_capture_horizontally_mirrored_then_processed_with_right_aslr_pipeline"
     )
-    metrics["display_rotation_applied"] = "horizontal_mirror_before_right_pipeline"
+    metrics["display_rotation_applied"] = "horizontal_image_mirror_before_yolo_then_right_clockwise_pipeline"
     metrics["mirror_processing_applied"] = True
     metrics["mirror_processing_rule"] = (
-        "if_test_left_mirror_keypoints_first_then_run_exact_right_pipeline_then_relabel_left"
+        "if_test_left_mirror_image_before_yolo_then_run_exact_right_pipeline_then_relabel_left"
     )
     metrics["expected_resting_side_after_reporting"] = "RIGHT"
 
@@ -1031,39 +1031,19 @@ def _relabel_aslr_result_for_left(result):
 
 
 def analyze_aslr(xy, conf, side="RIGHT", img=None, body_xy=None, body_conf=None):
-    """ASLR hybrid analysis.
+    """ASLR analysis using one canonical RIGHT pipeline.
 
-    Stable parity rule:
-      * RIGHT: analyze normally.
-      * LEFT: mirror the keypoints first, run the exact RIGHT pipeline,
-        then relabel the reported result back to LEFT.
+    The image-level normalization happens before YOLO in
+    ``run_yolo_analysis_from_bytes``:
+      * RIGHT: original normalized image.
+      * LEFT: horizontally mirrored normalized image.
 
-    `xy/conf` come from the selected original-or-rotated limb pass. The engine
-    restores the V101.28 ankle-first reconstruction across both hip/knee labels.
-    `body_xy/body_conf` always come from the original normalized photo.
+    Both then enter the exact same clockwise-rotation, YOLO, chain-selection,
+    quality-gate and angle pipeline. This function only relabels the canonical
+    RIGHT result back to LEFT for reporting.
     """
     requested_side = str(side or "RIGHT").upper()
-    if requested_side == "LEFT":
-        mirrored_xy = _mirror_pose_xy_horizontally(xy, img=img)
-        mirrored_body_xy = (
-            _mirror_pose_xy_horizontally(body_xy, img=img) if body_xy is not None else None
-        )
-        mirrored_result = analyze_aslr_rotated_fullbody(
-            mirrored_xy,
-            conf,
-            side="RIGHT",
-            keypoint_min_conf=ASLR_KEYPOINT_MIN_CONF,
-            required_mean_conf=ASLR_REQUIRED_MEAN_CONF,
-            raised_knee_extension_min=ASLR_RAISED_KNEE_EXTENSION_MIN,
-            resting_knee_extension_min=ASLR_RESTING_KNEE_EXTENSION_MIN,
-            resting_leg_max_angle=ASLR_RESTING_LEG_MAX_ANGLE,
-            img=img,
-            body_xy=mirrored_body_xy,
-            body_conf=body_conf,
-        )
-        return _relabel_aslr_result_for_left(mirrored_result)
-
-    return analyze_aslr_rotated_fullbody(
+    canonical_result = analyze_aslr_rotated_fullbody(
         xy,
         conf,
         side="RIGHT",
@@ -1076,6 +1056,9 @@ def analyze_aslr(xy, conf, side="RIGHT", img=None, body_xy=None, body_conf=None)
         body_xy=body_xy,
         body_conf=body_conf,
     )
+    if requested_side == "LEFT":
+        return _relabel_aslr_result_for_left(canonical_result)
+    return canonical_result
 
 
 
@@ -2892,27 +2875,16 @@ def run_yolo_analysis_from_bytes(img_bytes, test_type, capture_metadata=None):
     aslr_single_rotated_pass = None
 
     if is_aslr:
-        # V101.35.21: use the stable right-side protocol for both tests, mirrored
-        # at capture. Right ASLR (head left) rotates clockwise. Left ASLR
-        # (head right) rotates counterclockwise. Coordinates are inverse-mapped
-        # to the untouched source image before measurement and display.
-        rotate_counterclockwise = str(test_type) == "aslr_left"
-        rotation_code = (
-            cv2.ROTATE_90_COUNTERCLOCKWISE
-            if rotate_counterclockwise
-            else cv2.ROTATE_90_CLOCKWISE
-        )
-        rotation_name = (
-            "rotated_90_counterclockwise"
-            if rotate_counterclockwise
-            else "rotated_90_clockwise"
-        )
-        map_rotated_pose_to_original = (
-            _map_rotated_ccw_pose_to_original
-            if rotate_counterclockwise
-            else _map_rotated_cw_pose_to_original
-        )
-        rotated_pose_image = cv2.rotate(img, rotation_code)
+        # V101.35.31 canonical parity rule:
+        #   RIGHT -> original image -> clockwise RIGHT pipeline
+        #   LEFT  -> horizontal image mirror BEFORE YOLO -> same clockwise RIGHT pipeline
+        # The result is relabelled to LEFT only after the canonical analysis.
+        left_mirror_applied = str(test_type) == "aslr_left"
+        aslr_analysis_img = cv2.flip(img, 1) if left_mirror_applied else img
+        rotation_code = cv2.ROTATE_90_CLOCKWISE
+        rotation_name = "rotated_90_clockwise"
+        map_rotated_pose_to_original = _map_rotated_cw_pose_to_original
+        rotated_pose_image = cv2.rotate(aslr_analysis_img, rotation_code)
         first_prediction, first_threshold, first_imgsz = detect_aslr_pose_with_fallback(
             rotated_pose_image,
             inference_imgsz=first_requested_imgsz,
@@ -2928,7 +2900,7 @@ def run_yolo_analysis_from_bytes(img_bytes, test_type, capture_metadata=None):
         first_xy, first_boxes = map_rotated_pose_to_original(
             first_xy_rotated,
             first_boxes_rotated,
-            img.shape,
+            aslr_analysis_img.shape,
         )
         first_areas = np.array([
             max(0.0, float(box[2] - box[0])) * max(0.0, float(box[3] - box[1]))
@@ -2950,8 +2922,9 @@ def run_yolo_analysis_from_bytes(img_bytes, test_type, capture_metadata=None):
             "chain_candidates": first_chain_candidates,
             "pose_model_inference_count": 1,
             "detection_attempt_count": 1,
-            "rotation_direction": "counterclockwise" if rotate_counterclockwise else "clockwise",
-            "capture_protocol": "head_right" if rotate_counterclockwise else "head_left",
+            "rotation_direction": "clockwise",
+            "capture_protocol": "left_image_mirrored_to_head_left" if left_mirror_applied else "head_left",
+            "horizontal_mirror_before_yolo": left_mirror_applied,
         }
 
         # V101.35.20: keep the fast one-call path when a coherent same-side
@@ -2991,7 +2964,7 @@ def run_yolo_analysis_from_bytes(img_bytes, test_type, capture_metadata=None):
                     crop_xy_local, crop_boxes_local, crop_bounds
                 )
                 crop_xy, crop_boxes = map_rotated_pose_to_original(
-                    crop_xy_rotated, crop_boxes_rotated, img.shape
+                    crop_xy_rotated, crop_boxes_rotated, aslr_analysis_img.shape
                 )
                 crop_chain_quality, crop_chain_candidates = _aslr_same_side_chain_quality(
                     crop_xy, crop_conf
@@ -3010,8 +2983,9 @@ def run_yolo_analysis_from_bytes(img_bytes, test_type, capture_metadata=None):
                     "crop_bounds_rotated": crop_bounds,
                     "pose_model_inference_count": 2,
                     "detection_attempt_count": 2,
-                    "rotation_direction": "counterclockwise" if rotate_counterclockwise else "clockwise",
-                    "capture_protocol": "head_right" if rotate_counterclockwise else "head_left",
+                    "rotation_direction": "clockwise",
+                    "capture_protocol": "left_image_mirrored_to_head_left" if left_mirror_applied else "head_left",
+                    "horizontal_mirror_before_yolo": left_mirror_applied,
                 }
                 crop_score = float(crop_chain_quality.get("score", 0.0))
                 first_score = float(first_chain_quality.get("score", 0.0))
@@ -3182,7 +3156,7 @@ def run_yolo_analysis_from_bytes(img_bytes, test_type, capture_metadata=None):
                 selected_pass["xy"],
                 selected_pass["conf"],
                 requested_side,
-                img,
+                aslr_analysis_img,
                 body_xy=body_reference_xy,
                 body_conf=body_reference_conf,
             )
@@ -3198,7 +3172,7 @@ def run_yolo_analysis_from_bytes(img_bytes, test_type, capture_metadata=None):
         inference_imgsz = selected_pass["imgsz"]
 
         analysis_pass = {
-            "mode": "aslr_one_yolo_call_image_horizontal_primary_no_tracking_images",
+            "mode": "aslr_canonical_right_pipeline_image_mirror_before_yolo",
             "selected_pass": selected_pass_name,
             "rotation_direction": selected_pass.get("rotation_direction"),
             "capture_protocol": selected_pass.get("capture_protocol"),
@@ -3216,7 +3190,7 @@ def run_yolo_analysis_from_bytes(img_bytes, test_type, capture_metadata=None):
             "fallback_used": False,
             "visual_endpoint_allowed": False,
             "endpoint_policy": "raised_true_yolo_ankle_required_floor_leg_optional_validation_only",
-            "chain_policy": "raised_ankle_first_then_original_image_horizontal",
+            "chain_policy": "left_mirror_before_yolo_then_exact_right_chain_pipeline",
             "body_reference_policy": "original_image_horizontal_through_pelvis_always_primary_shoulders_and_floor_leg_excluded",
             "person_coverage": round(person_coverage, 4),
             "adaptive_crop_used": False,
@@ -3244,7 +3218,7 @@ def run_yolo_analysis_from_bytes(img_bytes, test_type, capture_metadata=None):
             result = aslr_precomputed_result
             if result is None:
                 try:
-                    result = analyze_aslr(xy, conf, requested_side, img)
+                    result = analyze_aslr(xy, conf, requested_side, aslr_analysis_img)
                 except ASLRQualityError as runtime_exc:
                     exc = runtime_exc
         if exc is not None:
