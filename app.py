@@ -401,7 +401,7 @@ async def request_timing_middleware(request, call_next):
 def health():
     return {
         "ok": True,
-        "patch_version": "V101.35.32-worker-only-analysis-enforcement",
+        "patch_version": "V101.35.34-adaptive-worker-queue",
         "base_patch": "V101.35.31-aslr-left-image-mirror-before-yolo",
         "release_policy": "launch_stable_formulas_frozen_validation_overlays_disabled",
         "production_formula_changes_allowed": False,
