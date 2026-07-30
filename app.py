@@ -375,8 +375,10 @@ async def request_timing_middleware(request, call_next):
 def health():
     return {
         "ok": True,
-        "patch_version": "V101.35.25-bounded-job-polling",
+        "patch_version": "V101.35.26-launch-stable-validation-freeze",
         "base_patch": "V101.28.4-aslr-thresholds-60-75",
+        "release_policy": "launch_stable_formulas_frozen_validation_overlays_enabled",
+        "production_formula_changes_allowed": False,
         "exercise_library_mode": EXERCISE_LIBRARY_MODE,
         "exercise_library_path": EXERCISE_LIBRARY_PATH,
         "exercise_library_count": len(EXERCISE_LIBRARY or []),
@@ -1016,15 +1018,24 @@ def _attach_screening_soft_warnings(result, test_type):
             )
     elif test_type in {"aslr_right", "aslr_left"}:
         knee = metrics.get("raised_knee_extension_angle")
+        knee_line_ratio = metrics.get("raised_knee_line_distance_ratio")
         preferred = float((metrics.get("quality_gate_config") or {}).get("raised_knee_extension_min", 145.0))
-        if knee is not None and float(knee) < preferred:
+        # Launch-stable rule: the hip-to-ankle ASLR angle is primary. A knee
+        # warning is shown only when both the joint angle and the knee's
+        # displacement from the hip-to-ankle line indicate meaningful flexion.
+        # This avoids false warnings caused by a slightly misplaced YOLO knee.
+        knee_is_low = knee is not None and float(knee) < preferred
+        knee_is_off_line = knee_line_ratio is not None and float(knee_line_ratio) > 0.06
+        if knee_is_low and knee_is_off_line:
             add(
                 "aslr_raised_knee_flexion",
                 "Le repère détecté du genou suggère une possible légère flexion.",
                 "The detected knee landmark suggests possible slight flexion.",
-                "Cela peut provenir du placement estimé du repère et légèrement influencer l’amplitude.",
-                "This may reflect landmark estimation and slightly influence the measured range.",
+                "Le résultat reste une estimation; vous pouvez vérifier les repères, reprendre la photo ou l’accepter.",
+                "The result remains an estimate; review the landmarks, retake the photo, or accept it.",
             )
+        elif knee_is_low:
+            metrics.setdefault("diagnostic_flags", []).append("knee_landmark_secondary_uncertainty_no_user_warning")
 
     metrics["screening_validation"] = {
         "status": "measurable_with_warning" if warnings else "measurable",
