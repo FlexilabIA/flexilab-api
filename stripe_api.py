@@ -105,6 +105,18 @@ def _iso(value: Optional[datetime]) -> Optional[str]:
     return value.isoformat() if value else None
 
 
+def _parse_iso_datetime(value: Any) -> Optional[datetime]:
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(timezone.utc)
+    except Exception:
+        return None
+
+
 def _add_months(value: datetime, months: int) -> datetime:
     month_index = value.month - 1 + months
     year = value.year + month_index // 12
@@ -689,7 +701,29 @@ def create_stripe_router(supabase_client) -> APIRouter:
 
         months = int(PLAN_CONFIG[plan_code]["months"])
         checkout_id = str(_object_value(session, "id"))
-        plan_end = _add_months(now, months)
+
+        # Prepaid Pro purchases are additive. If the user still has active Pro
+        # access, the new duration starts after the current access expires;
+        # it never replaces or shortens an existing prepaid period.
+        plan_start = now
+        entitlement_valid_from = now
+        if plan_code in {"pro_three_month", "pro_annual"}:
+            current_entitlement = effective_entitlement(supabase_client, user_id)
+            current_end = _parse_iso_datetime(current_entitlement.get("valid_until"))
+            current_start = _parse_iso_datetime(current_entitlement.get("valid_from"))
+            if (
+                current_end
+                and current_end > now
+                and bool(
+                    current_entitlement.get("program_access")
+                    or current_entitlement.get("workout_access")
+                )
+            ):
+                plan_start = current_end
+                # Keep the current entitlement active while extending its end.
+                entitlement_valid_from = current_start or now
+
+        plan_end = _add_months(plan_start, months)
 
         saved = save_subscription(
             user_id=user_id,
@@ -697,16 +731,16 @@ def create_stripe_router(supabase_client) -> APIRouter:
             provider_customer_id=str(customer_id) if customer_id else None,
             provider_subscription_id=checkout_id,
             status="active",
-            period_start=now,
+            period_start=plan_start,
             period_end=plan_end,
-            metadata=meta,
+            metadata={**meta, "scheduled_start": _iso(plan_start) or ""},
         )
         if plan_code == "trainer_pack_30":
             activate_trainer_pack(
                 user_id=user_id,
                 subscription_id=saved["id"],
                 plan_code=plan_code,
-                start=now,
+                start=plan_start,
                 end=plan_end,
             )
         else:
@@ -714,14 +748,14 @@ def create_stripe_router(supabase_client) -> APIRouter:
                 user_id=user_id,
                 plan_code=plan_code,
                 source_id=checkout_id,
-                valid_from=now,
+                valid_from=entitlement_valid_from,
                 valid_until=plan_end,
             )
             create_prepaid_cycles(
                 user_id=user_id,
                 subscription_id=saved["id"],
                 plan_code=plan_code,
-                start=now,
+                start=plan_start,
                 months=months,
             )
             grant_referral_reward(
@@ -968,6 +1002,24 @@ def create_stripe_router(supabase_client) -> APIRouter:
 
         entitlement = effective_entitlement(supabase_client, user["id"])
         has_pro_access = bool(entitlement.get("program_access") or entitlement.get("workout_access"))
+
+        # Never create a second recurring subscription while one is already active.
+        # Prepaid users can renew with another prepaid duration; that access is
+        # stacked safely by the webhook from their current expiry date.
+        if plan_code == "pro_monthly":
+            latest = latest_user_subscription(user["id"])
+            latest_end = _parse_iso_datetime((latest or {}).get("current_period_end"))
+            if (
+                latest
+                and latest.get("plan_code") == "pro_monthly"
+                and str(latest.get("status") or "").lower() in {"active", "trialing", "past_due"}
+                and (latest_end is None or latest_end > _utc_now())
+            ):
+                raise HTTPException(
+                    status_code=409,
+                    detail="A monthly subscription is already active for this account.",
+                )
+
         if plan_code == "standalone_assessment_4" and has_pro_access:
             raise HTTPException(status_code=409, detail="Active Pro accounts must use extra_screening_4.")
         if plan_code == "extra_screening_4" and not has_pro_access:
