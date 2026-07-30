@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import os
 import time
+import traceback
 from datetime import datetime, timezone
 
 # Must be set before importing app so analysis execution is cryptographically
@@ -27,6 +28,11 @@ CLEANUP_INTERVAL_SECONDS = max(
 
 if supabase is None:
     raise RuntimeError("Supabase is not configured")
+
+
+def _log(event: str, **fields: object) -> None:
+    payload = " ".join(f"{key}={value}" for key, value in fields.items())
+    print(f"{event}{(' ' + payload) if payload else ''}", flush=True)
 
 
 def cleanup_expired_images() -> None:
@@ -63,27 +69,90 @@ def cleanup_expired_images() -> None:
         supabase.table("analysis_jobs").update(changes).eq("id", row["id"]).execute()
 
 
-print(f"FlexiLab analysis worker started role={PROCESS_ROLE} bucket={ANALYSIS_STORAGE_BUCKET}", flush=True)
+_log(
+    "worker_started",
+    role=PROCESS_ROLE,
+    bucket=ANALYSIS_STORAGE_BUCKET,
+    poll_seconds=POLL_SECONDS,
+    cleanup_seconds=CLEANUP_INTERVAL_SECONDS,
+)
 last_cleanup = 0.0
 while True:
     try:
         current = time.monotonic()
         if current - last_cleanup >= CLEANUP_INTERVAL_SECONDS:
+            cleanup_started = time.perf_counter()
             cleanup_expired_images()
+            _log("worker_cleanup_completed", duration_ms=round((time.perf_counter() - cleanup_started) * 1000, 1))
             last_cleanup = current
 
         jobs = (
             supabase.table("analysis_jobs")
-            .select("id")
+            .select("id,session_id,test_type,created_at")
             .eq("status", "queued")
             .order("created_at")
             .limit(1)
             .execute()
         )
-        if jobs.data:
-            process_analysis_job(str(jobs.data[0]["id"]))
-        else:
+        if not jobs.data:
             time.sleep(POLL_SECONDS)
+            continue
+
+        job = jobs.data[0]
+        job_id = str(job["id"])
+        session_id = str(job.get("session_id") or "")
+        test_type = str(job.get("test_type") or "")
+        started = time.perf_counter()
+        _log(
+            "worker_job_found",
+            job_id=job_id,
+            session_id=session_id,
+            test_type=test_type,
+            created_at=job.get("created_at"),
+        )
+        _log("worker_processing_started", job_id=job_id, test_type=test_type)
+
+        process_analysis_job(job_id)
+
+        final = (
+            supabase.table("analysis_jobs")
+            .select("status,started_at,completed_at,error_message")
+            .eq("id", job_id)
+            .limit(1)
+            .execute()
+        )
+        final_row = (final.data or [{}])[0]
+        final_status = str(final_row.get("status") or "unknown")
+        duration_ms = round((time.perf_counter() - started) * 1000, 1)
+        if final_status == "completed":
+            _log(
+                "worker_completed",
+                job_id=job_id,
+                session_id=session_id,
+                test_type=test_type,
+                duration_ms=duration_ms,
+                started_at=final_row.get("started_at"),
+                completed_at=final_row.get("completed_at"),
+            )
+        elif final_status == "failed":
+            _log(
+                "worker_failed",
+                job_id=job_id,
+                session_id=session_id,
+                test_type=test_type,
+                duration_ms=duration_ms,
+                error=repr(final_row.get("error_message")),
+            )
+        else:
+            _log(
+                "worker_processing_returned",
+                job_id=job_id,
+                session_id=session_id,
+                test_type=test_type,
+                status=final_status,
+                duration_ms=duration_ms,
+            )
     except Exception as exc:
-        print(f"Analysis worker error: {exc}", flush=True)
+        _log("worker_loop_error", error=repr(exc))
+        traceback.print_exc()
         time.sleep(POLL_SECONDS)
