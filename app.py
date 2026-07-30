@@ -401,7 +401,7 @@ async def request_timing_middleware(request, call_next):
 def health():
     return {
         "ok": True,
-        "patch_version": "V101.35.36-completed-session-history-only",
+        "patch_version": "V101.35.37-complete-six-test-history-line-restore",
         "base_patch": "V101.35.31-aslr-left-image-mirror-before-yolo",
         "release_policy": "launch_stable_formulas_frozen_validation_overlays_disabled",
         "production_formula_changes_allowed": False,
@@ -1652,12 +1652,11 @@ def screening_history(
         if not session_id:
             continue
 
-        # Progress/history must represent finalized assessments only. A session
-        # can contain six screening rows while still being abandoned, resumed,
-        # or otherwise unfinished; completeness of rows alone is not enough.
-        if str(session.get("status") or "").strip().lower() != "completed":
-            continue
-
+        # A modern assessment is finalized with sessions.status=completed.
+        # Legacy production sessions were not always finalized even though all
+        # six required tests were successfully persisted. Validate the actual
+        # six-test evidence below so those complete historical assessments are
+        # retained while partial/abandoned sessions remain excluded.
         screenings_resp = (
             supabase.table("screenings")
             .select(
@@ -1689,6 +1688,11 @@ def screening_history(
             "created_at": session.get("created_at"),
             "status": "completed",
             "stored_status": session.get("status"),
+            "completion_basis": (
+                "finalized_session"
+                if str(session.get("status") or "").strip().lower() == "completed"
+                else "legacy_complete_six_test_set"
+            ),
             "score": v3_score,
             "score_version": "FlexiLab Evidence-Aware Score Engine V3",
             "movement_profile": build_movement_profile_from_session(
@@ -1708,7 +1712,7 @@ def screening_history(
         "count": len(usable),
         "screenings": usable,
         "latest": usable[-1] if usable else None,
-        "profile_method": "v3_rebuilt_unique_six_test_history",
+        "profile_method": "v3_rebuilt_unique_six_test_history_v2",
         "profile_disclaimer": (
             "History is rebuilt from the newest unique row for each of the six "
             "required tests. Scores use Evidence-Aware Score Engine V3."

@@ -146,6 +146,59 @@ def create_trainer_router(supabase_client) -> APIRouter:
                 logger.warning("trainer_read_failed label=%s error=%s", label, exc)
         raise last_error
 
+    REQUIRED_HISTORY_TESTS = {
+        "posture_side",
+        "shoulder_right",
+        "shoulder_left",
+        "squat",
+        "aslr_right",
+        "aslr_left",
+    }
+
+    def _latest_complete_assessment_sessions(
+        sessions: list[dict[str, Any]],
+        limit: int = 6,
+    ) -> list[dict[str, Any]]:
+        """Keep finalized sessions plus legacy sessions with all six tests.
+
+        New sessions should have status=completed. Some valid historical
+        sessions predate reliable finalization; they are accepted only when the
+        complete six-test evidence exists. Partial sessions are always removed.
+        """
+        if not sessions:
+            return []
+        session_ids = [str(row.get("id") or "") for row in sessions if row.get("id")]
+        tests_by_session: dict[str, set[str]] = {sid: set() for sid in session_ids}
+        if session_ids:
+            response = _read_with_retry(
+                lambda: (
+                    supabase_client.table("screenings")
+                    .select("session_id,test_type")
+                    .in_("session_id", session_ids)
+                    .execute()
+                ),
+                "trainer_complete_assessment_evidence",
+            )
+            for row in response.data or []:
+                sid = str(row.get("session_id") or "")
+                test_type = str(row.get("test_type") or "")
+                if sid in tests_by_session and test_type:
+                    tests_by_session[sid].add(test_type)
+
+        eligible = []
+        for row in sessions:
+            sid = str(row.get("id") or "")
+            finalized = str(row.get("status") or "").strip().lower() == "completed"
+            has_complete_evidence = REQUIRED_HISTORY_TESTS.issubset(tests_by_session.get(sid, set()))
+            if finalized or has_complete_evidence:
+                normalized = dict(row)
+                normalized["status"] = "completed"
+                normalized["stored_status"] = row.get("status")
+                eligible.append(normalized)
+            if len(eligible) >= max(1, limit):
+                break
+        return eligible
+
     def latest_client_sessions_bulk(
         rows: list[dict[str, Any]],
         trainer_id: str,
@@ -606,10 +659,11 @@ def create_trainer_router(supabase_client) -> APIRouter:
             supabase_client.table("sessions")
             .select("id,created_at,status,composite_score,user_id,user_email")
             .eq("trainer_client_link_id", link_id)
-            .eq("status", "completed")
             .order("created_at", desc=True)
+            .limit(48)
             .execute()
         )
+        completed_sessions = _latest_complete_assessment_sessions(sessions.data or [], limit=6)
         notes = (
             supabase_client.table("trainer_client_notes")
             .select("id,session_id,note,created_at,updated_at")
@@ -621,7 +675,7 @@ def create_trainer_router(supabase_client) -> APIRouter:
         )
         return {
             "client": link,
-            "screenings": sessions.data or [],
+            "screenings": completed_sessions,
             "notes": notes.data or [],
         }
 
@@ -751,12 +805,11 @@ def create_trainer_router(supabase_client) -> APIRouter:
             .eq("user_id", user["id"])
             .eq("performed_by_user_id", user["id"])
             .is_("trainer_client_link_id", "null")
-            .in_("status", ["in_progress", "completed"])
             .order("created_at", desc=True)
-            .limit(10)
+            .limit(48)
             .execute()
         )
-        return {"screenings": response.data or []}
+        return {"screenings": _latest_complete_assessment_sessions(response.data or [], limit=6)}
 
     @router.get("/trainer/token-history")
     def token_history(user: dict[str, str] = Depends(require_user)):
