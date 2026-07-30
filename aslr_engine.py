@@ -1285,7 +1285,9 @@ def analyze_aslr_rotated_fullbody(
             "raised_leg_not_separated",
             "The raised leg was not separated clearly from the horizontal body position. Retake the photo.",
         )
-    if float(raised["knee_extension_angle"]) < max(125.0, raised_knee_extension_min - 20.0):
+    # Screening estimate: moderate knee flexion becomes a non-blocking warning.
+    # Only severe flexion that makes the hip-knee-ankle chain unusable is rejected.
+    if float(raised["knee_extension_angle"]) < 105.0:
         raise ASLRQualityError(
             "raised_knee_geometry_uncertain",
             "The pelvis, raised knee and raised ankle do not form a reliable straight-leg chain. Straighten the knee and retake the photo.",
@@ -1443,6 +1445,7 @@ def analyze_aslr_rotated_fullbody(
             ),
             "reference_axis": "original_image_horizontal_through_selected_raised_hip",
             "reference_source": "image_horizontal_primary",
+            "reference_direction_x": reference_direction_x,
             "resting_reference_fallback_used": False,
             "resting_leg_used_for_measurement": False,
             "resting_leg_verified": False,

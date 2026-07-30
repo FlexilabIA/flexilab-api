@@ -375,7 +375,7 @@ async def request_timing_middleware(request, call_next):
 def health():
     return {
         "ok": True,
-        "patch_version": "V101.35.22-aslr-left-reference-direction-fix",
+        "patch_version": "V101.35.23-screening-soft-warnings-all-landmarks",
         "base_patch": "V101.28.4-aslr-thresholds-60-75",
         "exercise_library_mode": EXERCISE_LIBRARY_MODE,
         "exercise_library_path": EXERCISE_LIBRARY_PATH,
@@ -702,6 +702,11 @@ def analyze_posture(xy, conf):
             "thoracic_angle": round(thoracic_angle, 2),
             "pelvic_proxy_angle": round(pelvic_proxy_angle, 2),
             "side_used": side,
+            "keypoint_confidence": {
+                "ear": round(float(conf[R_EAR] if side == "RIGHT" else conf[L_EAR]), 3),
+                "shoulder": round(float(conf[R_SH] if side == "RIGHT" else conf[L_SH]), 3),
+                "hip": round(float(conf[R_HIP] if side == "RIGHT" else conf[L_HIP]), 3),
+            },
         },
         "thresholds": {
             "neck_angle": neck_thr,
@@ -786,6 +791,16 @@ def analyze_shoulder(xy, conf, side="RIGHT"):
     score = max(0.0, 100.0 - deficit * 2.0)
     conf_out = max(0.0, min(1.0, float(c)))
 
+    upper_arm = sh - el
+    forearm = wr - el
+    elbow_denom = np.linalg.norm(upper_arm) * np.linalg.norm(forearm)
+    if elbow_denom < 1e-6:
+        elbow_extension = None
+    else:
+        elbow_cos = float(np.dot(upper_arm, forearm) / elbow_denom)
+        elbow_cos = max(-1.0, min(1.0, elbow_cos))
+        elbow_extension = float(math.degrees(math.acos(elbow_cos)))
+
     shoulder_thr = make_thresholds(
         "deg", 0, 180,
         [
@@ -803,6 +818,7 @@ def analyze_shoulder(xy, conf, side="RIGHT"):
             "shoulder_flexion_angle": round(shoulder_flexion, 2),
             "side": side,
             "arm_point_used": arm_point_used,
+            "elbow_extension_angle": round(elbow_extension, 2) if elbow_extension is not None else None,
             "keypoint_confidence": {
                 "shoulder": round(sh_c, 3),
                 "elbow": round(el_c, 3),
@@ -884,6 +900,13 @@ def analyze_squat(xy, conf):
         "metrics": {
             "knee_angle": round(float(knee_angle), 2),
             "trunk_lean": round(float(trunk_angle), 2),
+            "keypoint_confidence": {
+                "shoulders_mean": round(float(np.mean([conf[L_SH], conf[R_SH]])), 3),
+                "hips_mean": round(float(np.mean([conf[L_HIP], conf[R_HIP]])), 3),
+                "knees_mean": round(float(np.mean([conf[L_KNEE], conf[R_KNEE]])), 3),
+                "ankles_mean": round(float(np.mean([conf[L_ANK], conf[R_ANK]])), 3),
+            },
+            "heel_elevation_assessment": "not_available_from_coco_ankle_keypoints",
         },
         "thresholds": {
             "knee_angle": knee_thr,
@@ -915,6 +938,84 @@ def analyze_aslr(xy, conf, side="RIGHT", img=None, body_xy=None, body_conf=None)
         body_conf=body_conf,
     )
 
+
+
+def _attach_screening_soft_warnings(result, test_type):
+    """Attach non-blocking technique/quality warnings to an estimated screening result."""
+    metrics = result.setdefault("metrics", {})
+    warnings = []
+
+    def add(code, message_fr, message_en, possible_effect_fr, possible_effect_en):
+        warnings.append({
+            "code": code,
+            "severity": "warning",
+            "blocking": False,
+            "message_fr": message_fr,
+            "message_en": message_en,
+            "possible_effect_fr": possible_effect_fr,
+            "possible_effect_en": possible_effect_en,
+        })
+
+    if test_type == "posture_side":
+        kp = metrics.get("keypoint_confidence") or {}
+        if min(float(kp.get("ear", 1)), float(kp.get("shoulder", 1)), float(kp.get("hip", 1))) < 0.45:
+            add(
+                "posture_landmark_moderate_confidence",
+                "Un repère de profil est partiellement masqué, mais les angles restent estimables.",
+                "A side-view landmark is partly obscured, but the angles remain estimable.",
+                "La précision peut être légèrement réduite.",
+                "Precision may be slightly reduced.",
+            )
+    elif test_type in {"shoulder_right", "shoulder_left"}:
+        elbow = metrics.get("elbow_extension_angle")
+        if elbow is not None and float(elbow) < 160.0:
+            add(
+                "shoulder_elbow_flexion",
+                "Le coude est légèrement fléchi.",
+                "The elbow is slightly bent.",
+                "L’amplitude d’épaule peut être légèrement surestimée ou sous-estimée.",
+                "Shoulder range may be slightly over- or underestimated.",
+            )
+    elif test_type == "squat":
+        if float(metrics.get("trunk_lean", 0) or 0) > 25.0:
+            add(
+                "squat_trunk_inclination",
+                "Le tronc est fortement incliné pendant le squat.",
+                "The trunk is substantially inclined during the squat.",
+                "Cela peut refléter votre stratégie de mouvement et influencer la profondeur estimée.",
+                "This may reflect your movement strategy and influence estimated depth.",
+            )
+        kp = metrics.get("keypoint_confidence") or {}
+        if float(kp.get("ankles_mean", 1)) < 0.40:
+            add(
+                "squat_ankle_landmark_moderate_confidence",
+                "Les repères de cheville sont moins nets.",
+                "The ankle landmarks are less clear.",
+                "La mesure du genou peut être légèrement moins précise.",
+                "The knee measurement may be slightly less precise.",
+            )
+    elif test_type in {"aslr_right", "aslr_left"}:
+        knee = metrics.get("raised_knee_extension_angle")
+        preferred = float((metrics.get("quality_gate_config") or {}).get("raised_knee_extension_min", 145.0))
+        if knee is not None and float(knee) < preferred:
+            add(
+                "aslr_raised_knee_flexion",
+                "Le genou levé est légèrement fléchi.",
+                "The raised knee is slightly bent.",
+                "L’amplitude ASLR peut être légèrement surestimée.",
+                "The ASLR range may be slightly overestimated.",
+            )
+
+    metrics["screening_validation"] = {
+        "status": "measurable_with_warning" if warnings else "measurable",
+        "requires_user_acknowledgement": bool(warnings),
+        "warnings": warnings,
+        "screening_estimate": True,
+        "diagnostic_claim": False,
+    }
+    if warnings:
+        metrics["quality_label"] = "moderate"
+    return result
 
 def compute_composite(posture, shoulder_r, shoulder_l, squat, aslr_r=None, aslr_l=None):
     shoulder = None
@@ -2998,6 +3099,7 @@ def run_yolo_analysis_from_bytes(img_bytes, test_type, capture_metadata=None):
         raise ValueError("Invalid test_type")
 
     _attach_measurement_points(result, test_type, xy)
+    _attach_screening_soft_warnings(result, test_type)
     result.setdefault("metrics", {})["detection_confidence_threshold"] = detection_threshold
     result["metrics"]["person_detection"] = {
         "person_count": int(len(first_boxes)),
