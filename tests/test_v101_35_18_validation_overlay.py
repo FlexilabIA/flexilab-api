@@ -12,7 +12,7 @@ VISION_SOURCE = (ROOT / "vision_qa.py").read_text(encoding="utf-8")
 def test_validation_mode_is_environment_controlled():
     assert 'FLEXILAB_VISION_QA_MODE' in APP_SOURCE
     assert 'VISION_QA_VALIDATION_ENABLED' in APP_SOURCE
-    assert 'V101.35.18-validation-overlay' in APP_SOURCE
+    assert 'V101.35.22-aslr-left-reference-direction-fix' in APP_SOURCE
 
 
 def test_validation_mode_generates_overlay_for_all_tests():
@@ -24,8 +24,8 @@ def test_validation_mode_generates_overlay_for_all_tests():
 def test_aslr_overlay_exposes_both_hips_and_selected_anchor():
     assert 'COCO left hip' in VISION_SOURCE
     assert 'COCO right hip' in VISION_SOURCE
-    assert 'SELECTED shared pelvic anchor' in VISION_SOURCE
-    assert 'Measurement vertex: shared pelvis' in VISION_SOURCE
+    assert 'Selected raised-leg hip' in VISION_SOURCE
+    assert 'Measurement vertex: selected raised-leg hip' in VISION_SOURCE
     assert 'detected chain' in VISION_SOURCE
 
 
@@ -56,7 +56,7 @@ def test_aslr_validation_payload_renders():
             "requested_side": "LEFT",
             "detected_coco_side": "LEFT",
             "raised_knee_extension_angle": 170.0,
-            "measurement_vertex_policy": "single_shared_pelvic_anchor_for_image_horizontal_and_raised_leg_vectors",
+            "measurement_vertex_policy": "selected_raised_leg_hip_for_image_horizontal_and_raised_leg_vectors",
             "selected_limb_points": {
                 "hip": {"x": 150.0, "y": 300.0},
                 "knee": {"x": 150.0, "y": 220.0},
@@ -64,11 +64,12 @@ def test_aslr_validation_payload_renders():
             },
             "resting_limb_points": {
                 "hip": {"x": 150.0, "y": 300.0},
-                "reference_endpoint": {"x": 290.0, "y": 300.0},
+                "reference_endpoint": {"x": 10.0, "y": 300.0},
             },
             "body_baseline": {
                 "line_start": {"x": 150.0, "y": 300.0},
-                "line_end": {"x": 290.0, "y": 300.0},
+                "line_end": {"x": 10.0, "y": 300.0},
+                "direction": {"x": -1.0, "y": 0.0},
                 "reference_source": "image_horizontal_primary",
             },
             "reference_source": "image_horizontal_primary",
