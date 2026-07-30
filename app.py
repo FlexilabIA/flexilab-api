@@ -200,6 +200,29 @@ ASLR_POSE_MODEL_NAME = os.environ.get(
 ).strip() or "yolo11m-pose.pt"
 ASLR_POSE_MODEL_LOAD_ERROR = None
 ASLR_POSE_MODEL_INFERENCE_LOCK = threading.RLock()
+
+# In-process terminal-state failsafe. Supabase can occasionally reject the final
+# status update with a transient httpx/httpcore ReadError. Without this cache the
+# database row can remain ``processing`` and the browser polls forever even though
+# the worker has already ended. This cache is not the source of truth for completed
+# screenings; it only guarantees a terminal response for the current Render process.
+ANALYSIS_RUNTIME_STATE = {}
+ANALYSIS_RUNTIME_STATE_LOCK = threading.RLock()
+ANALYSIS_RUNTIME_TIMEOUT_SECONDS = max(60, min(180, int(os.environ.get("FLEXILAB_ANALYSIS_RUNTIME_TIMEOUT_SECONDS", "120"))))
+
+def _set_analysis_runtime_state(job_id, status, *, result=None, error_message=None):
+    with ANALYSIS_RUNTIME_STATE_LOCK:
+        ANALYSIS_RUNTIME_STATE[str(job_id)] = {
+            "status": str(status),
+            "result": result,
+            "error_message": error_message,
+            "updated_at_monotonic": time.monotonic(),
+        }
+
+def _get_analysis_runtime_state(job_id):
+    with ANALYSIS_RUNTIME_STATE_LOCK:
+        value = ANALYSIS_RUNTIME_STATE.get(str(job_id))
+        return dict(value) if isinstance(value, dict) else None
 ASLR_POSE_MODEL_RELOAD_COUNT = 0
 
 
@@ -375,8 +398,8 @@ async def request_timing_middleware(request, call_next):
 def health():
     return {
         "ok": True,
-        "patch_version": "V101.35.27-aslr-mirror-fix-no-qa-overlays",
-        "base_patch": "V101.28.4-aslr-thresholds-60-75",
+        "patch_version": "V101.35.29-analysis-job-terminal-failsafe",
+        "base_patch": "V101.35.30-aslr-left-mirror-right-parity",
         "release_policy": "launch_stable_formulas_frozen_validation_overlays_disabled",
         "production_formula_changes_allowed": False,
         "exercise_library_mode": EXERCISE_LIBRARY_MODE,
@@ -435,7 +458,7 @@ def health():
 @app.get("/library_status")
 def library_status():
     return {
-        "patch_version": "V101.35.14-aslr-one-call-no-tracked-images",
+        "patch_version": "V101.35.30-aslr-left-mirror-right-parity",
         "exercise_library_mode": EXERCISE_LIBRARY_MODE,
         "exercise_library_path": EXERCISE_LIBRARY_PATH,
         "exercise_library_count": len(EXERCISE_LIBRARY or []),
@@ -869,13 +892,21 @@ def analyze_squat(xy, conf):
     trunk_dy = float(hip[1] - shoulder[1])
     trunk_angle = abs(math.degrees(math.atan2(trunk_dx, trunk_dy)))
 
+    # `knee_angle` is the included hip-knee-ankle angle used by the UI.
+    # Conventional knee flexion is approximately 180 - knee_angle, so a
+    # smaller displayed value means a deeper squat. Launch screening bands:
+    #   <=55 deg included angle  ~= >=125 deg flexion (deep/full capability)
+    #   55-75 deg included angle ~= 105-125 deg flexion (moderate/parallel)
+    #   >75 deg included angle   ~= <105 deg flexion (shallow/limited depth)
     depth_pen = 0.0
-    if knee_angle > 120:
-        depth_pen = 35
-    elif knee_angle > 100:
-        depth_pen = 20
-    elif knee_angle > 85:
-        depth_pen = 10
+    if knee_angle > 90:
+        depth_pen = 40
+    elif knee_angle > 75:
+        depth_pen = 30
+    elif knee_angle > 65:
+        depth_pen = 18
+    elif knee_angle > 55:
+        depth_pen = 8
 
     trunk_pen = 0.0
     if trunk_angle > 25:
@@ -898,11 +929,11 @@ def analyze_squat(xy, conf):
     )
 
     knee_thr = make_thresholds(
-        "deg", 60, 180,
+        "deg", 0, 120,
         [
-            {"label": "Green", "min": 60, "max": 95, "color": "green"},
-            {"label": "Yellow", "min": 95, "max": 110, "color": "yellow"},
-            {"label": "Red", "min": 110, "max": 180, "color": "red"},
+            {"label": "Green", "min": 0, "max": 55, "color": "green"},
+            {"label": "Yellow", "min": 55, "max": 75, "color": "yellow"},
+            {"label": "Red", "min": 75, "max": 120, "color": "red"},
         ],
         knee_angle
     )
@@ -912,6 +943,8 @@ def analyze_squat(xy, conf):
         "confidence": round(conf_out, 3),
         "metrics": {
             "knee_angle": round(float(knee_angle), 2),
+            "estimated_knee_flexion_angle": round(float(180.0 - knee_angle), 2),
+            "knee_angle_convention": "included_hip_knee_ankle_angle_smaller_is_deeper",
             "trunk_lean": round(float(trunk_angle), 2),
             "keypoint_confidence": {
                 "shoulders_mean": round(float(np.mean([conf[L_SH], conf[R_SH]])), 3),
@@ -930,17 +963,110 @@ def analyze_squat(xy, conf):
 
 
 
+def _mirror_pose_xy_horizontally(xy, frame_width=None, img=None):
+    """Return a horizontally mirrored copy of pose xy coordinates.
+
+    This is used only for ASLR LEFT so that the left workflow is processed
+    through the exact same geometric path as ASLR RIGHT.
+    """
+    mirrored = np.array(xy, dtype=float, copy=True)
+    width = None
+    try:
+        if frame_width is not None:
+            width = float(frame_width)
+        elif img is not None and hasattr(img, "shape") and len(img.shape) >= 2:
+            width = float(img.shape[1])
+        elif mirrored.size:
+            finite_x = mirrored[:, 0][np.isfinite(mirrored[:, 0])]
+            if finite_x.size:
+                width = float(np.max(finite_x)) + 1.0
+    except Exception:
+        width = None
+
+    if width is None or width <= 1.0:
+        return mirrored
+
+    mirrored[:, 0] = (width - 1.0) - mirrored[:, 0]
+    return mirrored
+
+
+
+def _relabel_aslr_result_for_left(result):
+    """Convert a mirrored-right ASLR result back to LEFT reporting labels."""
+    if not isinstance(result, dict):
+        return result
+
+    relabelled = copy.deepcopy(result)
+    metrics = relabelled.setdefault("metrics", {})
+    metrics["requested_side"] = "LEFT"
+    metrics["side"] = "LEFT"
+    metrics["side_identity_method"] = (
+        "left_capture_horizontally_mirrored_then_processed_through_right_pipeline"
+    )
+    metrics["source_orientation_requirement"] = (
+        "left_capture_horizontally_mirrored_then_processed_with_right_aslr_pipeline"
+    )
+    metrics["display_rotation_applied"] = "horizontal_mirror_before_right_pipeline"
+    metrics["mirror_processing_applied"] = True
+    metrics["mirror_processing_rule"] = (
+        "if_test_left_mirror_keypoints_first_then_run_exact_right_pipeline_then_relabel_left"
+    )
+    metrics["expected_resting_side_after_reporting"] = "RIGHT"
+
+    body_baseline = metrics.get("body_baseline")
+    if isinstance(body_baseline, dict):
+        body_baseline["side"] = "LEFT"
+
+    resting_limb_points = metrics.get("resting_limb_points")
+    if isinstance(resting_limb_points, dict):
+        resting_limb_points["expected_resting_side"] = "RIGHT"
+
+    flags = metrics.get("diagnostic_flags")
+    if isinstance(flags, list):
+        if "left_capture_mirrored_into_right_pipeline" not in flags:
+            flags.append("left_capture_mirrored_into_right_pipeline")
+
+    return relabelled
+
+
+
 def analyze_aslr(xy, conf, side="RIGHT", img=None, body_xy=None, body_conf=None):
     """ASLR hybrid analysis.
+
+    Stable parity rule:
+      * RIGHT: analyze normally.
+      * LEFT: mirror the keypoints first, run the exact RIGHT pipeline,
+        then relabel the reported result back to LEFT.
 
     `xy/conf` come from the selected original-or-rotated limb pass. The engine
     restores the V101.28 ankle-first reconstruction across both hip/knee labels.
     `body_xy/body_conf` always come from the original normalized photo.
     """
+    requested_side = str(side or "RIGHT").upper()
+    if requested_side == "LEFT":
+        mirrored_xy = _mirror_pose_xy_horizontally(xy, img=img)
+        mirrored_body_xy = (
+            _mirror_pose_xy_horizontally(body_xy, img=img) if body_xy is not None else None
+        )
+        mirrored_result = analyze_aslr_rotated_fullbody(
+            mirrored_xy,
+            conf,
+            side="RIGHT",
+            keypoint_min_conf=ASLR_KEYPOINT_MIN_CONF,
+            required_mean_conf=ASLR_REQUIRED_MEAN_CONF,
+            raised_knee_extension_min=ASLR_RAISED_KNEE_EXTENSION_MIN,
+            resting_knee_extension_min=ASLR_RESTING_KNEE_EXTENSION_MIN,
+            resting_leg_max_angle=ASLR_RESTING_LEG_MAX_ANGLE,
+            img=img,
+            body_xy=mirrored_body_xy,
+            body_conf=body_conf,
+        )
+        return _relabel_aslr_result_for_left(mirrored_result)
+
     return analyze_aslr_rotated_fullbody(
         xy,
         conf,
-        side=side,
+        side="RIGHT",
         keypoint_min_conf=ASLR_KEYPOINT_MIN_CONF,
         required_mean_conf=ASLR_REQUIRED_MEAN_CONF,
         raised_knee_extension_min=ASLR_RAISED_KNEE_EXTENSION_MIN,
@@ -3207,6 +3333,7 @@ def process_analysis_job(job_id: str):
     if supabase is None:
         return
 
+    _set_analysis_runtime_state(job_id, "starting")
     total_started = time.perf_counter()
     phases = {}
     job = None
@@ -3268,6 +3395,7 @@ def process_analysis_job(job_id: str):
             # Another web process or worker claimed this job first.
             return
 
+        _set_analysis_runtime_state(job_id, "processing")
         test_type = job.get("test_type")
         user_email = job.get("user_email")
         session_id = job.get("session_id")
@@ -3287,6 +3415,7 @@ def process_analysis_job(job_id: str):
                 test_type=test_type,
             )
             _complete_analysis_job(job_id, result_json, image_expires_at=None)
+            _set_analysis_runtime_state(job_id, "completed", result=result_json)
             image_path = str(job.get("image_path") or "").strip()
             if image_path:
                 try:
@@ -3369,6 +3498,7 @@ def process_analysis_job(job_id: str):
             result_json,
             image_expires_at=diagnostic_expiry,
         )
+        _set_analysis_runtime_state(job_id, "completed", result=result_json)
         phases["job_complete_ms"] = round((time.perf_counter() - phase_started) * 1000, 1)
         phases["total_ms"] = round((time.perf_counter() - total_started) * 1000, 1)
         logger.info(
@@ -3387,6 +3517,9 @@ def process_analysis_job(job_id: str):
                 pass
 
     except Exception as exc:
+        public_error = _public_analysis_error(exc)
+        runtime_result = exc.diagnostic_result if isinstance(exc, AnalysisWithDiagnosticsError) else None
+        _set_analysis_runtime_state(job_id, "failed", result=runtime_result, error_message=public_error)
         logger.exception(
             "analysis_job_failed job_id=%s session_id=%s test_type=%s",
             job_id,
@@ -3397,7 +3530,7 @@ def process_analysis_job(job_id: str):
             failure_update = {
                 "status": "failed",
                 "completed_at": utc_now_iso(),
-                "error_message": _public_analysis_error(exc),
+                "error_message": public_error,
             }
             if isinstance(exc, AnalysisWithDiagnosticsError):
                 failure_update["result_json"] = exc.diagnostic_result
@@ -3664,6 +3797,24 @@ def job_status(
     require_owned_session(user, str(job.get("session_id") or ""))
     current_status = str(job.get("status") or "").lower()
 
+    runtime_state = _get_analysis_runtime_state(job_id)
+    if current_status in {"queued", "processing"} and runtime_state:
+        runtime_status = str(runtime_state.get("status") or "").lower()
+        if runtime_status in {"completed", "failed"}:
+            return {
+                "job_id": job.get("id"),
+                "session_id": job.get("session_id"),
+                "user_email": job.get("user_email"),
+                "test_type": job.get("test_type"),
+                "status": runtime_status,
+                "result": runtime_state.get("result") or job.get("result_json"),
+                "error_message": runtime_state.get("error_message") or job.get("error_message"),
+                "created_at": job.get("created_at"),
+                "started_at": job.get("started_at"),
+                "completed_at": job.get("completed_at") or utc_now_iso(),
+                "status_source": "runtime_terminal_failsafe",
+            }
+
     # A processing job must not remain immortal. We never requeue it because
     # that can create competing YOLO runs. Once it is clearly stale, mark it
     # failed so the client stops polling and a deliberate retry can create a
@@ -3674,8 +3825,9 @@ def job_status(
             started_at = datetime.fromisoformat(str(started_raw).replace("Z", "+00:00"))
         except Exception:
             started_at = None
-        if started_at is not None and (datetime.now(timezone.utc) - started_at).total_seconds() >= 180:
+        if started_at is not None and (datetime.now(timezone.utc) - started_at).total_seconds() >= ANALYSIS_RUNTIME_TIMEOUT_SECONDS:
             stale_message = "Analysis timed out before completion. Please retry the photo once."
+            _set_analysis_runtime_state(job_id, "failed", error_message=stale_message)
             try:
                 _execute_with_transient_retry(
                     lambda: (
