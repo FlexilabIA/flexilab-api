@@ -156,6 +156,27 @@ class RetryJobRequest(BaseModel):
     reason: str = Field(min_length=3, max_length=500)
 
 
+class UserInviteCreate(BaseModel):
+    email: str = Field(min_length=5, max_length=254)
+    full_name: Optional[str] = Field(default=None, max_length=160)
+    language: str = "en"
+    account_type: str = "user"
+    plan_code: Optional[str] = None
+    screening_credits: int = Field(default=0, ge=0, le=1000)
+    access_ends_at: Optional[str] = None
+    reason: str = Field(min_length=3, max_length=500)
+
+
+class CreditAdjustment(BaseModel):
+    quantity: int = Field(ge=-1000, le=1000)
+    expires_at: Optional[str] = None
+    reason: str = Field(min_length=3, max_length=500)
+
+
+class AccessRevoke(BaseModel):
+    reason: str = Field(min_length=3, max_length=500)
+
+
 def create_operator_router(
     supabase_client: Any,
     health_provider: Optional[Callable[[], dict[str, Any]]] = None,
@@ -335,6 +356,174 @@ def create_operator_router(
             for row in rows
         ]
         return {"items": items, "page": safe_page, "page_size": safe_size, "total": _count(response, rows)}
+
+    @router.get("/users/{user_id}")
+    def user_detail(
+        user_id: str,
+        operator: dict[str, Any] = Depends(permission("users.read")),
+    ):
+        profile = supabase_client.table("profiles").select(
+            "id,email,full_name,language,account_status,onboarding_completed,created_at,updated_at"
+        ).eq("id", user_id).limit(1).execute()
+        if not profile.data:
+            raise HTTPException(status_code=404, detail="User profile not found.")
+        entitlement = supabase_client.table("entitlements").select(
+            "user_id,plan_code,source,status,program_access,workout_access,history_access,report_access,valid_from,valid_until,updated_at"
+        ).eq("user_id", user_id).limit(1).execute()
+        cycles = supabase_client.table("screening_credit_cycles").select(
+            "id,source,cycle_start,cycle_end,grace_expires_at,credits_granted,credits_used,created_at"
+        ).eq("user_id", user_id).order("created_at", desc=True).limit(100).execute()
+        cycle_rows = cycles.data or []
+        available = sum(max(0, int(r.get("credits_granted") or 0) - int(r.get("credits_used") or 0)) for r in cycle_rows)
+        grants = supabase_client.table("admin_grants").select(
+            "id,grant_type,granted_plan_code,quantity,starts_at,expires_at,reason,granted_by,revoked_at,created_at"
+        ).eq("user_id", user_id).order("created_at", desc=True).limit(50).execute()
+        latest = supabase_client.table("sessions").select(
+            "id,status,composite_score,created_at"
+        ).eq("user_id", user_id).order("created_at", desc=True).limit(1).execute()
+        trainer = supabase_client.table("trainer_profiles").select(
+            "user_id,status,company_name,created_at"
+        ).eq("user_id", user_id).limit(1).execute()
+        return {
+            "profile": profile.data[0],
+            "entitlement": entitlement.data[0] if entitlement.data else None,
+            "screening_credits": {"available": available, "cycles": cycle_rows},
+            "grants": grants.data or [],
+            "latest_screening": latest.data[0] if latest.data else None,
+            "trainer": trainer.data[0] if trainer.data else None,
+        }
+
+    @router.post("/users/invite")
+    def invite_user(
+        payload: UserInviteCreate,
+        operator: dict[str, Any] = Depends(permission("users.write")),
+    ):
+        email = payload.email.strip().lower()
+        if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
+            raise HTTPException(status_code=422, detail="Enter a valid email address.")
+        existing = supabase_client.table("profiles").select("id,email").ilike("email", email).limit(1).execute()
+        if existing.data:
+            raise HTTPException(status_code=409, detail="A FlexiLab account already exists for this email.")
+        language = "fr" if payload.language.strip().lower() == "fr" else "en"
+        account_type = payload.account_type.strip().lower()
+        if account_type not in {"user", "trainer"}:
+            raise HTTPException(status_code=422, detail="Account type must be user or trainer.")
+        try:
+            invited = supabase_client.auth.admin.invite_user_by_email(
+                email,
+                options={
+                    "redirect_to": f"{FRONTEND_URL}/reset-password",
+                    "data": {"full_name": payload.full_name or "", "language": language},
+                },
+            )
+            invited_user = getattr(invited, "user", None)
+            user_id = str(getattr(invited_user, "id", "") or "")
+            if not user_id and isinstance(invited, dict):
+                raw_user = invited.get("user") or {}
+                user_id = str(raw_user.get("id") or "")
+            if not user_id:
+                raise RuntimeError("Supabase did not return an invited user ID")
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail=f"Unable to send invitation: {exc}")
+        supabase_client.table("profiles").upsert({
+            "id": user_id, "email": email, "full_name": payload.full_name,
+            "language": language, "account_status": "active", "updated_at": _iso(),
+        }, on_conflict="id").execute()
+        if account_type == "trainer":
+            supabase_client.table("trainer_profiles").upsert({
+                "user_id": user_id, "status": "active", "updated_at": _iso(),
+            }, on_conflict="user_id").execute()
+        access_end = payload.access_ends_at or (_now() + timedelta(days=30)).isoformat()
+        if payload.plan_code:
+            supabase_client.table("admin_grants").insert({
+                "user_id": user_id, "grant_type": "pro_access",
+                "granted_plan_code": payload.plan_code, "starts_at": _iso(),
+                "expires_at": access_end, "reason": payload.reason, "granted_by": operator["id"],
+            }).execute()
+            supabase_client.table("entitlements").upsert({
+                "user_id": user_id, "plan_code": payload.plan_code, "source": "admin", "status": "active",
+                "program_access": True, "workout_access": True, "history_access": True,
+                "report_access": True, "can_generate_program": True, "valid_from": _iso(),
+                "valid_until": access_end, "updated_at": _iso(),
+            }, on_conflict="user_id").execute()
+        if payload.screening_credits > 0:
+            supabase_client.table("admin_grants").insert({
+                "user_id": user_id, "grant_type": "screening_credit", "quantity": payload.screening_credits,
+                "starts_at": _iso(), "expires_at": access_end, "reason": payload.reason, "granted_by": operator["id"],
+            }).execute()
+            supabase_client.table("screening_credit_cycles").insert({
+                "user_id": user_id, "subscription_id": None, "source": "operator_grant",
+                "cycle_start": _iso(), "cycle_end": access_end, "grace_expires_at": access_end,
+                "credits_granted": payload.screening_credits, "credits_used": 0,
+            }).execute()
+        audit(operator, "operator.user_invited", target_user_id=user_id, entity_type="profile", entity_id=user_id, after_data={
+            "email": email, "account_type": account_type, "plan_code": payload.plan_code,
+            "screening_credits": payload.screening_credits, "access_ends_at": access_end,
+        }, metadata={"reason": payload.reason})
+        return {"user_id": user_id, "email": email, "invite_sent": True}
+
+    @router.post("/users/{user_id}/credits/adjust")
+    def adjust_credits(
+        user_id: str,
+        payload: CreditAdjustment,
+        operator: dict[str, Any] = Depends(permission("users.write")),
+    ):
+        if payload.quantity == 0:
+            raise HTTPException(status_code=422, detail="Quantity cannot be zero.")
+        profile = supabase_client.table("profiles").select("id,email").eq("id", user_id).limit(1).execute()
+        if not profile.data:
+            raise HTTPException(status_code=404, detail="User profile not found.")
+        expires_at = payload.expires_at or (_now() + timedelta(days=3650)).isoformat()
+        if payload.quantity > 0:
+            supabase_client.table("screening_credit_cycles").insert({
+                "user_id": user_id, "subscription_id": None, "source": "operator_grant",
+                "cycle_start": _iso(), "cycle_end": expires_at, "grace_expires_at": expires_at,
+                "credits_granted": payload.quantity, "credits_used": 0,
+            }).execute()
+        else:
+            remaining = abs(payload.quantity)
+            cycles = supabase_client.table("screening_credit_cycles").select(
+                "id,credits_granted,credits_used,cycle_end,source"
+            ).eq("user_id", user_id).gt("cycle_end", _iso()).order("cycle_end", desc=False).execute()
+            total_available = sum(max(0, int(r.get("credits_granted") or 0)-int(r.get("credits_used") or 0)) for r in cycles.data or [])
+            if total_available < remaining:
+                raise HTTPException(status_code=409, detail=f"Only {total_available} unused credits are available.")
+            for row in cycles.data or []:
+                available = max(0, int(row.get("credits_granted") or 0)-int(row.get("credits_used") or 0))
+                take = min(available, remaining)
+                if take:
+                    supabase_client.table("screening_credit_cycles").update({
+                        "credits_used": int(row.get("credits_used") or 0) + take, "updated_at": _iso(),
+                    }).eq("id", row["id"]).execute()
+                    remaining -= take
+                if remaining == 0:
+                    break
+        grant = supabase_client.table("admin_grants").insert({
+            "user_id": user_id, "grant_type": "screening_credit", "quantity": payload.quantity,
+            "starts_at": _iso(), "expires_at": expires_at, "reason": payload.reason, "granted_by": operator["id"],
+        }).execute()
+        audit(operator, "operator.credits_adjusted", target_user_id=user_id, entity_type="screening_credit",
+              entity_id=str((grant.data or [{}])[0].get("id") or ""), after_data={"quantity": payload.quantity}, metadata={"reason": payload.reason})
+        return {"quantity": payload.quantity}
+
+    @router.post("/users/{user_id}/access/revoke")
+    def revoke_manual_access(
+        user_id: str,
+        payload: AccessRevoke,
+        operator: dict[str, Any] = Depends(permission("users.write")),
+    ):
+        entitlement = supabase_client.table("entitlements").select("*").eq("user_id", user_id).limit(1).execute()
+        current = entitlement.data[0] if entitlement.data else None
+        if not current or str(current.get("source") or "") != "admin":
+            raise HTTPException(status_code=409, detail="Only manually granted access can be revoked here. Paid access is protected.")
+        updated = supabase_client.table("entitlements").update({
+            "plan_code": "free", "source": "admin", "status": "active",
+            "program_access": False, "workout_access": False, "can_generate_program": False,
+            "valid_until": _iso(), "updated_at": _iso(),
+        }).eq("user_id", user_id).execute()
+        supabase_client.table("admin_grants").update({"revoked_at": _iso()}).eq("user_id", user_id).is_("revoked_at", "null").neq("grant_type", "screening_credit").execute()
+        audit(operator, "operator.manual_access_revoked", target_user_id=user_id, entity_type="entitlement", entity_id=user_id, before_data=current, after_data=(updated.data or [None])[0], metadata={"reason": payload.reason})
+        return {"entitlement": (updated.data or [None])[0]}
 
     @router.patch("/users/{user_id}/status")
     def update_user_status(
