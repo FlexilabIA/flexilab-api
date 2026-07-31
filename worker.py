@@ -30,6 +30,7 @@ MIN_FREE_MEMORY_MB = max(256, int(os.environ.get("ANALYSIS_WORKER_MIN_FREE_MEMOR
 MAX_MEMORY_PERCENT = min(95.0, max(50.0, float(os.environ.get("ANALYSIS_WORKER_MAX_MEMORY_PERCENT", "82"))))
 MAX_CPU_PERCENT = min(100.0, max(50.0, float(os.environ.get("ANALYSIS_WORKER_MAX_CPU_PERCENT", "90"))))
 STALE_PROCESSING_SECONDS = max(180, int(os.environ.get("ANALYSIS_WORKER_STALE_PROCESSING_SECONDS", "300")))
+IMAGE_DELETE_RETRIES = max(1, min(5, int(os.environ.get("FLEXILAB_ANALYSIS_IMAGE_DELETE_RETRIES", "3"))))
 ASLR_WEIGHT = 2
 LIGHT_WEIGHT = 1
 CAPACITY_UNITS = MAX_CONCURRENCY
@@ -48,6 +49,42 @@ if not SUPABASE_URL or not SUPABASE_KEY:
 def _log(event: str, **fields: object) -> None:
     payload = " ".join(f"{key}={value}" for key, value in fields.items())
     print(f"{event}{(' ' + payload) if payload else ''}", flush=True)
+
+
+def _delete_storage_object(client: Any, path: str, *, job_id: str) -> bool:
+    clean_path = str(path or "").strip()
+    if not clean_path:
+        return True
+    last_error: Exception | None = None
+    for attempt in range(1, IMAGE_DELETE_RETRIES + 1):
+        try:
+            client.storage.from_(ANALYSIS_STORAGE_BUCKET).remove([clean_path])
+            _log(
+                "worker_image_deleted",
+                job_id=job_id,
+                path=clean_path,
+                attempt=attempt,
+            )
+            return True
+        except Exception as exc:
+            last_error = exc
+            _log(
+                "worker_image_delete_retry",
+                job_id=job_id,
+                path=clean_path,
+                attempt=f"{attempt}/{IMAGE_DELETE_RETRIES}",
+                error=repr(exc),
+            )
+            if attempt < IMAGE_DELETE_RETRIES:
+                time.sleep(0.25 * attempt)
+    _log(
+        "worker_image_delete_failed",
+        job_id=job_id,
+        path=clean_path,
+        retries=IMAGE_DELETE_RETRIES,
+        error=repr(last_error),
+    )
+    return False
 
 
 def _memory_snapshot() -> tuple[float, float]:
@@ -244,13 +281,9 @@ def _cleanup_and_recover(client: Any) -> None:
     )
     for row in expired.data or []:
         path = str(row.get("image_path") or "").strip()
-        storage_removed = not path
-        if path:
-            try:
-                client.storage.from_(ANALYSIS_STORAGE_BUCKET).remove([path])
-                storage_removed = True
-            except Exception:
-                storage_removed = False
+        storage_removed = _delete_storage_object(
+            client, path, job_id=str(row.get("id") or "")
+        )
         changes: dict[str, object] = {"image_base64": None}
         if storage_removed:
             changes.update({"image_path": None, "image_expires_at": None})

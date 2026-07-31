@@ -101,6 +101,8 @@ ANALYSIS_INLINE_ENABLED = False
 ANALYSIS_MAX_EDGE = max(640, min(1920, int(os.environ.get("FLEXILAB_ANALYSIS_MAX_EDGE", "960"))))
 POSE_INFERENCE_IMGSZ = max(320, min(1280, int(os.environ.get("FLEXILAB_POSE_IMGSZ", "640"))))
 DIAGNOSTIC_RETENTION_HOURS = max(0, min(168, int(os.environ.get("FLEXILAB_DIAGNOSTIC_RETENTION_HOURS", "0"))))
+ANALYSIS_IMAGE_TTL_MINUTES = max(15, min(120, int(os.environ.get("FLEXILAB_ANALYSIS_IMAGE_TTL_MINUTES", "60"))))
+ANALYSIS_IMAGE_DELETE_RETRIES = max(1, min(5, int(os.environ.get("FLEXILAB_ANALYSIS_IMAGE_DELETE_RETRIES", "3"))))
 VISION_QA_MODE = os.environ.get("FLEXILAB_VISION_QA_MODE", "off").strip().lower()
 VISION_QA_VALIDATION_ENABLED = False  # Hotfix: disable composite QA overlay generation to reduce non-essential image processing.
 ASLR_KEYPOINT_MIN_CONF = max(0.05, min(0.80, float(os.environ.get("FLEXILAB_ASLR_KEYPOINT_MIN_CONF", "0.20"))))
@@ -212,6 +214,49 @@ ASLR_POSE_MODEL_INFERENCE_LOCK = threading.RLock()
 ANALYSIS_RUNTIME_STATE = {}
 ANALYSIS_RUNTIME_STATE_LOCK = threading.RLock()
 ANALYSIS_RUNTIME_TIMEOUT_SECONDS = max(60, min(180, int(os.environ.get("FLEXILAB_ANALYSIS_RUNTIME_TIMEOUT_SECONDS", "120"))))
+
+def _delete_analysis_image(image_path: str, *, job_id: str | None = None) -> bool:
+    """Delete one queued image with bounded retries and visible observability."""
+    path = str(image_path or "").strip()
+    if not path or supabase is None:
+        return not path
+    last_error: Exception | None = None
+    for attempt in range(1, ANALYSIS_IMAGE_DELETE_RETRIES + 1):
+        try:
+            supabase.storage.from_(ANALYSIS_STORAGE_BUCKET).remove([path])
+            logger.info(
+                "analysis_image_deleted job_id=%s path=%s attempt=%s",
+                job_id, path, attempt,
+            )
+            return True
+        except Exception as exc:
+            last_error = exc
+            logger.warning(
+                "analysis_image_delete_retry job_id=%s path=%s attempt=%s/%s error=%r",
+                job_id, path, attempt, ANALYSIS_IMAGE_DELETE_RETRIES, exc,
+            )
+            if attempt < ANALYSIS_IMAGE_DELETE_RETRIES:
+                time.sleep(0.25 * attempt)
+    logger.error(
+        "analysis_image_delete_failed job_id=%s path=%s retries=%s error=%r",
+        job_id, path, ANALYSIS_IMAGE_DELETE_RETRIES, last_error,
+    )
+    return False
+
+
+def _clear_analysis_image_reference(job_id: str, image_path: str) -> bool:
+    removed = _delete_analysis_image(image_path, job_id=job_id)
+    changes = {"image_base64": None}
+    if removed:
+        changes.update({"image_path": None, "image_expires_at": None})
+    else:
+        changes["image_expires_at"] = utc_now_iso()
+    try:
+        supabase.table("analysis_jobs").update(changes).eq("id", job_id).execute()
+    except Exception:
+        logger.exception("analysis_image_reference_update_failed job_id=%s", job_id)
+    return removed
+
 
 def _set_analysis_runtime_state(job_id, status, *, result=None, error_message=None):
     with ANALYSIS_RUNTIME_STATE_LOCK:
@@ -3420,11 +3465,7 @@ def process_analysis_job(job_id: str):
             _set_analysis_runtime_state(job_id, "completed", result=result_json)
             image_path = str(job.get("image_path") or "").strip()
             if image_path:
-                try:
-                    supabase.storage.from_(ANALYSIS_STORAGE_BUCKET).remove([image_path])
-                    supabase.table("analysis_jobs").update({"image_path": None}).eq("id", job_id).execute()
-                except Exception:
-                    pass
+                _clear_analysis_image_reference(job_id, image_path)
             return
 
         phase_started = time.perf_counter()
@@ -3512,11 +3553,7 @@ def process_analysis_job(job_id: str):
         )
 
         if image_path and not keep_diagnostic_image:
-            try:
-                supabase.storage.from_(ANALYSIS_STORAGE_BUCKET).remove([image_path])
-                supabase.table("analysis_jobs").update({"image_path": None}).eq("id", job_id).execute()
-            except Exception:
-                pass
+            _clear_analysis_image_reference(job_id, image_path)
 
     except Exception as exc:
         public_error = _public_analysis_error(exc)
@@ -3542,6 +3579,9 @@ def process_analysis_job(job_id: str):
             )
         except Exception:
             logger.exception("analysis_job_failure_status_update_failed job_id=%s", job_id)
+        failed_image_path = str((job or {}).get("image_path") or "").strip()
+        if failed_image_path and DIAGNOSTIC_RETENTION_HOURS <= 0:
+            _clear_analysis_image_reference(job_id, failed_image_path)
 
 
 @app.post("/submit_analysis")
@@ -3683,10 +3723,15 @@ async def submit_analysis(
                 "upsert": "false",
             },
         )
-    except Exception:
-        # Compatibility fallback while the private Storage bucket is being deployed.
-        image_path = None
-        image_base64_fallback = base64.b64encode(img_bytes).decode("utf-8")
+    except Exception as exc:
+        logger.exception(
+            "analysis_image_upload_failed session_id=%s test_type=%s path=%s",
+            session_id, test_type, image_path,
+        )
+        raise HTTPException(
+            status_code=503,
+            detail="The screening image could not be queued securely. Please retry.",
+        ) from exc
     phases["storage_upload_ms"] = round((time.perf_counter() - phase_started) * 1000, 1)
 
     job_intake_data = dict(intake_data)
@@ -3705,7 +3750,7 @@ async def submit_analysis(
         "image_base64": image_base64_fallback,
         "image_expires_at": (
             datetime.now(timezone.utc)
-            + timedelta(hours=max(6, DIAGNOSTIC_RETENTION_HOURS))
+            + timedelta(minutes=ANALYSIS_IMAGE_TTL_MINUTES)
         ).isoformat(),
         "intake_json": job_intake_data,
     }
@@ -3745,10 +3790,12 @@ async def submit_analysis(
         }
         if response["status"] == "completed" and existing.get("result_json"):
             response["result"] = existing.get("result_json")
+        _delete_analysis_image(image_path, job_id=str(existing.get("id") or ""))
         return response
 
     phases["job_insert_ms"] = round((time.perf_counter() - phase_started) * 1000, 1)
     if not resp.data:
+        _delete_analysis_image(image_path)
         raise HTTPException(status_code=500, detail="Unable to queue the photo analysis.")
 
     job_id = resp.data[0]["id"]
