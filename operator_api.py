@@ -6,6 +6,8 @@ import json
 import os
 import re
 import time
+import urllib.error
+import urllib.request
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Optional
 
@@ -21,6 +23,57 @@ FRONTEND_URL = os.environ.get(
 ).rstrip("/")
 STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY", "").strip()
 stripe.api_key = STRIPE_SECRET_KEY
+
+
+PLAN_INCLUDED_SCREENING_CREDITS: dict[str, int] = {
+    "pro_monthly": 2,
+    "pro_three_month": 6,
+    "pro_annual": 24,
+    "corporate": 0,
+}
+
+
+def _plan_label(plan_code: str) -> str:
+    return {
+        "pro_monthly": "FlexiLab Pro — monthly access",
+        "pro_three_month": "FlexiLab Pro — 3 months",
+        "pro_annual": "FlexiLab Pro — annual access",
+        "corporate": "FlexiLab Corporate",
+    }.get(plan_code, plan_code.replace("_", " ").title())
+
+
+def _send_access_grant_email(*, email: str, full_name: str, plan_code: str, expires_at: str, credits: int) -> bool:
+    api_key = os.environ.get("RESEND_API_KEY", "").strip()
+    if not api_key:
+        return False
+    sender = os.environ.get("FLEXILAB_EMAIL_FROM", "FlexiLab <support@flexilab.app>").strip()
+    name = (full_name or "there").strip()
+    plan = _plan_label(plan_code)
+    subject = "Your FlexiLab access has been activated"
+    html = f"""
+    <div style="font-family:Arial,sans-serif;line-height:1.6;color:#0f172a">
+      <h2>Your FlexiLab access is active</h2>
+      <p>Hello {name},</p>
+      <p>Your <strong>{plan}</strong> access has been granted by the FlexiLab team.</p>
+      <p><strong>Access valid until:</strong> {expires_at[:10]}<br>
+      <strong>Screening credits included:</strong> {credits}</p>
+      <p>You can sign in and begin using your access now.</p>
+      <p><a href="{FRONTEND_URL}/login">Open FlexiLab</a></p>
+      <p>FlexiLab Support<br>support@flexilab.app</p>
+    </div>
+    """
+    body = json.dumps({"from": sender, "to": [email], "subject": subject, "html": html}).encode("utf-8")
+    request = urllib.request.Request(
+        "https://api.resend.com/emails",
+        data=body,
+        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=12) as response:
+            return 200 <= int(response.status) < 300
+    except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, ValueError):
+        return False
 
 ROLE_PERMISSIONS: dict[str, set[str]] = {
     "super_admin": {"*"},
@@ -545,6 +598,7 @@ def create_operator_router(
     def create_grant(
         user_id: str,
         payload: GrantCreate,
+        background_tasks: BackgroundTasks,
         operator: dict[str, Any] = Depends(permission("users.write")),
     ):
         grant_type = payload.grant_type.strip().lower()
@@ -575,11 +629,15 @@ def create_operator_router(
                 "credits_used": 0,
             }).execute()
         else:
+            profile = supabase_client.table("profiles").select("id,email,full_name").eq("id", user_id).limit(1).execute()
+            if not profile.data:
+                raise HTTPException(status_code=404, detail="User profile not found.")
             existing_ent = supabase_client.table("entitlements").select("*").eq("user_id", user_id).limit(1).execute()
             current = existing_ent.data[0] if existing_ent.data else {}
+            plan_code = payload.granted_plan_code or current.get("plan_code") or "free"
             next_ent = {
                 "user_id": user_id,
-                "plan_code": payload.granted_plan_code or current.get("plan_code") or "free",
+                "plan_code": plan_code,
                 "source": "admin",
                 "status": "active",
                 "program_access": grant_type in {"pro_access", "program_access"} or bool(current.get("program_access")),
@@ -592,8 +650,41 @@ def create_operator_router(
                 "updated_at": _iso(),
             }
             supabase_client.table("entitlements").upsert(next_ent, on_conflict="user_id").execute()
-        audit(operator, "operator.grant_created", target_user_id=user_id, entity_type="admin_grant", entity_id=str((result.data or [{}])[0].get("id") or ""), after_data=grant_row)
-        return {"grant": (result.data or [grant_row])[0]}
+
+            included_credits = PLAN_INCLUDED_SCREENING_CREDITS.get(str(plan_code), 0) if grant_type == "pro_access" else 0
+            if included_credits > 0:
+                supabase_client.table("screening_credit_cycles").insert({
+                    "user_id": user_id,
+                    "subscription_id": None,
+                    "source": "operator_plan_grant",
+                    "cycle_start": _iso(),
+                    "cycle_end": expires_at,
+                    "grace_expires_at": expires_at,
+                    "credits_granted": included_credits,
+                    "credits_used": 0,
+                }).execute()
+                supabase_client.table("admin_grants").insert({
+                    "user_id": user_id,
+                    "grant_type": "screening_credit",
+                    "quantity": included_credits,
+                    "starts_at": _iso(),
+                    "expires_at": expires_at,
+                    "reason": f"Included with {plan_code} access: {payload.reason}",
+                    "granted_by": operator["id"],
+                }).execute()
+
+            recipient = profile.data[0]
+            if grant_type == "pro_access" and recipient.get("email"):
+                background_tasks.add_task(
+                    _send_access_grant_email,
+                    email=str(recipient.get("email")),
+                    full_name=str(recipient.get("full_name") or ""),
+                    plan_code=str(plan_code),
+                    expires_at=expires_at,
+                    credits=included_credits,
+                )
+        audit(operator, "operator.grant_created", target_user_id=user_id, entity_type="admin_grant", entity_id=str((result.data or [{}])[0].get("id") or ""), after_data={**grant_row, "included_screening_credits": locals().get("included_credits", 0)})
+        return {"grant": (result.data or [grant_row])[0], "included_screening_credits": locals().get("included_credits", 0), "email_queued": bool(grant_type == "pro_access" and os.environ.get("RESEND_API_KEY"))}
 
     @router.put("/users/{user_id}/role")
     def update_role(
