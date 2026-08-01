@@ -460,7 +460,7 @@ async def request_timing_middleware(request, call_next):
 def health():
     return {
         "ok": True,
-        "patch_version": "V101.39.2-shoulder-protocol-angle-sign-fix",
+        "patch_version": "V101.40.1-screening-retake-quality-no-shoulder-overlay",
         "base_patch": "V101.35.31-aslr-left-image-mirror-before-yolo",
         "release_policy": "minimal_shoulder_protocol_directed_angle_change_with_existing_stability_preserved",
         "production_formula_changes_allowed": True,
@@ -1245,6 +1245,89 @@ def _attach_screening_soft_warnings(result, test_type):
             )
         elif knee_is_low:
             metrics.setdefault("diagnostic_flags", []).append("knee_landmark_secondary_uncertainty_no_user_warning")
+
+    # Cross-test, non-blocking image and pose reliability checks. These do not
+    # change the score and intentionally avoid claiming that clothing colour or
+    # furniture caused an error. They surface measurable risk signals so the
+    # user or trainer can inspect the result and choose a retake.
+    person_detection = metrics.get("person_detection") or {}
+    person_count = int(person_detection.get("person_count") or 0)
+    if person_count > 1:
+        add(
+            "multiple_people_detected",
+            "Plusieurs personnes ou silhouettes ont été détectées dans l’image.",
+            "Multiple people or person-like silhouettes were detected in the image.",
+            "Le squelette sélectionné peut ne pas correspondre entièrement au sujet évalué.",
+            "The selected skeleton may not correspond entirely to the assessed person.",
+        )
+
+    image_quality = metrics.get("image_quality_diagnostics") or {}
+    blur = float(image_quality.get("blur_laplacian_variance") or 0.0)
+    brightness = float(image_quality.get("brightness_mean") or 0.0)
+    if blur and blur < 55.0:
+        add(
+            "image_blur_moderate",
+            "La photo semble légèrement floue.",
+            "The photo appears slightly blurred.",
+            "Certains repères articulaires peuvent être moins précis.",
+            "Some joint landmarks may be less precise.",
+        )
+    if brightness and (brightness < 45.0 or brightness > 220.0):
+        add(
+            "image_exposure_moderate",
+            "L’éclairage de la photo est peu favorable.",
+            "The photo exposure is not ideal.",
+            "Les contours du corps peuvent être moins faciles à distinguer.",
+            "Body contours may be harder to distinguish.",
+        )
+
+    analysis_pass = metrics.get("analysis_pass") or {}
+    coverage = float(analysis_pass.get("person_coverage") or 0.0)
+    if coverage and coverage < 0.10:
+        add(
+            "subject_too_small",
+            "La personne occupe une petite partie de l’image.",
+            "The person occupies a small part of the image.",
+            "Les repères peuvent être moins stables; rapprochez légèrement la caméra tout en gardant le corps entier visible.",
+            "Landmarks may be less stable; move the camera slightly closer while keeping the full body visible.",
+        )
+    elif coverage > 0.78:
+        add(
+            "subject_too_close",
+            "La personne est très proche du cadre.",
+            "The person is very close to the frame.",
+            "Une main, un pied ou un autre repère peut être coupé ou placé près du bord.",
+            "A hand, foot, or another landmark may be cropped or too close to the edge.",
+        )
+
+    kp = metrics.get("keypoint_confidence") or {}
+    numeric_kp = []
+    for value in kp.values():
+        try:
+            numeric_kp.append(float(value))
+        except (TypeError, ValueError):
+            continue
+    if numeric_kp and min(numeric_kp) < 0.30:
+        add(
+            "required_landmark_low_confidence",
+            "Au moins un repère nécessaire est moins net que les autres.",
+            "At least one required landmark is less clear than the others.",
+            "Un vêtement, un objet, le cadrage ou le contraste avec l’arrière-plan peut influencer l’estimation.",
+            "Clothing, an object, framing, or low contrast with the background may influence the estimate.",
+        )
+
+    # De-duplicate warnings when a test-specific and a generic rule describe the
+    # same risk through different metrics.
+    deduped = []
+    seen_codes = set()
+    for warning in warnings:
+        code = str(warning.get("code") or "")
+        if code and code in seen_codes:
+            continue
+        if code:
+            seen_codes.add(code)
+        deduped.append(warning)
+    warnings = deduped
 
     metrics["screening_validation"] = {
         "status": "measurable_with_warning" if warnings else "measurable",
@@ -3395,7 +3478,7 @@ def run_yolo_analysis_from_bytes(img_bytes, test_type, capture_metadata=None):
                 "metrics": rejection_metrics,
                 "thresholds": {},
             }
-            if _vision_qa_enabled_for_test(test_type):
+            if _vision_qa_enabled_for_test(test_type) and bool((capture_metadata or {}).get("vision_qa_requested")):
                 rejected_result["metrics"]["vision_qa"] = build_vision_qa_payload(
                     img,
                     xy,
@@ -3413,7 +3496,6 @@ def run_yolo_analysis_from_bytes(img_bytes, test_type, capture_metadata=None):
         raise ValueError("Invalid test_type")
 
     _attach_measurement_points(result, test_type, xy)
-    _attach_screening_soft_warnings(result, test_type)
     result.setdefault("metrics", {})["detection_confidence_threshold"] = detection_threshold
     result["metrics"]["person_detection"] = {
         "person_count": int(len(first_boxes)),
@@ -3430,8 +3512,9 @@ def run_yolo_analysis_from_bytes(img_bytes, test_type, capture_metadata=None):
         "analysis_max_edge": ANALYSIS_MAX_EDGE,
         "reload_count": ASLR_POSE_MODEL_RELOAD_COUNT if is_aslr else POSE_MODEL_RELOAD_COUNT,
     }
+    _attach_screening_soft_warnings(result, test_type)
 
-    if _vision_qa_enabled_for_test(test_type):
+    if _vision_qa_enabled_for_test(test_type) and bool((capture_metadata or {}).get("vision_qa_requested")):
         result["metrics"]["vision_qa"] = build_vision_qa_payload(
             img,
             final_xy,
@@ -3528,11 +3611,12 @@ def process_analysis_job(job_id: str):
         intake_data, capture_metadata = _split_job_intake_and_capture_metadata(
             job.get("intake_json")
         )
+        retake_requested = bool((capture_metadata or {}).get("retake_requested"))
 
         # Recovery path: a previous attempt may have inserted the authoritative
         # screening row and then failed while updating a non-authoritative cache.
         existing_screening = _find_existing_screening(session_id, test_type)
-        if existing_screening:
+        if existing_screening and not retake_requested:
             result_json = _analysis_result_from_screening(existing_screening, intake_data)
             _update_session_score_best_effort(
                 session_id,
@@ -3584,10 +3668,24 @@ def process_analysis_job(job_id: str):
 
         phase_started = time.perf_counter()
         try:
-            _execute_with_transient_retry(
-                lambda: supabase.table("screenings").insert(screening_row).execute(),
-                label="screening_insert",
-            )
+            existing_for_retake = _find_existing_screening(session_id, test_type) if retake_requested else None
+            if existing_for_retake and existing_for_retake.get("id"):
+                replacement_row = dict(screening_row)
+                replacement_row.pop("id", None)
+                _execute_with_transient_retry(
+                    lambda: (
+                        supabase.table("screenings")
+                        .update(replacement_row)
+                        .eq("id", existing_for_retake["id"])
+                        .execute()
+                    ),
+                    label="screening_retake_replace",
+                )
+            else:
+                _execute_with_transient_retry(
+                    lambda: supabase.table("screenings").insert(screening_row).execute(),
+                    label="screening_insert",
+                )
             result_json = _analysis_result_from_runtime(
                 user_email, session_id, test_type, result, intake_data
             )
