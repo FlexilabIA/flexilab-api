@@ -460,10 +460,10 @@ async def request_timing_middleware(request, call_next):
 def health():
     return {
         "ok": True,
-        "patch_version": "V101.38.0-shoulder-yolo-diagnostic-overlay",
+        "patch_version": "V101.39.1-shoulder-protocol-directed-angle",
         "base_patch": "V101.35.31-aslr-left-image-mirror-before-yolo",
-        "release_policy": "formulas_frozen_ephemeral_shoulder_diagnostic_overlay",
-        "production_formula_changes_allowed": False,
+        "release_policy": "minimal_shoulder_protocol_directed_angle_change_with_existing_stability_preserved",
+        "production_formula_changes_allowed": True,
         "process_role": PROCESS_ROLE,
         "analysis_execution_policy": "worker_only",
         "inline_analysis_enabled": False,
@@ -886,14 +886,43 @@ def analyze_shoulder(xy, conf, side="RIGHT"):
     arm_point = wr if wr_c >= 0.25 else el
     arm_point_used = "WRIST" if wr_c >= 0.25 else "ELBOW_FALLBACK"
     arm_c = wr_c if wr_c >= 0.25 else el_c
-    v_trunk = sh - hip
+
+    # Preserve the validated shoulder geometry and use the screening protocol to
+    # disambiguate only the small over-vertical range. The right and left tests
+    # are captured as mirrored views, so their expected cross-product signs are
+    # opposite. Facial landmarks are deliberately not required: the raised arm
+    # may hide the nose or ear in users with limited mobility or larger bodies.
+    v_trunk_up = sh - hip
+    v_trunk_down = hip - sh
     v_arm = arm_point - sh
-    denom = float(np.linalg.norm(v_trunk) * np.linalg.norm(v_arm))
+    denom = float(np.linalg.norm(v_trunk_up) * np.linalg.norm(v_arm))
+    shoulder_flexion_base = 0.0
     shoulder_flexion = 0.0
+    protocol_branch = "DIRECT_0_180"
+    signed_cross = 0.0
+    over_vertical_candidate = False
+
     if denom > 1e-6:
-        cosang = max(-1.0, min(1.0, float(np.dot(v_trunk, v_arm) / denom)))
-        shoulder_flexion = 180.0 - float(math.degrees(math.acos(cosang)))
-    shoulder_flexion = max(0.0, min(180.0, shoulder_flexion))
+        cosang = max(-1.0, min(1.0, float(np.dot(v_trunk_up, v_arm) / denom)))
+        shoulder_flexion_base = 180.0 - float(math.degrees(math.acos(cosang)))
+
+        # 2-D cross product between the downward trunk reference and the arm.
+        # In image coordinates, the expected sign is mirrored between tests.
+        signed_cross = float(v_trunk_down[0] * v_arm[1] - v_trunk_down[1] * v_arm[0])
+        expected_over_vertical_sign = -1.0 if str(side).upper() == "RIGHT" else 1.0
+        reflex_candidate = 360.0 - shoulder_flexion_base
+        over_vertical_candidate = (
+            signed_cross * expected_over_vertical_sign > 0.0
+            and 180.0 < reflex_candidate <= 210.0
+        )
+        if over_vertical_candidate:
+            shoulder_flexion = reflex_candidate
+            protocol_branch = f"{str(side).upper()}_PROTOCOL_OVER_VERTICAL"
+        else:
+            shoulder_flexion = shoulder_flexion_base
+
+    shoulder_flexion_base = max(0.0, min(180.0, shoulder_flexion_base))
+    shoulder_flexion = max(0.0, min(210.0, shoulder_flexion))
 
     elbow_extension = float(selected["elbow_extension_angle"])
     confidence = max(0.0, min(1.0, float((sh_c + arm_c + hip_c) / 3.0)))
@@ -902,11 +931,11 @@ def analyze_shoulder(xy, conf, side="RIGHT"):
     margin = float(selected["score"] - candidates[1]["score"]) if len(candidates) > 1 else float(selected["score"])
 
     shoulder_thr = make_thresholds(
-        "deg", 0, 180,
+        "deg", 0, 210,
         [
             {"label": "Red", "min": 0, "max": 160, "color": "red"},
             {"label": "Yellow", "min": 160, "max": 175, "color": "yellow"},
-            {"label": "Green", "min": 175, "max": 180, "color": "green"},
+            {"label": "Green", "min": 175, "max": 210, "color": "green"},
         ],
         shoulder_flexion,
     )
@@ -916,6 +945,11 @@ def analyze_shoulder(xy, conf, side="RIGHT"):
         "confidence": round(confidence, 3),
         "metrics": {
             "shoulder_flexion_angle": round(shoulder_flexion, 2),
+            "shoulder_flexion_base_angle": round(shoulder_flexion_base, 2),
+            "angle_protocol_branch": protocol_branch,
+            "protocol_over_vertical_applied": bool(over_vertical_candidate),
+            "protocol_cross_product": round(signed_cross, 4),
+            "angle_method": "existing_trunk_to_arm_geometry_plus_test_specific_over_vertical_disambiguation",
             "side": side,
             "requested_side": side,
             "detected_coco_chain": selected["label"],
