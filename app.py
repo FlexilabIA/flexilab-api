@@ -103,8 +103,22 @@ POSE_INFERENCE_IMGSZ = max(320, min(1280, int(os.environ.get("FLEXILAB_POSE_IMGS
 DIAGNOSTIC_RETENTION_HOURS = max(0, min(168, int(os.environ.get("FLEXILAB_DIAGNOSTIC_RETENTION_HOURS", "0"))))
 ANALYSIS_IMAGE_TTL_MINUTES = max(15, min(120, int(os.environ.get("FLEXILAB_ANALYSIS_IMAGE_TTL_MINUTES", "60"))))
 ANALYSIS_IMAGE_DELETE_RETRIES = max(1, min(5, int(os.environ.get("FLEXILAB_ANALYSIS_IMAGE_DELETE_RETRIES", "3"))))
-VISION_QA_MODE = os.environ.get("FLEXILAB_VISION_QA_MODE", "off").strip().lower()
-VISION_QA_VALIDATION_ENABLED = False  # Hotfix: disable composite QA overlay generation to reduce non-essential image processing.
+VISION_QA_MODE = os.environ.get("FLEXILAB_VISION_QA_MODE", "shoulder").strip().lower()
+VISION_QA_ONE_TIME_DELIVERY = os.environ.get("FLEXILAB_VISION_QA_ONE_TIME_DELIVERY", "true").strip().lower() not in {"0", "false", "no", "off"}
+
+def _vision_qa_enabled_for_test(test_type):
+    """Enable ephemeral YOLO overlays only for the configured diagnostic scope."""
+    normalized_mode = VISION_QA_MODE.replace("-", "_")
+    normalized_test = str(test_type or "").strip().lower()
+    if normalized_mode in {"all", "on", "validation", "true", "1"}:
+        return True
+    if normalized_mode in {"shoulder", "shoulders", "shoulder_only"}:
+        return normalized_test in {"shoulder_right", "shoulder_left"}
+    if normalized_mode in {"aslr", "aslr_only"}:
+        return normalized_test.startswith("aslr_")
+    return False
+
+VISION_QA_VALIDATION_ENABLED = VISION_QA_MODE not in {"", "off", "false", "0", "none"}
 ASLR_KEYPOINT_MIN_CONF = max(0.05, min(0.80, float(os.environ.get("FLEXILAB_ASLR_KEYPOINT_MIN_CONF", "0.20"))))
 ASLR_REQUIRED_MEAN_CONF = max(ASLR_KEYPOINT_MIN_CONF, min(0.90, float(os.environ.get("FLEXILAB_ASLR_REQUIRED_MEAN_CONF", "0.35"))))
 ASLR_RAISED_KNEE_EXTENSION_MIN = max(135.0, min(175.0, float(os.environ.get("FLEXILAB_ASLR_RAISED_KNEE_EXTENSION_MIN", "155"))))
@@ -446,9 +460,9 @@ async def request_timing_middleware(request, call_next):
 def health():
     return {
         "ok": True,
-        "patch_version": "V101.35.37-complete-six-test-history-line-restore",
+        "patch_version": "V101.38.0-shoulder-yolo-diagnostic-overlay",
         "base_patch": "V101.35.31-aslr-left-image-mirror-before-yolo",
-        "release_policy": "launch_stable_formulas_frozen_validation_overlays_disabled",
+        "release_policy": "formulas_frozen_ephemeral_shoulder_diagnostic_overlay",
         "production_formula_changes_allowed": False,
         "process_role": PROCESS_ROLE,
         "analysis_execution_policy": "worker_only",
@@ -497,9 +511,10 @@ def health():
             "delivery": "ephemeral_job_result_only",
             "mode": VISION_QA_MODE,
             "validation_enabled": VISION_QA_VALIDATION_ENABLED,
-            "enabled_by_capture_metadata": True,
-            "all_tests_enabled_in_validation_mode": True,
-            "aslr_enabled": VISION_QA_VALIDATION_ENABLED,
+            "enabled_scope": VISION_QA_MODE,
+            "shoulder_enabled": _vision_qa_enabled_for_test("shoulder_right"),
+            "aslr_enabled": _vision_qa_enabled_for_test("aslr_right"),
+            "one_time_delivery": VISION_QA_ONE_TIME_DELIVERY,
             "persisted_to_screenings": False,
         },
         "runtime_versions": RUNTIME_PACKAGE_VERSIONS,
@@ -2481,6 +2496,36 @@ def _without_ephemeral_vision_qa(result):
     return persistent
 
 
+def _deliver_and_scrub_vision_qa(job_id, result_json):
+    """Return the overlay once, then remove the composite from the queued job row.
+
+    The authoritative screening row never contains the overlay. This additional
+    scrub prevents the diagnostic composite from remaining in analysis_jobs after
+    the frontend receives it. Failures are logged and never block screening UX.
+    """
+    if not VISION_QA_ONE_TIME_DELIVERY or not isinstance(result_json, dict):
+        return result_json
+    metrics = result_json.get("metrics")
+    if not isinstance(metrics, dict) or "vision_qa" not in metrics:
+        return result_json
+
+    scrubbed = _without_ephemeral_vision_qa(result_json)
+    try:
+        _execute_with_transient_retry(
+            lambda: (
+                supabase.table("analysis_jobs")
+                .update({"result_json": scrubbed})
+                .eq("id", job_id)
+                .execute()
+            ),
+            label="vision_qa_one_time_scrub",
+        )
+        logger.info("vision_qa_delivered_and_scrubbed job_id=%s", job_id)
+    except Exception:
+        logger.exception("vision_qa_scrub_failed job_id=%s", job_id)
+    return result_json
+
+
 def detect_pose_with_fallback(img, test_type, inference_imgsz=None):
     """Run YOLO pose inference under one model lock with one safe reload."""
     global model, POSE_MODEL_LOAD_ERROR, POSE_MODEL_RELOAD_COUNT
@@ -3316,7 +3361,7 @@ def run_yolo_analysis_from_bytes(img_bytes, test_type, capture_metadata=None):
                 "metrics": rejection_metrics,
                 "thresholds": {},
             }
-            if VISION_QA_VALIDATION_ENABLED:
+            if _vision_qa_enabled_for_test(test_type):
                 rejected_result["metrics"]["vision_qa"] = build_vision_qa_payload(
                     img,
                     xy,
@@ -3352,7 +3397,7 @@ def run_yolo_analysis_from_bytes(img_bytes, test_type, capture_metadata=None):
         "reload_count": ASLR_POSE_MODEL_RELOAD_COUNT if is_aslr else POSE_MODEL_RELOAD_COUNT,
     }
 
-    if VISION_QA_VALIDATION_ENABLED:
+    if _vision_qa_enabled_for_test(test_type):
         result["metrics"]["vision_qa"] = build_vision_qa_payload(
             img,
             final_xy,
@@ -3362,7 +3407,7 @@ def run_yolo_analysis_from_bytes(img_bytes, test_type, capture_metadata=None):
             test_type,
             analysis_pass=analysis_pass,
         )
-        result["metrics"]["vision_qa_mode"] = "validation" if VISION_QA_VALIDATION_ENABLED else "requested"
+        result["metrics"]["vision_qa_mode"] = VISION_QA_MODE
     else:
         result["metrics"]["vision_qa_mode"] = "off"
 
@@ -3852,7 +3897,9 @@ def job_status(
                 "user_email": job.get("user_email"),
                 "test_type": job.get("test_type"),
                 "status": runtime_status,
-                "result": runtime_state.get("result") or job.get("result_json"),
+                "result": _deliver_and_scrub_vision_qa(
+                    job_id, runtime_state.get("result") or job.get("result_json")
+                ),
                 "error_message": runtime_state.get("error_message") or job.get("error_message"),
                 "created_at": job.get("created_at"),
                 "started_at": job.get("started_at"),
@@ -3904,7 +3951,7 @@ def job_status(
         "user_email": job.get("user_email"),
         "test_type": job.get("test_type"),
         "status": current_status,
-        "result": job.get("result_json"),
+        "result": _deliver_and_scrub_vision_qa(job_id, job.get("result_json")),
         "error_message": job.get("error_message"),
         "created_at": job.get("created_at"),
         "started_at": job.get("started_at"),
