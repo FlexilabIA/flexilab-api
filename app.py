@@ -460,7 +460,7 @@ async def request_timing_middleware(request, call_next):
 def health():
     return {
         "ok": True,
-        "patch_version": "V101.39.1-shoulder-protocol-directed-angle",
+        "patch_version": "V101.39.2-shoulder-protocol-angle-sign-fix",
         "base_patch": "V101.35.31-aslr-left-image-mirror-before-yolo",
         "release_policy": "minimal_shoulder_protocol_directed_angle_change_with_existing_stability_preserved",
         "production_formula_changes_allowed": True,
@@ -909,7 +909,7 @@ def analyze_shoulder(xy, conf, side="RIGHT"):
         # 2-D cross product between the downward trunk reference and the arm.
         # In image coordinates, the expected sign is mirrored between tests.
         signed_cross = float(v_trunk_down[0] * v_arm[1] - v_trunk_down[1] * v_arm[0])
-        expected_over_vertical_sign = -1.0 if str(side).upper() == "RIGHT" else 1.0
+        expected_over_vertical_sign = 1.0 if str(side).upper() == "RIGHT" else -1.0
         reflex_candidate = 360.0 - shoulder_flexion_base
         over_vertical_candidate = (
             signed_cross * expected_over_vertical_sign > 0.0
