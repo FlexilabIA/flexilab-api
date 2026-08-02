@@ -26,9 +26,9 @@ stripe.api_key = STRIPE_SECRET_KEY
 
 
 PLAN_INCLUDED_SCREENING_CREDITS: dict[str, int] = {
-    "pro_monthly": 2,
-    "pro_three_month": 6,
-    "pro_annual": 24,
+    "pro_monthly": 1,
+    "pro_three_month": 3,
+    "pro_annual": 12,
     "corporate": 0,
 }
 

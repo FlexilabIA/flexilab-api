@@ -393,7 +393,7 @@ def create_stripe_router(supabase_client) -> APIRouter:
                 "cycle_start": _iso(cycle_start),
                 "cycle_end": _iso(cycle_end),
                 "grace_expires_at": _iso(cycle_end + timedelta(days=14)),
-                "credits_granted": 2,
+                "credits_granted": 1,
                 "credits_used": 0,
             }
         ).execute()
