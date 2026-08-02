@@ -379,4 +379,43 @@ def create_account_router(supabase_client) -> APIRouter:
             **subscription,
         }
 
+    @router.delete("/me/account")
+    def delete_my_account(
+        user: dict[str, Any] = Depends(require_user),
+    ):
+        subscription = latest_subscription(user["id"])
+        if subscription:
+            plan_code = str(subscription.get("plan_code") or "")
+            status = str(subscription.get("status") or "")
+            cancel_at_period_end = bool(subscription.get("cancel_at_period_end", False))
+            if plan_code == "pro_monthly" and status in {"active", "trialing"} and not cancel_at_period_end:
+                raise HTTPException(
+                    status_code=409,
+                    detail=(
+                        "Cancel automatic renewal before deleting your account. "
+                        "Your access remains active until the end of the paid period."
+                    ),
+                )
+
+        try:
+            supabase_client.rpc(
+                "delete_flexilab_user_data",
+                {"p_user_id": user["id"], "p_user_email": user.get("email") or ""},
+            ).execute()
+        except Exception as exc:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Unable to delete account data: {exc}",
+            )
+
+        try:
+            supabase_client.auth.admin.delete_user(user["id"])
+        except Exception as exc:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Account data was deleted, but authentication removal failed: {exc}",
+            )
+
+        return {"ok": True, "message": "Account permanently deleted."}
+
     return router
