@@ -1208,14 +1208,9 @@ def _attach_screening_soft_warnings(result, test_type):
                 "Shoulder range may be slightly over- or underestimated.",
             )
     elif test_type == "squat":
-        if float(metrics.get("trunk_lean", 0) or 0) > 25.0:
-            add(
-                "squat_trunk_inclination",
-                "Le tronc est fortement incliné pendant le squat.",
-                "The trunk is substantially inclined during the squat.",
-                "Cela peut refléter votre stratégie de mouvement et influencer la profondeur estimée.",
-                "This may reflect your movement strategy and influence estimated depth.",
-            )
+        # Trunk inclination and limited squat depth are assessment outcomes, not
+        # capture-quality failures. They must influence the measured result and
+        # corrective programme without prompting the user to retake a valid pose.
         kp = metrics.get("keypoint_confidence") or {}
         if float(kp.get("ankles_mean", 1)) < 0.40:
             add(
