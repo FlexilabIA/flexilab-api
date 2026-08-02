@@ -389,6 +389,30 @@ def create_trainer_router(supabase_client) -> APIRouter:
     @router.get("/trainer/overview")
     def overview(user: dict[str, str] = Depends(require_user)):
         profile = require_trainer(user)
+        try:
+            account_profile_response = (
+                supabase_client.table("profiles")
+                .select("full_name,language,email")
+                .eq("id", user["id"])
+                .limit(1)
+                .execute()
+            )
+            account_profile = (
+                account_profile_response.data[0]
+                if account_profile_response.data
+                else {}
+            )
+            current_name = str(account_profile.get("full_name") or "").strip()
+            current_language = str(account_profile.get("language") or "").strip()
+            if current_name:
+                profile["full_name"] = current_name
+            if current_language in {"en", "fr"}:
+                profile["language"] = current_language
+            if not profile.get("email"):
+                profile["email"] = account_profile.get("email") or user.get("email")
+        except Exception:
+            pass
+
         clients_response = (
             supabase_client.table("trainer_clients")
             .select("id,status")
@@ -480,6 +504,31 @@ def create_trainer_router(supabase_client) -> APIRouter:
         """Return one compact, authoritative Trainer workspace snapshot."""
         started = time.perf_counter()
         profile = require_trainer(user)
+
+        account_profile_response = _read_with_retry(
+            lambda: (
+                supabase_client.table("profiles")
+                .select("full_name,language,email")
+                .eq("id", user["id"])
+                .limit(1)
+                .execute()
+            ),
+            "bootstrap_account_profile",
+        )
+        account_profile = (
+            account_profile_response.data[0]
+            if account_profile_response.data
+            else {}
+        )
+        current_name = str(account_profile.get("full_name") or "").strip()
+        current_language = str(account_profile.get("language") or "").strip()
+
+        if current_name:
+            profile["full_name"] = current_name
+        if current_language in {"en", "fr"}:
+            profile["language"] = current_language
+        if not profile.get("email"):
+            profile["email"] = account_profile.get("email") or user.get("email")
 
         clients_response = _read_with_retry(
             lambda: (

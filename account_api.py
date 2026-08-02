@@ -267,6 +267,22 @@ def create_account_router(supabase_client) -> APIRouter:
                     detail="Unable to update the profile.",
                 )
 
+            trainer_changes = {
+                key: changes[key]
+                for key in ("full_name", "language")
+                if key in changes
+            }
+            if trainer_changes:
+                try:
+                    (
+                        supabase_client.table("trainer_profiles")
+                        .update(trainer_changes)
+                        .eq("user_id", user["id"])
+                        .execute()
+                    )
+                except Exception:
+                    pass
+
         return get_my_profile(user)
 
     @router.get("/me/entitlements")
