@@ -26,6 +26,7 @@ class TrainerRegister(BaseModel):
 class TrainerClientCreate(BaseModel):
     full_name: str = Field(min_length=2, max_length=120)
     email: str = Field(min_length=5, max_length=254)
+    language: str = Field(default="en", max_length=2)
 
 
 class TrainerClientUpdate(BaseModel):
@@ -618,9 +619,19 @@ def create_trainer_router(supabase_client) -> APIRouter:
             status = "pending"
         else:
             try:
+                invite_language = "fr" if payload.language == "fr" else "en"
                 invited = supabase_client.auth.admin.invite_user_by_email(
                     email,
-                    options={"redirect_to": f"{FRONTEND_URL}/reset-password"},
+                    options={
+                        "redirect_to": f"{FRONTEND_URL}/reset-password",
+                        "data": {
+                            "full_name": name,
+                            "language": invite_language,
+                            "invited_client": True,
+                            "welcome_demo_required": True,
+                            "welcome_demo_completed": False,
+                        },
+                    },
                 )
                 invited_user = getattr(invited, "user", None)
                 client_user_id = str(getattr(invited_user, "id", "") or "") or None
@@ -630,7 +641,7 @@ def create_trainer_router(supabase_client) -> APIRouter:
                         "id": client_user_id,
                         "email": email,
                         "full_name": name,
-                        "language": "en",
+                        "language": invite_language,
                         "account_status": "active",
                     }).execute()
             except Exception:
@@ -775,6 +786,9 @@ def create_trainer_router(supabase_client) -> APIRouter:
                     "data": {
                         "full_name": link.get("client_name"),
                         "language": "fr" if payload.language == "fr" else "en",
+                        "invited_client": True,
+                        "welcome_demo_required": True,
+                        "welcome_demo_completed": False,
                     },
                 },
             )
