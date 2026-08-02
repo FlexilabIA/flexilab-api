@@ -460,7 +460,7 @@ async def request_timing_middleware(request, call_next):
 def health():
     return {
         "ok": True,
-        "patch_version": "V101.40.1-screening-retake-quality-no-shoulder-overlay",
+        "patch_version": "V101.46.0-program-runtime-bilingual-localization",
         "base_patch": "V101.35.31-aslr-left-image-mirror-before-yolo",
         "release_policy": "minimal_shoulder_protocol_directed_angle_change_with_existing_stability_preserved",
         "production_formula_changes_allowed": True,
@@ -4703,28 +4703,192 @@ def attach_movement_dna_to_report(report_data: dict, lang: str = "fr") -> dict:
 def _v45_lang(lang: str) -> str:
     return "en" if str(lang).lower().startswith("en") else "fr"
 
+
+def _program_exercise_library_index() -> dict:
+    """Index the currently active bilingual exercise library by stable ID."""
+    index = {}
+    for record in EXERCISE_LIBRARY or []:
+        if not isinstance(record, dict):
+            continue
+        exercise_id = str(record.get("exercise_id") or record.get("id") or "").strip()
+        if exercise_id:
+            index[exercise_id] = record
+    return index
+
+
+def _program_band(score, lang: str) -> dict:
+    try:
+        value = float(score)
+    except Exception:
+        value = 0.0
+    if value >= 80:
+        return {"color": "green", "label": "Good" if lang == "en" else "Bon"}
+    if value >= 70:
+        return {"color": "yellow", "label": "Fair" if lang == "en" else "Correct"}
+    if value >= 60:
+        return {"color": "orange", "label": "Needs improvement" if lang == "en" else "À améliorer"}
+    return {"color": "red", "label": "Limited" if lang == "en" else "Limité"}
+
+
+def _program_localized_exercise(exercise: dict, library_record: dict | None, lang: str) -> dict:
+    """Rebuild one stored exercise in the requested language without regenerating the program."""
+    e = exercise
+    record = library_record or {}
+
+    def pick(*keys, default=""):
+        for key in keys:
+            value = record.get(key)
+            if value not in (None, "", []):
+                return copy.deepcopy(value)
+            value = e.get(key)
+            if value not in (None, "", []):
+                return copy.deepcopy(value)
+        return copy.deepcopy(default)
+
+    e["name"] = pick(f"name_{lang}", "name", default=e.get("id") or e.get("exercise_id") or "")
+    e["target"] = pick(f"category_{lang}", f"target_{lang}", "target")
+    equipment_label = pick(f"equipment_label_{lang}", f"equipment_{lang}", f"material_{lang}", "equipment_label", "equipment", "material")
+    e["equipment_label"] = equipment_label
+    e["equipment"] = equipment_label
+    e["material"] = equipment_label
+    e["coaching_cues"] = pick(f"coaching_cues_{lang}", f"tips_{lang}", "coaching_cues", "tips")
+    e["tips"] = pick(f"tips_{lang}", f"coaching_cues_{lang}", "tips", "coaching_cues")
+    e["common_errors"] = pick(f"common_errors_{lang}", "common_errors")
+    e["clinical_rationale"] = pick(f"clinical_rationale_{lang}", "clinical_rationale")
+    e["instructions"] = pick(f"instructions_{lang}", "instructions")
+
+    localized_why = pick(f"why_in_this_program_{lang}", f"why_prescribed_{lang}")
+    if not localized_why:
+        target = e.get("target") or ("your movement priorities" if lang == "en" else "vos priorités de mouvement")
+        localized_why = (
+            f"Selected to support {target} through a progressive and controlled exercise stimulus."
+            if lang == "en"
+            else f"Sélectionné pour soutenir {target} grâce à un exercice progressif et contrôlé."
+        )
+    e["why_in_this_program"] = localized_why
+    e["why_prescribed"] = localized_why
+
+    reps_time = pick(f"reps_time_{lang}", "reps_time")
+    if isinstance(reps_time, str):
+        if lang == "en":
+            reps_time = reps_time.replace("répétitions", "repetitions").replace("répétition", "repetition")
+        else:
+            reps_time = reps_time.replace("repetitions", "répétitions").replace("repetition", "répétition")
+    e["reps_time"] = reps_time
+    e["tempo"] = pick(f"tempo_{lang}", "tempo")
+    e["rest"] = pick(f"rest_{lang}", "rest")
+    return e
+
+
 def _v45_walk_program_i18n(program_data: dict, lang: str = "fr") -> dict:
+    """Localize a stored canonical program for display without changing its identity or progress."""
     lang = _v45_lang(lang)
     if not isinstance(program_data, dict):
         return program_data
+
     program_data["language"] = lang
+    library_by_id = _program_exercise_library_index()
+
+    score = program_data.get("movement_score")
+    if score is not None:
+        program_data["movement_score_band"] = _program_band(score, lang)
+
+    summary = program_data.get("program_summary")
+    if isinstance(summary, dict):
+        summary["duration"] = "4 weeks" if lang == "en" else "4 semaines"
+        summary["frequency"] = "3 sessions/week" if lang == "en" else "3 séances/semaine"
+        summary["session_duration"] = "18–30 min"
+
+    week_phases = {
+        1: ("Restore & Learn", "Restaurer et apprendre"),
+        2: ("Control & Build Capacity", "Contrôler et développer"),
+        3: ("Strengthen & Stabilize", "Renforcer et stabiliser"),
+        4: ("Integrate & Challenge", "Intégrer et progresser"),
+    }
+    week_objectives = {
+        1: ("Learn comfortable movement foundations.", "Apprendre les bases du mouvement dans une zone confortable."),
+        2: ("Develop active control and capacity.", "Développer le contrôle actif et la capacité."),
+        3: ("Introduce resistance and stronger stability demands when appropriate.", "Introduire la résistance et renforcer la stabilité lorsque cela est adapté."),
+        4: ("Integrate movement priorities into more challenging functional movement.", "Intégrer les priorités de mouvement dans des tâches fonctionnelles plus exigeantes."),
+    }
+    session_focuses = {
+        1: ("Mobility & Movement Quality", "Mobilité et qualité du mouvement"),
+        2: ("Stability & Strength", "Stabilité et renforcement"),
+        3: ("Functional Integration", "Intégration fonctionnelle"),
+    }
+
+    for priority_key in ("clinical_priorities", "main_priorities", "monitor_domains"):
+        for priority in program_data.get(priority_key, []) or []:
+            if not isinstance(priority, dict):
+                continue
+            priority["label"] = priority.get(f"label_{lang}") or priority.get("label") or priority.get("id") or ""
+            if priority.get("score") is not None:
+                priority["band"] = _program_band(priority.get("score"), lang)
+
     for week in program_data.get("weeks", []) or []:
+        if not isinstance(week, dict):
+            continue
+        week_number = int(week.get("week") or 0)
+        if week_number in week_phases:
+            week["phase"] = week_phases[week_number][0 if lang == "en" else 1]
+            week["objective"] = week_objectives[week_number][0 if lang == "en" else 1]
+        week["progression_logic"] = "Learn → control → load → integrate" if lang == "en" else "Apprendre → contrôler → charger → intégrer"
+
         for session in week.get("sessions", []) or week.get("days", []) or []:
-            for e in session.get("exercises", []) or []:
-                if not isinstance(e, dict):
+            if not isinstance(session, dict):
+                continue
+            day = int(session.get("day") or 0)
+            if day in session_focuses:
+                session["focus"] = session_focuses[day][0 if lang == "en" else 1]
+            for exercise in session.get("exercises", []) or []:
+                if not isinstance(exercise, dict):
                     continue
-                # Prefer backend-engine bilingual fields. These are filled by the V45 engine patch.
-                e["name"] = e.get(f"name_{lang}") or e.get("name") or e.get("id") or e.get("exercise_id") or ""
-                e["target"] = e.get(f"target_{lang}") or e.get("target") or ""
-                e["equipment"] = e.get(f"equipment_{lang}") or e.get(f"material_{lang}") or e.get("equipment") or e.get("material") or ""
-                e["material"] = e.get(f"material_{lang}") or e.get(f"equipment_{lang}") or e.get("material") or e.get("equipment") or ""
-                e["coaching_cues"] = e.get(f"coaching_cues_{lang}") or e.get(f"tips_{lang}") or e.get("coaching_cues") or e.get("tips") or ""
-                e["tips"] = e.get(f"tips_{lang}") or e.get(f"coaching_cues_{lang}") or e.get("tips") or e.get("coaching_cues") or ""
-                e["clinical_rationale"] = e.get(f"clinical_rationale_{lang}") or e.get("clinical_rationale") or ""
-                e["why_in_this_program"] = e.get(f"why_in_this_program_{lang}") or e.get("why_in_this_program") or e.get("clinical_rationale") or ""
-                e["reps_time"] = e.get(f"reps_time_{lang}") or e.get("reps_time") or ""
-                e["tempo"] = e.get(f"tempo_{lang}") or e.get("tempo") or ""
-                e["rest"] = e.get(f"rest_{lang}") or e.get("rest") or ""
+                exercise_id = str(exercise.get("exercise_id") or exercise.get("id") or "")
+                _program_localized_exercise(exercise, library_by_id.get(exercise_id), lang)
+
+    program_data["safety_notes"] = (
+        [
+            "No exercise should increase symptoms.",
+            "Movement quality is more important than repetitions.",
+            "Reduce range or load if compensation appears.",
+        ]
+        if lang == "en"
+        else [
+            "Aucun exercice ne doit augmenter les symptômes.",
+            "La qualité du mouvement prime sur le nombre de répétitions.",
+            "Réduisez l’amplitude ou la charge si une compensation apparaît.",
+        ]
+    )
+
+    readiness = program_data.get("clinical_readiness") or {}
+    symptom_state = readiness.get("symptom_state") or readiness.get("pain_state")
+    if symptom_state == "mild_discomfort":
+        program_data["safety_notes"].append(
+            "Targeted recovery should remain comfortable; stop if discomfort increases or becomes sharp."
+            if lang == "en"
+            else "La récupération ciblée doit rester confortable ; arrêtez si la gêne augmente ou devient vive."
+        )
+    elif symptom_state == "moderate_non_sharp_pain":
+        program_data["safety_notes"].append(
+            "Use only light pressure for targeted recovery and stop if pain increases, becomes sharp, radiates, or causes numbness or tingling."
+            if lang == "en"
+            else "Utilisez uniquement une pression légère pour la récupération ciblée et arrêtez si la douleur augmente, devient vive, irradie ou provoque un engourdissement ou des fourmillements."
+        )
+    elif symptom_state == "high_risk_pain":
+        program_data["safety_notes"].append(
+            "Targeted self-massage is excluded for high-risk symptoms. Seek qualified professional assessment when symptoms are significant, sharp, radiating, neurological, unstable, or linked to recent trauma."
+            if lang == "en"
+            else "L’auto-massage ciblé est exclu en présence de symptômes à risque. Demandez l’avis d’un professionnel qualifié si les symptômes sont importants, vifs, irradiants, neurologiques, instables ou liés à un traumatisme récent."
+        )
+
+    report_summary = program_data.get("report_ready_summary")
+    if isinstance(report_summary, dict):
+        report_summary["next_action"] = (
+            "Follow the 4-week corrective plan, then repeat the same screening."
+            if lang == "en"
+            else "Suivre le plan correctif 4 semaines, puis refaire le même screening."
+        )
+
     return program_data
 
 def normalize_clinical_program_for_frontend(program_data: dict, report_data: dict, lang: str = "fr") -> dict:
