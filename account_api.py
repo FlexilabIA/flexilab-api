@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import time
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException
@@ -409,12 +410,58 @@ def create_account_router(supabase_client) -> APIRouter:
             )
 
         try:
-            supabase_client.auth.admin.delete_user(user["id"])
+            # Explicitly request a hard deletion. A soft-deleted or retained Auth
+            # identity would prevent the same email address from being registered again.
+            supabase_client.auth.admin.delete_user(
+                user["id"],
+                should_soft_delete=False,
+            )
         except Exception as exc:
             raise HTTPException(
                 status_code=500,
                 detail=f"Account data was deleted, but authentication removal failed: {exc}",
             )
+
+        # Do not report success merely because the SDK call returned without raising.
+        # Verify that Supabase Auth can no longer retrieve the identity.
+        auth_user_still_exists = True
+        verification_error: Optional[Exception] = None
+
+        for attempt in range(3):
+            try:
+                response = supabase_client.auth.admin.get_user_by_id(user["id"])
+                auth_user = getattr(response, "user", None)
+                if auth_user is None and isinstance(response, dict):
+                    auth_user = response.get("user")
+
+                if auth_user is None:
+                    auth_user_still_exists = False
+                    break
+            except Exception as exc:
+                message = str(exc).lower()
+                if any(
+                    marker in message
+                    for marker in (
+                        "user not found",
+                        "not found",
+                        "404",
+                    )
+                ):
+                    auth_user_still_exists = False
+                    break
+                verification_error = exc
+
+            if attempt < 2:
+                time.sleep(0.25)
+
+        if auth_user_still_exists:
+            detail = (
+                "Authentication removal could not be verified. "
+                "The account data was deleted, but the Supabase Auth identity may still exist."
+            )
+            if verification_error is not None:
+                detail += f" Verification error: {verification_error}"
+            raise HTTPException(status_code=500, detail=detail)
 
         return {"ok": True, "message": "Account permanently deleted."}
 
