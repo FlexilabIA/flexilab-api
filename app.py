@@ -197,14 +197,31 @@ def load_clinical_resources():
 
 load_clinical_resources()
 
-ALLOWED_ORIGINS = [
+DEFAULT_ALLOWED_ORIGINS = {
+    "https://flexilab.app",
+    "https://www.flexilab.app",
+    "https://flexilab.fr",
+    "https://www.flexilab.fr",
+    "https://flexi-move-lab.lovable.app",
+    "http://localhost:3000",
+    "http://localhost:5173",
+    # Native Capacitor iOS WebView origin.
+    "capacitor://localhost",
+}
+
+# Environment values extend the safe defaults instead of replacing them.
+# This prevents a Render environment-variable mismatch from accidentally
+# removing the native iOS origin or the production web origins.
+_configured_origins = {
     origin.strip()
-    for origin in os.environ.get(
-        "FLEXILAB_ALLOWED_ORIGINS",
-        "https://flexilab.fr,https://www.flexilab.fr,https://flexi-move-lab.lovable.app,http://localhost:3000,http://localhost:5173",
-    ).split(",")
+    for origin in os.environ.get("FLEXILAB_ALLOWED_ORIGINS", "").split(",")
     if origin.strip()
-]
+}
+ALLOWED_ORIGINS = sorted(DEFAULT_ALLOWED_ORIGINS | _configured_origins)
+
+# WKWebView normally reports `capacitor://localhost`. Keep an explicit regex
+# as a defensive fallback for Capacitor's local origin.
+CAPACITOR_ORIGIN_REGEX = r"^capacitor://localhost(?::\d+)?$"
 
 POSE_MODEL_NAME = os.environ.get("FLEXILAB_POSE_MODEL", "yolov8n-pose.pt")
 POSE_MODEL_LOAD_ERROR = None
@@ -374,6 +391,7 @@ app.include_router(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
+    allow_origin_regex=CAPACITOR_ORIGIN_REGEX,
     allow_credentials=True,
     allow_methods=["*"],
     # The frontend and browser may add request-id, tracing, or Supabase headers.
