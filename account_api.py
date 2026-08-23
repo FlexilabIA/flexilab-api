@@ -146,13 +146,17 @@ def create_account_router(supabase_client) -> APIRouter:
             }
 
         plan_code = str(row.get("plan_code") or "free")
+        provider = str(row.get("provider") or "")
         status = str(row.get("status") or "active")
-        is_monthly = plan_code == "pro_monthly"
-        is_prepaid = plan_code in {"pro_three_month", "pro_annual", "trainer_pack_30"}
+        is_apple_subscription = provider == "apple" and plan_code in {"pro_monthly", "pro_three_month", "pro_annual"}
+        is_monthly = plan_code == "pro_monthly" and not is_apple_subscription
+        is_prepaid = plan_code in {"pro_three_month", "pro_annual", "trainer_pack_30"} and not is_apple_subscription
         cancel_at_period_end = bool(row.get("cancel_at_period_end", False))
         period_end = row.get("current_period_end")
 
-        if is_monthly:
+        if is_apple_subscription:
+            billing_model = "subscription"
+        elif is_monthly:
             billing_model = "monthly"
         elif is_prepaid:
             billing_model = "prepaid"
@@ -168,7 +172,7 @@ def create_account_router(supabase_client) -> APIRouter:
             "current_period_end": period_end,
             "next_billing_date": (
                 period_end
-                if is_monthly
+                if (is_monthly or is_apple_subscription)
                 and status in {"active", "trialing"}
                 and not cancel_at_period_end
                 else None
@@ -176,8 +180,8 @@ def create_account_router(supabase_client) -> APIRouter:
             "cancel_at_period_end": cancel_at_period_end,
             "cancellation_requested": cancel_at_period_end,
             "cancellation_effective_at": period_end if cancel_at_period_end else None,
-            "auto_renew": is_monthly and not cancel_at_period_end,
-            "can_manage_billing": bool(row.get("provider_customer_id")),
+            "auto_renew": (is_monthly or is_apple_subscription) and not cancel_at_period_end,
+            "can_manage_billing": is_apple_subscription or bool(row.get("provider_customer_id")),
             "can_cancel": (
                 is_monthly
                 and status in {"active", "trialing"}

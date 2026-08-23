@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse
 
 from account_api import create_account_router
 from stripe_api import create_stripe_router
+from apple_iap_api import create_apple_iap_router
 from trainer_api import create_trainer_router
 from operator_api import create_operator_router
 from screening_access import (
@@ -197,31 +198,14 @@ def load_clinical_resources():
 
 load_clinical_resources()
 
-DEFAULT_ALLOWED_ORIGINS = {
-    "https://flexilab.app",
-    "https://www.flexilab.app",
-    "https://flexilab.fr",
-    "https://www.flexilab.fr",
-    "https://flexi-move-lab.lovable.app",
-    "http://localhost:3000",
-    "http://localhost:5173",
-    # Native Capacitor iOS WebView origin.
-    "capacitor://localhost",
-}
-
-# Environment values extend the safe defaults instead of replacing them.
-# This prevents a Render environment-variable mismatch from accidentally
-# removing the native iOS origin or the production web origins.
-_configured_origins = {
+ALLOWED_ORIGINS = [
     origin.strip()
-    for origin in os.environ.get("FLEXILAB_ALLOWED_ORIGINS", "").split(",")
+    for origin in os.environ.get(
+        "FLEXILAB_ALLOWED_ORIGINS",
+        "https://flexilab.fr,https://www.flexilab.fr,https://flexi-move-lab.lovable.app,http://localhost:3000,http://localhost:5173",
+    ).split(",")
     if origin.strip()
-}
-ALLOWED_ORIGINS = sorted(DEFAULT_ALLOWED_ORIGINS | _configured_origins)
-
-# WKWebView normally reports `capacitor://localhost`. Keep an explicit regex
-# as a defensive fallback for Capacitor's local origin.
-CAPACITOR_ORIGIN_REGEX = r"^capacitor://localhost(?::\d+)?$"
+]
 
 POSE_MODEL_NAME = os.environ.get("FLEXILAB_POSE_MODEL", "yolov8n-pose.pt")
 POSE_MODEL_LOAD_ERROR = None
@@ -358,6 +342,7 @@ app = FastAPI(
 )
 app.include_router(create_account_router(supabase))
 app.include_router(create_stripe_router(supabase))
+app.include_router(create_apple_iap_router(supabase))
 app.include_router(create_trainer_router(supabase))
 app.include_router(
     create_operator_router(
@@ -391,7 +376,6 @@ app.include_router(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
-    allow_origin_regex=CAPACITOR_ORIGIN_REGEX,
     allow_credentials=True,
     allow_methods=["*"],
     # The frontend and browser may add request-id, tracing, or Supabase headers.
