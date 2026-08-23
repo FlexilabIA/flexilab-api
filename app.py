@@ -198,14 +198,27 @@ def load_clinical_resources():
 
 load_clinical_resources()
 
-ALLOWED_ORIGINS = [
+_DEFAULT_ALLOWED_ORIGINS = {
+    "https://flexilab.fr",
+    "https://www.flexilab.fr",
+    "https://flexilab.app",
+    "https://www.flexilab.app",
+    "https://flexi-move-lab.lovable.app",
+    "http://localhost:3000",
+    "http://localhost:5173",
+    "capacitor://localhost",
+}
+
+_CONFIGURED_ALLOWED_ORIGINS = {
     origin.strip()
-    for origin in os.environ.get(
-        "FLEXILAB_ALLOWED_ORIGINS",
-        "https://flexilab.fr,https://www.flexilab.fr,https://flexi-move-lab.lovable.app,http://localhost:3000,http://localhost:5173",
-    ).split(",")
+    for origin in os.environ.get("FLEXILAB_ALLOWED_ORIGINS", "").split(",")
     if origin.strip()
-]
+}
+
+# Environment configuration extends the safe application defaults instead of
+# replacing them. This keeps the native Capacitor origin available even when
+# Render has an older FLEXILAB_ALLOWED_ORIGINS value.
+ALLOWED_ORIGINS = sorted(_DEFAULT_ALLOWED_ORIGINS | _CONFIGURED_ALLOWED_ORIGINS)
 
 POSE_MODEL_NAME = os.environ.get("FLEXILAB_POSE_MODEL", "yolov8n-pose.pt")
 POSE_MODEL_LOAD_ERROR = None
