@@ -585,7 +585,7 @@ def create_stripe_router(supabase_client) -> APIRouter:
             supabase_client.table("assessment_upgrade_credits").upsert({
                 "user_id": user_id,
                 "source_checkout_id": checkout_id,
-                "amount_cents": 400,
+                "amount_cents": 399,
                 "currency": "eur",
                 "status": "available",
                 "expires_at": _iso(now + timedelta(days=30)),
