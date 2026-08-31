@@ -15,6 +15,7 @@ from stripe_api import create_stripe_router
 from apple_iap_api import create_apple_iap_router
 from trainer_api import create_trainer_router
 from operator_api import create_operator_router
+from corporate_qvct_api import create_corporate_qvct_router
 from screening_access import (
     authenticated_user,
     ensure_email_matches,
@@ -203,6 +204,8 @@ _DEFAULT_ALLOWED_ORIGINS = {
     "https://www.flexilab.fr",
     "https://flexilab.app",
     "https://www.flexilab.app",
+    "https://flexilab.ai",
+    "https://www.flexilab.ai",
     "https://flexi-move-lab.lovable.app",
     "http://localhost:3000",
     "http://localhost:5173",
@@ -357,6 +360,7 @@ app.include_router(create_account_router(supabase))
 app.include_router(create_stripe_router(supabase))
 app.include_router(create_apple_iap_router(supabase))
 app.include_router(create_trainer_router(supabase))
+app.include_router(create_corporate_qvct_router(supabase))
 app.include_router(
     create_operator_router(
         supabase,
