@@ -4,6 +4,8 @@ import csv
 import io
 import json
 import os
+import hashlib
+import hmac
 import re
 import time
 import urllib.error
@@ -106,6 +108,41 @@ ROLE_PERMISSIONS: dict[str, set[str]] = {
 }
 
 
+
+def _normalize_email_domains(values: Optional[list[str]]) -> list[str]:
+    domains: list[str] = []
+    for raw in values or []:
+        domain = str(raw or "").strip().lower()
+        if domain.startswith("@"):
+            domain = domain[1:]
+        if not domain or "@" in domain or "." not in domain:
+            raise ValueError(f"Invalid email domain: {raw}")
+        if not re.fullmatch(r"[a-z0-9.-]+", domain):
+            raise ValueError(f"Invalid email domain: {raw}")
+        if domain not in domains:
+            domains.append(domain)
+    return domains
+
+
+def _hash_qvct_access_code(code: str) -> tuple[str, str]:
+    normalized = str(code or "").strip()
+    if len(normalized) < 6 or len(normalized) > 64:
+        raise ValueError("QVCT access code must contain between 6 and 64 characters.")
+    salt = os.urandom(16)
+    digest = hashlib.pbkdf2_hmac("sha256", normalized.encode("utf-8"), salt, 200_000)
+    return salt.hex(), digest.hex()
+
+
+def _safe_organization_row(row: Optional[dict[str, Any]]) -> Optional[dict[str, Any]]:
+    if not row:
+        return row
+    safe = {
+        key: value for key, value in row.items()
+        if key not in {"qvct_access_code_hash", "qvct_access_code_salt"}
+    }
+    safe["qvct_access_code_configured"] = bool(row.get("qvct_access_code_hash"))
+    return safe
+
 def _now() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -184,6 +221,8 @@ class OrganizationCreate(BaseModel):
     default_plan_code: Optional[str] = None
     access_ends_at: Optional[str] = None
     enrollment_limit: Optional[int] = Field(default=None, ge=1, le=100000)
+    qvct_access_code: Optional[str] = Field(default=None, min_length=6, max_length=64)
+    qvct_allowed_email_domains: list[str] = Field(default_factory=list, max_length=20)
 
 
 class OrganizationUpdate(BaseModel):
@@ -192,6 +231,8 @@ class OrganizationUpdate(BaseModel):
     default_plan_code: Optional[str] = None
     access_ends_at: Optional[str] = None
     enrollment_limit: Optional[int] = Field(default=None, ge=1, le=100000)
+    qvct_access_code: Optional[str] = Field(default=None, min_length=6, max_length=64)
+    qvct_allowed_email_domains: Optional[list[str]] = Field(default=None, max_length=20)
 
 
 class GrantCreate(BaseModel):
@@ -986,8 +1027,13 @@ def create_operator_router(
             enrolled = enrolled_counts.get(oid, 0)
             limit = row.get("enrollment_limit")
             remaining = max(int(limit) - enrolled, 0) if limit is not None else None
+            safe_row = {
+                key: value for key, value in row.items()
+                if key not in {"qvct_access_code_hash", "qvct_access_code_salt"}
+            }
             items.append({
-                **row,
+                **safe_row,
+                "qvct_access_code_configured": bool(row.get("qvct_access_code_hash")),
                 "member_count": member_counts.get(oid, 0),
                 "enrolled_count": enrolled,
                 "remaining_enrollments": remaining,
@@ -1007,12 +1053,26 @@ def create_operator_router(
             "enrollment_limit": payload.enrollment_limit,
             "created_by": operator["id"], "updated_at": _iso(),
         }
+        if payload.default_plan_code == "corporate":
+            if not payload.qvct_access_code:
+                raise HTTPException(status_code=422, detail="A QVCT employee access code is required.")
+            try:
+                salt, digest = _hash_qvct_access_code(payload.qvct_access_code)
+                domains = _normalize_email_domains(payload.qvct_allowed_email_domains)
+            except ValueError as exc:
+                raise HTTPException(status_code=422, detail=str(exc))
+            row.update({
+                "qvct_access_code_salt": salt,
+                "qvct_access_code_hash": digest,
+                "qvct_allowed_email_domains": domains,
+            })
         try:
             result = supabase_client.table("organizations").insert(row).execute()
         except Exception as exc:
             raise HTTPException(status_code=409, detail=f"Unable to create organization: {exc}")
-        audit(operator, "operator.organization_created", entity_type="organization", entity_id=str((result.data or [{}])[0].get("id") or ""), after_data=row)
-        return {"organization": (result.data or [row])[0]}
+        created = (result.data or [row])[0]
+        audit(operator, "operator.organization_created", entity_type="organization", entity_id=str(created.get("id") or ""), after_data={**row, "qvct_access_code_hash": "[stored]" if row.get("qvct_access_code_hash") else None, "qvct_access_code_salt": "[stored]" if row.get("qvct_access_code_salt") else None})
+        return {"organization": _safe_organization_row(created)}
 
     @router.patch("/organizations/{organization_id}")
     def update_organization(
@@ -1023,13 +1083,26 @@ def create_operator_router(
         before = supabase_client.table("organizations").select("*").eq("id", organization_id).limit(1).execute()
         if not before.data:
             raise HTTPException(status_code=404, detail="Organization not found.")
-        changes = {k: v for k, v in payload.model_dump().items() if v is not None}
+        raw_changes = {k: v for k, v in payload.model_dump().items() if v is not None}
+        access_code = raw_changes.pop("qvct_access_code", None)
+        domains_value = raw_changes.pop("qvct_allowed_email_domains", None)
+        changes = raw_changes
         if "status" in changes and changes["status"] not in {"active", "suspended", "archived"}:
             raise HTTPException(status_code=422, detail="Invalid organization status.")
+        try:
+            if access_code:
+                salt, digest = _hash_qvct_access_code(access_code)
+                changes["qvct_access_code_salt"] = salt
+                changes["qvct_access_code_hash"] = digest
+            if domains_value is not None:
+                changes["qvct_allowed_email_domains"] = _normalize_email_domains(domains_value)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc))
         changes["updated_at"] = _iso()
         result = supabase_client.table("organizations").update(changes).eq("id", organization_id).execute()
-        audit(operator, "operator.organization_updated", entity_type="organization", entity_id=organization_id, before_data=before.data[0], after_data=(result.data or [None])[0])
-        return {"organization": (result.data or [None])[0]}
+        updated = (result.data or [None])[0]
+        audit(operator, "operator.organization_updated", entity_type="organization", entity_id=organization_id, before_data=before.data[0], after_data=updated)
+        return {"organization": _safe_organization_row(updated)}
 
     @router.post("/organizations/{organization_id}/imports")
     async def create_import(

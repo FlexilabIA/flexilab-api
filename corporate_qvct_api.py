@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+import hashlib
+import hmac
 from typing import Any, Optional
 
 from fastapi import APIRouter, Header, HTTPException, Query
@@ -12,6 +14,13 @@ from screening_access import authenticated_user
 class CorporateEnroll(BaseModel):
     organization_id: str = Field(min_length=36, max_length=36)
     full_name: Optional[str] = Field(default=None, max_length=160)
+    access_code: str = Field(min_length=6, max_length=64)
+
+
+class CorporateAccessValidate(BaseModel):
+    organization_id: str = Field(min_length=36, max_length=36)
+    email: str = Field(min_length=5, max_length=254)
+    access_code: str = Field(min_length=6, max_length=64)
 
 
 class QVCTResponseCreate(BaseModel):
@@ -37,7 +46,7 @@ def _now_iso() -> str:
 def _active_organization(supabase_client, organization_id: str) -> dict[str, Any]:
     response = (
         supabase_client.table("organizations")
-        .select("id,name,slug,status,default_plan_code,access_ends_at,enrollment_limit")
+        .select("id,name,slug,status,default_plan_code,access_ends_at,enrollment_limit,qvct_access_code_hash,qvct_access_code_salt,qvct_allowed_email_domains")
         .eq("id", organization_id)
         .eq("status", "active")
         .limit(1)
@@ -62,6 +71,36 @@ def _active_organization(supabase_client, organization_id: str) -> dict[str, Any
     return organization
 
 
+
+def _verify_access_code(organization: dict[str, Any], access_code: str) -> None:
+    expected = str(organization.get("qvct_access_code_hash") or "")
+    salt_hex = str(organization.get("qvct_access_code_salt") or "")
+    if not expected or not salt_hex:
+        raise HTTPException(status_code=403, detail="This organization is not configured for employee access yet.")
+    try:
+        salt = bytes.fromhex(salt_hex)
+        actual = hashlib.pbkdf2_hmac(
+            "sha256",
+            str(access_code or "").strip().encode("utf-8"),
+            salt,
+            200_000,
+        ).hex()
+    except Exception:
+        raise HTTPException(status_code=403, detail="Invalid organization access code.")
+    if not hmac.compare_digest(actual, expected):
+        raise HTTPException(status_code=403, detail="Invalid organization access code.")
+
+
+def _verify_email_domain(organization: dict[str, Any], email: str) -> None:
+    domains = [str(value or "").strip().lower().lstrip("@") for value in (organization.get("qvct_allowed_email_domains") or [])]
+    domains = [value for value in domains if value]
+    if not domains:
+        return
+    normalized_email = str(email or "").strip().lower()
+    domain = normalized_email.rsplit("@", 1)[-1] if "@" in normalized_email else ""
+    if domain not in domains:
+        raise HTTPException(status_code=403, detail="Please use an authorized organization email address.")
+
 def _validated_choice(value: str, allowed: set[str], field: str) -> str:
     normalized = str(value or "").strip().lower()
     if normalized not in allowed:
@@ -84,7 +123,7 @@ def create_corporate_qvct_router(supabase_client) -> APIRouter:
             return {"items": []}
         response = (
             supabase_client.table("organizations")
-            .select("id,name,slug,default_plan_code,access_ends_at")
+            .select("id,name,slug,default_plan_code,access_ends_at,qvct_access_code_hash,qvct_allowed_email_domains")
             .eq("status", "active")
             .eq("default_plan_code", "corporate")
             .ilike("name", f"%{search}%")
@@ -102,8 +141,15 @@ def create_corporate_qvct_router(supabase_client) -> APIRouter:
                         continue
                 except Exception:
                     pass
-            items.append({"id": row.get("id"), "name": row.get("name"), "slug": row.get("slug")})
+            items.append({"id": row.get("id"), "name": row.get("name"), "slug": row.get("slug"), "requires_access_code": bool(row.get("qvct_access_code_hash")), "email_domain_restricted": bool(row.get("qvct_allowed_email_domains"))})
         return {"items": items}
+
+    @router.post("/access/validate")
+    def validate_access(payload: CorporateAccessValidate):
+        organization = _active_organization(supabase_client, payload.organization_id)
+        _verify_access_code(organization, payload.access_code)
+        _verify_email_domain(organization, payload.email)
+        return {"ok": True}
 
     @router.post("/enroll")
     def enroll(
@@ -114,6 +160,9 @@ def create_corporate_qvct_router(supabase_client) -> APIRouter:
         organization = _active_organization(supabase_client, payload.organization_id)
         email = user["email"]
         now = _now_iso()
+
+        _verify_access_code(organization, payload.access_code)
+        _verify_email_domain(organization, email)
 
         existing = (
             supabase_client.table("organization_members")
