@@ -1040,6 +1040,347 @@ def create_operator_router(
             })
         return {"items": items, "page": safe_page, "page_size": safe_size, "total": _count(response, rows)}
 
+    @router.get("/organizations/{organization_id}/qvct-report")
+    def organization_qvct_report(
+        organization_id: str,
+        operator: dict[str, Any] = Depends(permission("organizations.read")),
+    ):
+        organization_response = (
+            supabase_client.table("organizations")
+            .select("id,name,slug,status,default_plan_code,access_ends_at,enrollment_limit,created_at")
+            .eq("id", organization_id)
+            .limit(1)
+            .execute()
+        )
+        if not organization_response.data:
+            raise HTTPException(status_code=404, detail="Organization not found.")
+        organization = organization_response.data[0]
+        if organization.get("default_plan_code") != "corporate":
+            raise HTTPException(status_code=422, detail="QVCT reporting is available only for QVCT organizations.")
+
+        members_response = (
+            supabase_client.table("organization_members")
+            .select("id,user_id,invited_email,full_name,status,accepted_at,created_at")
+            .eq("organization_id", organization_id)
+            .eq("status", "active")
+            .execute()
+        )
+        members = members_response.data or []
+        user_ids = [str(row.get("user_id")) for row in members if row.get("user_id")]
+        user_id_set = set(user_ids)
+
+        qvct_response = (
+            supabase_client.table("corporate_qvct_responses")
+            .select("*")
+            .eq("organization_id", organization_id)
+            .order("submitted_at", desc=True)
+            .execute()
+        )
+        latest_qvct: dict[str, dict[str, Any]] = {}
+        for row in qvct_response.data or []:
+            uid = str(row.get("user_id") or "")
+            if uid and uid in user_id_set and uid not in latest_qvct:
+                latest_qvct[uid] = row
+
+        session_rows: list[dict[str, Any]] = []
+        if user_ids:
+            sessions_response = (
+                supabase_client.table("sessions")
+                .select(
+                    "id,user_id,user_email,status,created_at,composite_score,"
+                    "posture_score,shoulder_right_score,shoulder_left_score,"
+                    "squat_score,aslr_right_score,aslr_left_score"
+                )
+                .in_("user_id", user_ids)
+                .order("created_at", desc=True)
+                .limit(5000)
+                .execute()
+            )
+            session_rows = sessions_response.data or []
+
+        session_ids = [str(row.get("id")) for row in session_rows if row.get("id")]
+        tests_by_session: dict[str, set[str]] = {}
+        if session_ids:
+            screening_rows = (
+                supabase_client.table("screenings")
+                .select("session_id,test_type")
+                .in_("session_id", session_ids)
+                .limit(20000)
+                .execute()
+            )
+            for row in screening_rows.data or []:
+                sid = str(row.get("session_id") or "")
+                test_type = str(row.get("test_type") or "")
+                if sid and test_type:
+                    tests_by_session.setdefault(sid, set()).add(test_type)
+
+        latest_screening: dict[str, dict[str, Any]] = {}
+        for row in session_rows:
+            uid = str(row.get("user_id") or "")
+            sid = str(row.get("id") or "")
+            if not uid or uid in latest_screening:
+                continue
+            complete_evidence = len(tests_by_session.get(sid, set())) >= 6
+            if str(row.get("status") or "").lower() == "completed" or complete_evidence:
+                latest_screening[uid] = row
+
+        def number(value: Any) -> Optional[float]:
+            try:
+                if value is None:
+                    return None
+                return float(value)
+            except Exception:
+                return None
+
+        def avg(values: list[Optional[float]]) -> Optional[float]:
+            clean = [float(value) for value in values if value is not None]
+            return round(sum(clean) / len(clean), 1) if clean else None
+
+        def pct(count: int, total: int) -> float:
+            return round((count / total) * 100.0, 1) if total else 0.0
+
+        completed_sessions = list(latest_screening.values())
+        overall_scores = [number(row.get("composite_score")) for row in completed_sessions]
+        posture_scores = [number(row.get("posture_score")) for row in completed_sessions]
+        shoulder_scores = [
+            avg([number(row.get("shoulder_right_score")), number(row.get("shoulder_left_score"))])
+            for row in completed_sessions
+        ]
+        lower_body_scores = [number(row.get("squat_score")) for row in completed_sessions]
+        posterior_scores = [
+            avg([number(row.get("aslr_right_score")), number(row.get("aslr_left_score"))])
+            for row in completed_sessions
+        ]
+
+        movement_profile = {
+            "overall": avg(overall_scores),
+            "posture": avg(posture_scores),
+            "shoulders": avg(shoulder_scores),
+            "lower_body": avg(lower_body_scores),
+            "posterior_chain": avg(posterior_scores),
+        }
+
+        domain_specs = [
+            ("shoulders", "Shoulder & upper-body mobility", shoulder_scores),
+            ("posture", "Posture / cervical-thoracic mobility", posture_scores),
+            ("posterior_chain", "Posterior-chain mobility", posterior_scores),
+            ("lower_body", "Lower-body functional mobility", lower_body_scores),
+        ]
+        priorities = []
+        for key, label, values in domain_specs:
+            clean = [v for v in values if v is not None]
+            priority_count = sum(1 for v in clean if v < 70)
+            priorities.append({
+                "key": key,
+                "label": label,
+                "count": priority_count,
+                "total": len(clean),
+                "percent": pct(priority_count, len(clean)),
+                "average_score": avg(clean),
+            })
+        priorities.sort(key=lambda item: (item["percent"], -(item["average_score"] or 0)), reverse=True)
+
+        shoulder_asymmetry = 0
+        aslr_asymmetry = 0
+        symmetry_total = 0
+        for row in completed_sessions:
+            sr = number(row.get("shoulder_right_score"))
+            sl = number(row.get("shoulder_left_score"))
+            ar = number(row.get("aslr_right_score"))
+            al = number(row.get("aslr_left_score"))
+            if sr is not None and sl is not None:
+                symmetry_total += 1
+                if abs(sr - sl) >= 15:
+                    shoulder_asymmetry += 1
+            if ar is not None and al is not None and abs(ar - al) >= 15:
+                aslr_asymmetry += 1
+        asymmetry_percent = pct(max(shoulder_asymmetry, aslr_asymmetry), symmetry_total) if symmetry_total else 0.0
+
+        questionnaire_rows = list(latest_qvct.values())
+        questionnaire_total = len(questionnaire_rows)
+
+        def response_percent(field: str, accepted: set[str]) -> float:
+            return pct(sum(1 for row in questionnaire_rows if str(row.get(field) or "") in accepted), questionnaire_total)
+
+        high_sitting = response_percent("sitting_hours", {"6to8", "gt8"})
+        high_screen = response_percent("screen_hours", {"6to8", "gt8"})
+        infrequent_breaks = response_percent("movement_breaks", {"60to90", "gt90"})
+        laptop_only = response_percent("screen_setup", {"laptop"})
+        screen_below = response_percent("screen_height", {"below"})
+        limited_chair = response_percent("chair_support", {"partial", "little"})
+        reaching_input = response_percent("keyboard_mouse", {"reach", "laptop"})
+        low_walking = response_percent("daily_walking", {"lt30"})
+        discomfort = response_percent("desk_discomfort", {"occasional", "frequent"})
+        frequent_discomfort = response_percent("desk_discomfort", {"frequent"})
+
+        work_mode_counts: dict[str, int] = {}
+        discomfort_area_counts: dict[str, int] = {}
+        for row in questionnaire_rows:
+            mode = str(row.get("work_mode") or "")
+            if mode:
+                work_mode_counts[mode] = work_mode_counts.get(mode, 0) + 1
+            for area in row.get("discomfort_areas") or []:
+                key = str(area or "")
+                if key:
+                    discomfort_area_counts[key] = discomfort_area_counts.get(key, 0) + 1
+
+        workplace = {
+            "high_sitting_percent": high_sitting,
+            "high_screen_percent": high_screen,
+            "infrequent_breaks_percent": infrequent_breaks,
+            "laptop_only_percent": laptop_only,
+            "screen_below_eye_level_percent": screen_below,
+            "limited_chair_support_percent": limited_chair,
+            "input_reach_or_laptop_percent": reaching_input,
+            "low_walking_percent": low_walking,
+            "desk_discomfort_percent": discomfort,
+            "frequent_discomfort_percent": frequent_discomfort,
+            "work_mode_distribution": [
+                {"key": key, "count": count, "percent": pct(count, questionnaire_total)}
+                for key, count in sorted(work_mode_counts.items(), key=lambda item: item[1], reverse=True)
+            ],
+            "discomfort_areas": [
+                {"key": key, "count": count, "percent": pct(count, questionnaire_total)}
+                for key, count in sorted(discomfort_area_counts.items(), key=lambda item: item[1], reverse=True)
+            ],
+        }
+
+        matched_ids = [uid for uid in user_ids if uid in latest_qvct and uid in latest_screening]
+
+        def screening_domain_for_user(uid: str, domain: str) -> Optional[float]:
+            row = latest_screening.get(uid) or {}
+            if domain == "overall":
+                return number(row.get("composite_score"))
+            if domain == "posture":
+                return number(row.get("posture_score"))
+            if domain == "shoulders":
+                return avg([number(row.get("shoulder_right_score")), number(row.get("shoulder_left_score"))])
+            if domain == "posterior_chain":
+                return avg([number(row.get("aslr_right_score")), number(row.get("aslr_left_score"))])
+            return None
+
+        linkages: list[dict[str, Any]] = []
+
+        def add_linkage(field: str, exposed: set[str], domain: str, title: str, action: str):
+            exposed_values = []
+            reference_values = []
+            for uid in matched_ids:
+                response = latest_qvct.get(uid) or {}
+                score = screening_domain_for_user(uid, domain)
+                if score is None:
+                    continue
+                if str(response.get(field) or "") in exposed:
+                    exposed_values.append(score)
+                else:
+                    reference_values.append(score)
+            if len(exposed_values) >= 3 and len(reference_values) >= 3:
+                exposed_avg = avg(exposed_values)
+                reference_avg = avg(reference_values)
+                if exposed_avg is not None and reference_avg is not None:
+                    linkages.append({
+                        "title": title,
+                        "exposed_count": len(exposed_values),
+                        "reference_count": len(reference_values),
+                        "exposed_average": exposed_avg,
+                        "reference_average": reference_avg,
+                        "difference": round(exposed_avg - reference_avg, 1),
+                        "action": action,
+                        "disclaimer": "Observed association within this cohort; this does not establish causation.",
+                    })
+
+        add_linkage(
+            "movement_breaks", {"60to90", "gt90"}, "shoulders",
+            "Movement-break frequency and upper-body mobility",
+            "Introduce short movement breaks and guided upper-body mobility during screen-based work.",
+        )
+        add_linkage(
+            "screen_height", {"below"}, "posture",
+            "Screen height and posture-related movement score",
+            "Review screen height and prolonged laptop use; encourage adjustable setups where practical.",
+        )
+        add_linkage(
+            "sitting_hours", {"6to8", "gt8"}, "posterior_chain",
+            "Sitting exposure and posterior-chain mobility",
+            "Increase position changes, walking opportunities and hip/posterior-chain mobility routines.",
+        )
+
+        recommendations: list[dict[str, str]] = []
+
+        def recommend(priority: str, title: str, evidence: str, action: str):
+            recommendations.append({"priority": priority, "title": title, "evidence": evidence, "action": action})
+
+        if (movement_profile.get("shoulders") is not None and movement_profile["shoulders"] < 72) or (priorities and priorities[0].get("key") == "shoulders"):
+            recommend(
+                "high", "Upper-body mobility & workstation variation",
+                f"Group shoulder mobility averages {movement_profile.get('shoulders') or 0:.0f}/100 and shoulder-related movement priorities are common in the cohort.",
+                "Deploy 3-5 minute shoulder/thoracic mobility routines, vary arm position during the workday and review prolonged keyboard/mouse positioning.",
+            )
+        if screen_below >= 35 or (movement_profile.get("posture") is not None and movement_profile["posture"] < 72):
+            recommend(
+                "high", "Screen setup & postural variety",
+                f"{screen_below:.0f}% report a main screen below eye level; the group posture-related movement score is {movement_profile.get('posture') or 0:.0f}/100.",
+                "Promote screen-height adjustment, external peripherals for prolonged laptop use and frequent changes of sitting position rather than a single fixed posture.",
+            )
+        if high_sitting >= 45 or infrequent_breaks >= 35:
+            recommend(
+                "high", "Reduce uninterrupted sedentary periods",
+                f"{high_sitting:.0f}% report 6+ hours sitting per workday and {infrequent_breaks:.0f}% report movement breaks no more often than every 60-90 minutes.",
+                "Introduce a simple organizational movement-break protocol: brief movement opportunities approximately every 60-90 minutes, adapted to operational constraints.",
+            )
+        if low_walking >= 35 or (movement_profile.get("posterior_chain") is not None and movement_profile["posterior_chain"] < 72):
+            recommend(
+                "medium", "Walking & posterior-chain mobility",
+                f"{low_walking:.0f}% report less than 30 minutes of daily walking; posterior-chain mobility averages {movement_profile.get('posterior_chain') or 0:.0f}/100.",
+                "Encourage walking opportunities, sit-to-stand transitions and short hip/hamstring mobility sequences across the workweek.",
+            )
+        if discomfort >= 30:
+            recommend(
+                "medium", "Targeted ergonomic follow-up",
+                f"{discomfort:.0f}% report occasional or frequent workday-related discomfort.",
+                "Offer workstation self-check guidance and route persistent or significant discomfort to qualified occupational-health/ergonomic professionals rather than treating the screening as a diagnosis.",
+            )
+        if not recommendations:
+            recommend(
+                "maintain", "Maintain healthy movement habits",
+                "Current group indicators do not show a dominant workplace movement priority.",
+                "Maintain movement variety, periodic workstation checks and reassess the cohort to track change over time.",
+            )
+
+        questionnaire_count = len(latest_qvct)
+        screening_count = len(latest_screening)
+        matched_count = len(matched_ids)
+        enrolled_count = len(members)
+        minimum_group_size = 10
+
+        return {
+            "generated_at": _iso(),
+            "organization": organization,
+            "sample": {
+                "enrolled": enrolled_count,
+                "questionnaire_completed": questionnaire_count,
+                "screening_completed": screening_count,
+                "matched_completed": matched_count,
+                "questionnaire_completion_percent": pct(questionnaire_count, enrolled_count),
+                "screening_completion_percent": pct(screening_count, enrolled_count),
+                "full_completion_percent": pct(matched_count, enrolled_count),
+                "minimum_group_size": minimum_group_size,
+                "privacy_ready": matched_count >= minimum_group_size,
+            },
+            "movement_profile": movement_profile,
+            "priorities": priorities,
+            "asymmetry_percent": asymmetry_percent,
+            "workplace": workplace,
+            "linkages": linkages,
+            "recommendations": recommendations,
+            "method": {
+                "screening_basis": "Latest complete six-test FlexiLab screening per enrolled employee.",
+                "questionnaire_basis": "Latest QVCT questionnaire response per enrolled employee.",
+                "matching_basis": "Authenticated Supabase user UUID within the organization.",
+                "privacy_note": "Employer-facing reporting is aggregate. Individual names, emails and individual screening results are not included.",
+                "disclaimer": "FlexiLab provides movement and workplace-wellbeing insights for educational and preventive purposes. It does not diagnose medical conditions or replace medical, occupational-health, physiotherapy or ergonomic assessment.",
+            },
+        }
+
     @router.post("/organizations")
     def create_organization(
         payload: OrganizationCreate,
