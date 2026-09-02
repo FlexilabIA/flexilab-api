@@ -183,6 +183,7 @@ class OrganizationCreate(BaseModel):
     slug: Optional[str] = Field(default=None, max_length=100)
     default_plan_code: Optional[str] = None
     access_ends_at: Optional[str] = None
+    enrollment_limit: Optional[int] = Field(default=None, ge=1, le=100000)
 
 
 class OrganizationUpdate(BaseModel):
@@ -190,6 +191,7 @@ class OrganizationUpdate(BaseModel):
     status: Optional[str] = None
     default_plan_code: Optional[str] = None
     access_ends_at: Optional[str] = None
+    enrollment_limit: Optional[int] = Field(default=None, ge=1, le=100000)
 
 
 class GrantCreate(BaseModel):
@@ -970,12 +972,27 @@ def create_operator_router(
         rows = response.data or []
         org_ids = [str(row.get("id")) for row in rows if row.get("id")]
         member_counts: dict[str, int] = {}
+        enrolled_counts: dict[str, int] = {}
         if org_ids:
-            members = supabase_client.table("organization_members").select("organization_id").in_("organization_id", org_ids).execute()
+            members = supabase_client.table("organization_members").select("organization_id,status").in_("organization_id", org_ids).execute()
             for row in members.data or []:
                 oid = str(row.get("organization_id"))
                 member_counts[oid] = member_counts.get(oid, 0) + 1
-        return {"items": [{**row, "member_count": member_counts.get(str(row.get("id")), 0)} for row in rows], "page": safe_page, "page_size": safe_size, "total": _count(response, rows)}
+                if str(row.get("status") or "").lower() == "active":
+                    enrolled_counts[oid] = enrolled_counts.get(oid, 0) + 1
+        items = []
+        for row in rows:
+            oid = str(row.get("id"))
+            enrolled = enrolled_counts.get(oid, 0)
+            limit = row.get("enrollment_limit")
+            remaining = max(int(limit) - enrolled, 0) if limit is not None else None
+            items.append({
+                **row,
+                "member_count": member_counts.get(oid, 0),
+                "enrolled_count": enrolled,
+                "remaining_enrollments": remaining,
+            })
+        return {"items": items, "page": safe_page, "page_size": safe_size, "total": _count(response, rows)}
 
     @router.post("/organizations")
     def create_organization(
@@ -987,6 +1004,7 @@ def create_operator_router(
         row = {
             "name": payload.name.strip(), "slug": slug, "status": "active",
             "default_plan_code": payload.default_plan_code, "access_ends_at": payload.access_ends_at,
+            "enrollment_limit": payload.enrollment_limit,
             "created_by": operator["id"], "updated_at": _iso(),
         }
         try:

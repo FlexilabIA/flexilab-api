@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 from fastapi import APIRouter, Header, HTTPException, Query
@@ -37,7 +37,7 @@ def _now_iso() -> str:
 def _active_organization(supabase_client, organization_id: str) -> dict[str, Any]:
     response = (
         supabase_client.table("organizations")
-        .select("id,name,slug,status,access_ends_at")
+        .select("id,name,slug,status,default_plan_code,access_ends_at,enrollment_limit")
         .eq("id", organization_id)
         .eq("status", "active")
         .limit(1)
@@ -47,6 +47,8 @@ def _active_organization(supabase_client, organization_id: str) -> dict[str, Any
         raise HTTPException(status_code=404, detail="Organization is not available.")
 
     organization = response.data[0]
+    if organization.get("default_plan_code") != "corporate":
+        raise HTTPException(status_code=404, detail="Organization is not available for QVCT assessment.")
     access_ends_at = organization.get("access_ends_at")
     if access_ends_at:
         try:
@@ -82,8 +84,9 @@ def create_corporate_qvct_router(supabase_client) -> APIRouter:
             return {"items": []}
         response = (
             supabase_client.table("organizations")
-            .select("id,name,slug,access_ends_at")
+            .select("id,name,slug,default_plan_code,access_ends_at")
             .eq("status", "active")
+            .eq("default_plan_code", "corporate")
             .ilike("name", f"%{search}%")
             .order("name")
             .limit(limit)
@@ -120,6 +123,28 @@ def create_corporate_qvct_router(supabase_client) -> APIRouter:
             .limit(1)
             .execute()
         )
+        # Existing enrolled employees may always return. The cap is only checked
+        # when this request would consume a new active enrollment.
+        existing_member = (existing.data or [None])[0]
+        already_enrolled = bool(existing_member and str(existing_member.get("status") or "").lower() == "active")
+        if not already_enrolled:
+            enrollment_limit = organization.get("enrollment_limit")
+            if enrollment_limit is not None:
+                active_members = (
+                    supabase_client.table("organization_members")
+                    .select("id", count="exact")
+                    .eq("organization_id", organization["id"])
+                    .eq("status", "active")
+                    .limit(1)
+                    .execute()
+                )
+                enrolled_count = int(getattr(active_members, "count", 0) or 0)
+                if enrolled_count >= int(enrollment_limit):
+                    raise HTTPException(
+                        status_code=409,
+                        detail="This organization's employee enrollment limit has been reached.",
+                    )
+
         changes = {
             "user_id": user["id"],
             "status": "active",
@@ -202,9 +227,38 @@ def create_corporate_qvct_router(supabase_client) -> APIRouter:
             "submitted_at": _now_iso(),
         }
         result = supabase_client.table("corporate_qvct_responses").insert(row).execute()
+
+        # The QVCT package includes exactly one AI movement screening credit.
+        # Grant it once per user + organization, even if the questionnaire is resubmitted.
+        credit_source = f"qvct_assessment:{organization['id']}"
+        existing_credit = (
+            supabase_client.table("screening_credit_cycles")
+            .select("id")
+            .eq("user_id", user["id"])
+            .eq("source", credit_source)
+            .limit(1)
+            .execute()
+        )
+        screening_credit_granted = False
+        if not existing_credit.data:
+            now = datetime.now(timezone.utc)
+            credit_end = organization.get("access_ends_at") or (now + timedelta(days=365)).isoformat()
+            supabase_client.table("screening_credit_cycles").insert({
+                "user_id": user["id"],
+                "subscription_id": None,
+                "source": credit_source,
+                "cycle_start": now.isoformat(),
+                "cycle_end": credit_end,
+                "grace_expires_at": credit_end,
+                "credits_granted": 1,
+                "credits_used": 0,
+            }).execute()
+            screening_credit_granted = True
+
         return {
             "response": (result.data or [row])[0],
             "organization": {"id": organization["id"], "name": organization["name"]},
+            "screening_credit_granted": screening_credit_granted,
         }
 
     return router
