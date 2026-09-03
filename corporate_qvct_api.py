@@ -37,6 +37,20 @@ class QVCTResponseCreate(BaseModel):
     daily_walking: str
     desk_discomfort: str
     discomfort_areas: list[str] = Field(default_factory=list, max_length=8)
+    physical_activity: str
+    longest_sitting: str
+    sit_stand_desk: str
+    workstation_comfort: str
+    end_day_energy: str
+    setup_encourages_movement: str
+    wfh_days: Optional[str] = None
+    home_work_location: Optional[str] = None
+    home_screen_setup: Optional[str] = None
+    home_screen_height: Optional[str] = None
+    home_chair_support: Optional[str] = None
+    home_movement_breaks: Optional[str] = None
+    home_activity_vs_office: Optional[str] = None
+    home_longest_sitting: Optional[str] = None
 
 
 def _now_iso() -> str:
@@ -258,6 +272,12 @@ def create_corporate_qvct_router(supabase_client) -> APIRouter:
             "keyboard_mouse": {"comfortable", "reach", "laptop", "unsure"},
             "daily_walking": {"lt30", "30to60", "60to90", "gt90"},
             "desk_discomfort": {"none", "occasional", "frequent"},
+            "physical_activity": {"0", "1to2", "3to4", "5plus"},
+            "longest_sitting": {"lt30", "30to60", "60to90", "gt90"},
+            "sit_stand_desk": {"regular", "sometimes", "never"},
+            "workstation_comfort": {"1", "2", "3", "4", "5"},
+            "end_day_energy": {"1", "2", "3", "4", "5"},
+            "setup_encourages_movement": {"yes", "partly", "no"},
         }
         values = {
             key: _validated_choice(getattr(payload, key), choices, key)
@@ -266,12 +286,40 @@ def create_corporate_qvct_router(supabase_client) -> APIRouter:
         allowed_areas = {"neck", "shoulders", "upper_back", "lower_back", "hips", "legs", "wrists_hands", "other"}
         areas = sorted({str(area).strip().lower() for area in payload.discomfort_areas if str(area).strip().lower() in allowed_areas})
 
+        remote_values: dict[str, Any] = {
+            "wfh_days": None,
+            "home_work_location": None,
+            "home_screen_setup": None,
+            "home_screen_height": None,
+            "home_chair_support": None,
+            "home_movement_breaks": None,
+            "home_activity_vs_office": None,
+            "home_longest_sitting": None,
+        }
+        if values["work_mode"] in {"hybrid", "remote"}:
+            remote_allowed = {
+                "wfh_days": {"1", "2", "3", "4", "5"},
+                "home_work_location": {"dedicated_desk", "dining_table", "sofa", "bed", "other"},
+                "home_screen_setup": {"laptop", "single_monitor", "dual_monitor", "other"},
+                "home_screen_height": {"below", "eye_level", "above", "unsure"},
+                "home_chair_support": {"good", "partial", "little", "unsure"},
+                "home_movement_breaks": {"lt30", "30to60", "60to90", "gt90"},
+                "home_activity_vs_office": {"more", "same", "less"},
+                "home_longest_sitting": {"lt30", "30to60", "60to90", "gt90"},
+            }
+            for key, choices in remote_allowed.items():
+                raw = getattr(payload, key)
+                if raw is None:
+                    raise HTTPException(status_code=422, detail=f"Missing {key} value.")
+                remote_values[key] = _validated_choice(raw, choices, key)
+
         row = {
             "organization_id": organization["id"],
             "user_id": user["id"],
             "member_id": membership.data[0]["id"],
             "language": payload.language,
             **values,
+            **remote_values,
             "discomfort_areas": areas,
             "submitted_at": _now_iso(),
         }
