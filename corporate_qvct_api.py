@@ -31,6 +31,7 @@ class QVCTResponseCreate(BaseModel):
     screen_hours: str
     movement_breaks: str
     screen_setup: str
+    workplace_equipment: list[str] = Field(default_factory=list, max_length=10)
     screen_height: str
     chair_support: str
     keyboard_mouse: str
@@ -45,7 +46,9 @@ class QVCTResponseCreate(BaseModel):
     setup_encourages_movement: str
     wfh_days: Optional[str] = None
     home_work_location: Optional[str] = None
+    home_work_locations: list[str] = Field(default_factory=list, max_length=6)
     home_screen_setup: Optional[str] = None
+    home_equipment: list[str] = Field(default_factory=list, max_length=10)
     home_screen_height: Optional[str] = None
     home_chair_support: Optional[str] = None
     home_movement_breaks: Optional[str] = None
@@ -86,11 +89,9 @@ def _active_organization(supabase_client, organization_id: str) -> dict[str, Any
 
 
 
-def _verify_access_code(organization: dict[str, Any], access_code: str) -> None:
-    expected = str(organization.get("qvct_access_code_hash") or "")
-    salt_hex = str(organization.get("qvct_access_code_salt") or "")
+def _access_code_matches(expected: str, salt_hex: str, access_code: str) -> bool:
     if not expected or not salt_hex:
-        raise HTTPException(status_code=403, detail="This organization is not configured for employee access yet.")
+        return False
     try:
         salt = bytes.fromhex(salt_hex)
         actual = hashlib.pbkdf2_hmac(
@@ -100,9 +101,35 @@ def _verify_access_code(organization: dict[str, Any], access_code: str) -> None:
             200_000,
         ).hex()
     except Exception:
-        raise HTTPException(status_code=403, detail="Invalid organization access code.")
-    if not hmac.compare_digest(actual, expected):
-        raise HTTPException(status_code=403, detail="Invalid organization access code.")
+        return False
+    return hmac.compare_digest(actual, expected)
+
+
+def _resolve_group_by_code(supabase_client, organization: dict[str, Any], access_code: str) -> dict[str, Any]:
+    groups = (
+        supabase_client.table("organization_groups")
+        .select("id,organization_id,name,status,qvct_access_code_hash,qvct_access_code_salt")
+        .eq("organization_id", organization["id"])
+        .eq("status", "active")
+        .execute()
+    )
+    for group in groups.data or []:
+        if _access_code_matches(
+            str(group.get("qvct_access_code_hash") or ""),
+            str(group.get("qvct_access_code_salt") or ""),
+            access_code,
+        ):
+            return group
+
+    # Backward-compatible fallback for an organization created before groups existed.
+    if _access_code_matches(
+        str(organization.get("qvct_access_code_hash") or ""),
+        str(organization.get("qvct_access_code_salt") or ""),
+        access_code,
+    ):
+        return {"id": None, "organization_id": organization["id"], "name": None, "status": "active"}
+
+    raise HTTPException(status_code=403, detail="Invalid organization access code.")
 
 
 def _verify_email_domain(organization: dict[str, Any], email: str) -> None:
@@ -161,9 +188,12 @@ def create_corporate_qvct_router(supabase_client) -> APIRouter:
     @router.post("/access/validate")
     def validate_access(payload: CorporateAccessValidate):
         organization = _active_organization(supabase_client, payload.organization_id)
-        _verify_access_code(organization, payload.access_code)
+        group = _resolve_group_by_code(supabase_client, organization, payload.access_code)
         _verify_email_domain(organization, payload.email)
-        return {"ok": True}
+        return {
+            "ok": True,
+            "group": {"id": group.get("id"), "name": group.get("name") or "General"},
+        }
 
     @router.post("/enroll")
     def enroll(
@@ -175,7 +205,7 @@ def create_corporate_qvct_router(supabase_client) -> APIRouter:
         email = user["email"]
         now = _now_iso()
 
-        _verify_access_code(organization, payload.access_code)
+        group = _resolve_group_by_code(supabase_client, organization, payload.access_code)
         _verify_email_domain(organization, email)
 
         existing = (
@@ -210,6 +240,8 @@ def create_corporate_qvct_router(supabase_client) -> APIRouter:
 
         changes = {
             "user_id": user["id"],
+            "organization_group_id": group.get("id"),
+            "department": group.get("name") or None,
             "status": "active",
             "accepted_at": now,
             "updated_at": now,
@@ -227,9 +259,11 @@ def create_corporate_qvct_router(supabase_client) -> APIRouter:
         else:
             result = supabase_client.table("organization_members").insert({
                 "organization_id": organization["id"],
+                "organization_group_id": group.get("id"),
                 "user_id": user["id"],
                 "invited_email": email,
                 "full_name": payload.full_name.strip() if payload.full_name else None,
+                "department": group.get("name") or None,
                 "status": "active",
                 "accepted_at": now,
                 "metadata": {"source": "corporate_qvct_web"},
@@ -238,6 +272,7 @@ def create_corporate_qvct_router(supabase_client) -> APIRouter:
 
         return {
             "organization": {"id": organization["id"], "name": organization["name"]},
+            "group": {"id": group.get("id"), "name": group.get("name") or "General"},
             "membership": (result.data or [{}])[0],
         }
 
@@ -251,7 +286,7 @@ def create_corporate_qvct_router(supabase_client) -> APIRouter:
 
         membership = (
             supabase_client.table("organization_members")
-            .select("id,status")
+            .select("id,status,organization_group_id,department")
             .eq("organization_id", organization["id"])
             .eq("user_id", user["id"])
             .eq("status", "active")
@@ -285,11 +320,15 @@ def create_corporate_qvct_router(supabase_client) -> APIRouter:
         }
         allowed_areas = {"neck", "shoulders", "upper_back", "lower_back", "hips", "legs", "wrists_hands", "other"}
         areas = sorted({str(area).strip().lower() for area in payload.discomfort_areas if str(area).strip().lower() in allowed_areas})
+        allowed_equipment = {"laptop", "desktop", "external_monitor", "multiple_monitors", "external_keyboard", "external_mouse", "laptop_stand", "sit_stand_desk", "footrest", "other"}
+        workplace_equipment = sorted({str(item).strip().lower() for item in payload.workplace_equipment if str(item).strip().lower() in allowed_equipment})
 
         remote_values: dict[str, Any] = {
             "wfh_days": None,
             "home_work_location": None,
+            "home_work_locations": [],
             "home_screen_setup": None,
+            "home_equipment": [],
             "home_screen_height": None,
             "home_chair_support": None,
             "home_movement_breaks": None,
@@ -299,7 +338,7 @@ def create_corporate_qvct_router(supabase_client) -> APIRouter:
         if values["work_mode"] in {"hybrid", "remote"}:
             remote_allowed = {
                 "wfh_days": {"1", "2", "3", "4", "5"},
-                "home_work_location": {"dedicated_desk", "dining_table", "sofa", "bed", "other"},
+                "home_work_location": {"dedicated_desk", "dining_table", "kitchen_counter", "sofa", "bed", "other"},
                 "home_screen_setup": {"laptop", "single_monitor", "dual_monitor", "other"},
                 "home_screen_height": {"below", "eye_level", "above", "unsure"},
                 "home_chair_support": {"good", "partial", "little", "unsure"},
@@ -312,15 +351,26 @@ def create_corporate_qvct_router(supabase_client) -> APIRouter:
                 if raw is None:
                     raise HTTPException(status_code=422, detail=f"Missing {key} value.")
                 remote_values[key] = _validated_choice(raw, choices, key)
+            allowed_home_locations = {"dedicated_desk", "dining_table", "kitchen_counter", "sofa", "bed", "other"}
+            home_locations = sorted({str(item).strip().lower() for item in payload.home_work_locations if str(item).strip().lower() in allowed_home_locations})
+            home_equipment = sorted({str(item).strip().lower() for item in payload.home_equipment if str(item).strip().lower() in allowed_equipment})
+            if not home_locations:
+                raise HTTPException(status_code=422, detail="Select at least one home work location.")
+            if not home_equipment:
+                raise HTTPException(status_code=422, detail="Select at least one home equipment item.")
+            remote_values["home_work_locations"] = home_locations
+            remote_values["home_equipment"] = home_equipment
 
         row = {
             "organization_id": organization["id"],
             "user_id": user["id"],
             "member_id": membership.data[0]["id"],
+            "organization_group_id": membership.data[0].get("organization_group_id"),
             "language": payload.language,
             **values,
             **remote_values,
             "discomfort_areas": areas,
+            "workplace_equipment": workplace_equipment,
             "submitted_at": _now_iso(),
         }
         result = supabase_client.table("corporate_qvct_responses").insert(row).execute()

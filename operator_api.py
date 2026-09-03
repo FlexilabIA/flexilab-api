@@ -223,6 +223,12 @@ class OrganizationCreate(BaseModel):
     enrollment_limit: Optional[int] = Field(default=None, ge=1, le=100000)
     qvct_access_code: Optional[str] = Field(default=None, min_length=6, max_length=64)
     qvct_allowed_email_domains: list[str] = Field(default_factory=list, max_length=20)
+    department_name: Optional[str] = Field(default=None, max_length=180)
+
+
+class OrganizationGroupCreate(BaseModel):
+    department_name: str = Field(min_length=1, max_length=180)
+    qvct_access_code: str = Field(min_length=6, max_length=64)
 
 
 class OrganizationUpdate(BaseModel):
@@ -1014,13 +1020,29 @@ def create_operator_router(
         org_ids = [str(row.get("id")) for row in rows if row.get("id")]
         member_counts: dict[str, int] = {}
         enrolled_counts: dict[str, int] = {}
+        group_rows: dict[str, list[dict[str, Any]]] = {}
+        group_enrolled_counts: dict[str, int] = {}
         if org_ids:
-            members = supabase_client.table("organization_members").select("organization_id,status").in_("organization_id", org_ids).execute()
+            members = supabase_client.table("organization_members").select("organization_id,organization_group_id,status").in_("organization_id", org_ids).execute()
             for row in members.data or []:
                 oid = str(row.get("organization_id"))
                 member_counts[oid] = member_counts.get(oid, 0) + 1
                 if str(row.get("status") or "").lower() == "active":
                     enrolled_counts[oid] = enrolled_counts.get(oid, 0) + 1
+                    gid = str(row.get("organization_group_id") or "")
+                    if gid:
+                        group_enrolled_counts[gid] = group_enrolled_counts.get(gid, 0) + 1
+            groups = supabase_client.table("organization_groups").select("id,organization_id,name,status,created_at").in_("organization_id", org_ids).order("created_at").execute()
+            for group in groups.data or []:
+                oid = str(group.get("organization_id"))
+                gid = str(group.get("id"))
+                group_rows.setdefault(oid, []).append({
+                    "id": gid,
+                    "name": group.get("name") or "General",
+                    "status": group.get("status"),
+                    "enrolled_count": group_enrolled_counts.get(gid, 0),
+                    "created_at": group.get("created_at"),
+                })
         items = []
         for row in rows:
             oid = str(row.get("id"))
@@ -1037,6 +1059,7 @@ def create_operator_router(
                 "member_count": member_counts.get(oid, 0),
                 "enrolled_count": enrolled,
                 "remaining_enrollments": remaining,
+                "groups": group_rows.get(oid, []),
             })
         return {"items": items, "page": safe_page, "page_size": safe_size, "total": _count(response, rows)}
 
@@ -1044,6 +1067,7 @@ def create_operator_router(
     def organization_qvct_report(
         organization_id: str,
         language: str = Query(default="en", pattern="^(fr|en)$"),
+        group_id: Optional[str] = Query(default=None),
         operator: dict[str, Any] = Depends(permission("organizations.read")),
     ):
         fr = language == "fr"
@@ -1058,9 +1082,23 @@ def create_operator_router(
         if organization.get("default_plan_code") != "corporate":
             raise HTTPException(status_code=422, detail="QVCT reporting is available only for QVCT organizations.")
 
-        members = (supabase_client.table("organization_members")
-            .select("id,user_id,status").eq("organization_id", organization_id)
-            .eq("status", "active").execute()).data or []
+        report_group = None
+        members_query = (supabase_client.table("organization_members")
+            .select("id,user_id,status,organization_group_id,department").eq("organization_id", organization_id)
+            .eq("status", "active"))
+        if group_id:
+            group_response = (supabase_client.table("organization_groups")
+                .select("id,name,status").eq("organization_id", organization_id)
+                .eq("id", group_id).limit(1).execute())
+            if not group_response.data:
+                raise HTTPException(status_code=404, detail="Department/group not found for this organization.")
+            report_group = {
+                "id": group_response.data[0].get("id"),
+                "name": group_response.data[0].get("name") or "General",
+                "status": group_response.data[0].get("status"),
+            }
+            members_query = members_query.eq("organization_group_id", group_id)
+        members = members_query.execute().data or []
         user_ids = [str(r.get("user_id")) for r in members if r.get("user_id")]
         user_id_set = set(user_ids)
 
@@ -1154,8 +1192,17 @@ def create_operator_router(
 
         questionnaire_rows=list(latest_qvct.values()); qt=len(questionnaire_rows)
         def resp_pct(field:str, accepted:set[str])->float: return pct(sum(1 for r in questionnaire_rows if str(r.get(field) or "") in accepted),qt)
+        def array_has(row:dict[str,Any], field:str, accepted:set[str])->bool:
+            raw=row.get(field) or []
+            return any(str(item or "") in accepted for item in raw) if isinstance(raw,list) else False
+        def equipment_laptop_only(row:dict[str,Any], field:str, legacy_field:str)->bool:
+            raw=row.get(field) or []
+            if isinstance(raw,list) and raw:
+                items={str(item or "") for item in raw}
+                return "laptop" in items and not ({"desktop","external_monitor","multiple_monitors"} & items)
+            return str(row.get(legacy_field) or "") == "laptop"
         high_sitting=resp_pct("sitting_hours",{"6to8","gt8"}); high_screen=resp_pct("screen_hours",{"6to8","gt8"})
-        infrequent=resp_pct("movement_breaks",{"60to90","gt90"}); laptop=resp_pct("screen_setup",{"laptop"}); below=resp_pct("screen_height",{"below"})
+        infrequent=resp_pct("movement_breaks",{"60to90","gt90"}); laptop=pct(sum(1 for r in questionnaire_rows if equipment_laptop_only(r,"workplace_equipment","screen_setup")),qt); below=resp_pct("screen_height",{"below"})
         limited_chair=resp_pct("chair_support",{"partial","little"}); reaching=resp_pct("keyboard_mouse",{"reach","laptop"}); low_walk=resp_pct("daily_walking",{"lt30"})
         discomfort=resp_pct("desk_discomfort",{"occasional","frequent"}); frequent_discomfort=resp_pct("desk_discomfort",{"frequent"})
         long_sitting=resp_pct("longest_sitting",{"60to90","gt90"}); low_activity=resp_pct("physical_activity",{"0","1to2"}); no_sitstand=resp_pct("sit_stand_desk",{"never"})
@@ -1180,6 +1227,7 @@ def create_operator_router(
         hybrid=[r for r in questionnaire_rows if str(r.get("work_mode") or "") in {"hybrid","remote"}]
         ht=len(hybrid)
         def hp(field:str, accepted:set[str])->float: return pct(sum(1 for r in hybrid if str(r.get(field) or "") in accepted),ht)
+        def hap(field:str, accepted:set[str])->float: return pct(sum(1 for r in hybrid if array_has(r,field,accepted)),ht)
         office_home={"eligible_count":ht,"available":ht>=3,
             "office":[
                 {"key":"laptop_only","label":label("Laptop only","Portable uniquement"),"value":laptop},
@@ -1189,14 +1237,14 @@ def create_operator_router(
                 {"key":"long_sitting","label":label("60+ min uninterrupted sitting","60+ min assis sans interruption"),"value":long_sitting},
             ],
             "home":[
-                {"key":"laptop_only","label":label("Laptop only","Portable uniquement"),"value":hp("home_screen_setup",{"laptop"})},
+                {"key":"laptop_only","label":label("Laptop only","Portable uniquement"),"value":pct(sum(1 for r in hybrid if equipment_laptop_only(r,"home_equipment","home_screen_setup")),ht)},
                 {"key":"screen_below","label":label("Screen below eye level","Écran sous le niveau des yeux"),"value":hp("home_screen_height",{"below"})},
                 {"key":"limited_chair","label":label("Limited chair support","Soutien de chaise limité"),"value":hp("home_chair_support",{"partial","little"})},
                 {"key":"infrequent_breaks","label":label("Infrequent movement","Mouvements peu fréquents"),"value":hp("home_movement_breaks",{"60to90","gt90"})},
                 {"key":"long_sitting","label":label("60+ min uninterrupted sitting","60+ min assis sans interruption"),"value":hp("home_longest_sitting",{"60to90","gt90"})},
             ],
             "less_active_at_home_percent":hp("home_activity_vs_office",{"less"}),
-            "dedicated_home_workstation_percent":hp("home_work_location",{"dedicated_desk"}),
+            "dedicated_home_workstation_percent":hap("home_work_locations",{"dedicated_desk"}) if any(isinstance(r.get("home_work_locations"),list) and r.get("home_work_locations") for r in hybrid) else hp("home_work_location",{"dedicated_desk"}),
         }
 
         matched=[uid for uid in user_ids if uid in latest_qvct and uid in latest_screening]
@@ -1235,7 +1283,7 @@ def create_operator_router(
             rec("maintain","Maintain healthy movement habits","Maintenir de bonnes habitudes de mouvement","Current group indicators do not show a dominant workplace movement priority.","Les indicateurs actuels du groupe ne montrent pas de priorité dominante.","Maintain movement variety, periodic workstation checks and reassess the cohort over time.","Maintenir la variété de mouvement, des vérifications périodiques du poste et réévaluer la cohorte dans le temps.")
 
         qc,sc,mc,ec=len(latest_qvct),len(latest_screening),len(matched),len(members); min_group=10
-        return {"generated_at":_iso(),"language":language,"organization":organization,
+        return {"generated_at":_iso(),"language":language,"organization":organization,"report_group":report_group,
             "sample":{"enrolled":ec,"questionnaire_completed":qc,"screening_completed":sc,"matched_completed":mc,
                 "questionnaire_completion_percent":pct(qc,ec),"screening_completion_percent":pct(sc,ec),"full_completion_percent":pct(mc,ec),
                 "minimum_group_size":min_group,"privacy_ready":mc>=min_group,"analysis_level":"full" if mc>=20 else "limited" if mc>=10 else "preview"},
@@ -1278,8 +1326,69 @@ def create_operator_router(
         except Exception as exc:
             raise HTTPException(status_code=409, detail=f"Unable to create organization: {exc}")
         created = (result.data or [row])[0]
-        audit(operator, "operator.organization_created", entity_type="organization", entity_id=str(created.get("id") or ""), after_data={**row, "qvct_access_code_hash": "[stored]" if row.get("qvct_access_code_hash") else None, "qvct_access_code_salt": "[stored]" if row.get("qvct_access_code_salt") else None})
+        if payload.default_plan_code == "corporate":
+            # Each QVCT organization starts with one code-selected group. The
+            # department name is optional; a blank name is treated as General.
+            supabase_client.table("organization_groups").insert({
+                "organization_id": created.get("id"),
+                "name": payload.department_name.strip() if payload.department_name and payload.department_name.strip() else None,
+                "status": "active",
+                "qvct_access_code_salt": row.get("qvct_access_code_salt"),
+                "qvct_access_code_hash": row.get("qvct_access_code_hash"),
+                "updated_at": _iso(),
+            }).execute()
+        audit(operator, "operator.organization_created", entity_type="organization", entity_id=str(created.get("id") or ""), after_data={**row, "department_name": payload.department_name, "qvct_access_code_hash": "[stored]" if row.get("qvct_access_code_hash") else None, "qvct_access_code_salt": "[stored]" if row.get("qvct_access_code_salt") else None})
         return {"organization": _safe_organization_row(created)}
+
+    @router.post("/organizations/{organization_id}/groups")
+    def create_organization_group(
+        organization_id: str,
+        payload: OrganizationGroupCreate,
+        operator: dict[str, Any] = Depends(permission("organizations.write")),
+    ):
+        organization = supabase_client.table("organizations").select("id,name,default_plan_code").eq("id", organization_id).limit(1).execute()
+        if not organization.data:
+            raise HTTPException(status_code=404, detail="Organization not found.")
+        if organization.data[0].get("default_plan_code") != "corporate":
+            raise HTTPException(status_code=422, detail="Departments/groups are available only for QVCT organizations.")
+        try:
+            salt, digest = _hash_qvct_access_code(payload.qvct_access_code)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc))
+        group_row = {
+            "organization_id": organization_id,
+            "name": payload.department_name.strip(),
+            "status": "active",
+            "qvct_access_code_salt": salt,
+            "qvct_access_code_hash": digest,
+            "updated_at": _iso(),
+        }
+        try:
+            result = supabase_client.table("organization_groups").insert(group_row).execute()
+        except Exception as exc:
+            raise HTTPException(status_code=409, detail=f"Unable to create department/group: {exc}")
+        created_group = (result.data or [group_row])[0]
+        safe_group = {k: v for k, v in created_group.items() if k not in {"qvct_access_code_hash", "qvct_access_code_salt"}}
+        audit(operator, "operator.organization_group_created", entity_type="organization", entity_id=organization_id, after_data={**safe_group, "qvct_access_code": "[stored]"})
+        return {"group": safe_group}
+
+    @router.delete("/organizations/{organization_id}")
+    def delete_organization(
+        organization_id: str,
+        operator: dict[str, Any] = Depends(permission("organizations.write")),
+    ):
+        before = supabase_client.table("organizations").select("*").eq("id", organization_id).limit(1).execute()
+        if not before.data:
+            raise HTTPException(status_code=404, detail="Organization not found.")
+        organization = before.data[0]
+        # Foreign keys use ON DELETE CASCADE for corporate membership, entitlement,
+        # import and questionnaire data. User accounts and their screenings are not deleted.
+        try:
+            supabase_client.table("organizations").delete().eq("id", organization_id).execute()
+        except Exception as exc:
+            raise HTTPException(status_code=409, detail=f"Unable to delete organization: {exc}")
+        audit(operator, "operator.organization_deleted", entity_type="organization", entity_id=organization_id, before_data=_safe_organization_row(organization))
+        return {"ok": True, "organization_id": organization_id}
 
     @router.patch("/organizations/{organization_id}")
     def update_organization(
@@ -1301,6 +1410,24 @@ def create_operator_router(
                 salt, digest = _hash_qvct_access_code(access_code)
                 changes["qvct_access_code_salt"] = salt
                 changes["qvct_access_code_hash"] = digest
+                # Keep the default/general group synchronized for existing UI
+                # access-code updates. Department-specific groups keep their own codes.
+                general_group = (
+                    supabase_client.table("organization_groups")
+                    .select("id,name")
+                    .eq("organization_id", organization_id)
+                    .order("created_at")
+                    .limit(1)
+                    .execute()
+                )
+                if general_group.data:
+                    first_group = general_group.data[0]
+                    if not first_group.get("name") or str(first_group.get("name") or "").lower() == "general":
+                        supabase_client.table("organization_groups").update({
+                            "qvct_access_code_salt": salt,
+                            "qvct_access_code_hash": digest,
+                            "updated_at": _iso(),
+                        }).eq("id", first_group["id"]).execute()
             if domains_value is not None:
                 changes["qvct_allowed_email_domains"] = _normalize_email_domains(domains_value)
         except ValueError as exc:
