@@ -32,6 +32,11 @@ stripe.api_key = STRIPE_SECRET_KEY
 
 class CheckoutRequest(BaseModel):
     plan_code: str
+    voucher_code: Optional[str] = None
+
+
+class VoucherRedeemRequest(BaseModel):
+    code: str
 
 
 PLAN_CONFIG = {
@@ -208,6 +213,90 @@ def create_stripe_router(supabase_client) -> APIRouter:
                 status_code=401,
                 detail="Invalid or expired authentication token.",
             )
+
+    def _voucher_row(code: str) -> Optional[dict[str, Any]]:
+        normalized = str(code or "").strip().upper()
+        if not normalized:
+            return None
+        response = (
+            supabase_client.table("promotion_codes")
+            .select("*")
+            .ilike("code", normalized)
+            .limit(1)
+            .execute()
+        )
+        return response.data[0] if response.data else None
+
+    def _voucher_is_available(voucher: dict[str, Any]) -> None:
+        if not bool(voucher.get("is_active")):
+            raise HTTPException(status_code=422, detail="This voucher is inactive.")
+        now = _utc_now()
+        starts_at = _parse_iso_datetime(voucher.get("starts_at"))
+        expires_at = _parse_iso_datetime(voucher.get("expires_at"))
+        if starts_at and starts_at > now:
+            raise HTTPException(status_code=422, detail="This voucher is not active yet.")
+        if expires_at and expires_at < now:
+            raise HTTPException(status_code=422, detail="This voucher has expired.")
+        max_redemptions = int(voucher.get("max_redemptions") or 0)
+        redemption_count = int(voucher.get("redemption_count") or 0)
+        if max_redemptions and redemption_count >= max_redemptions:
+            raise HTTPException(status_code=422, detail="This voucher has reached its redemption limit.")
+
+    def _voucher_already_used(voucher_id: str, user_id: str) -> bool:
+        response = (
+            supabase_client.table("voucher_redemptions")
+            .select("id")
+            .eq("voucher_id", str(voucher_id))
+            .eq("user_id", user_id)
+            .limit(1)
+            .execute()
+        )
+        return bool(response.data)
+
+    def _validate_checkout_voucher(code: str, *, user_id: str, plan_code: str) -> dict[str, Any]:
+        voucher = _voucher_row(code)
+        if not voucher:
+            raise HTTPException(status_code=422, detail="Voucher code not found.")
+        _voucher_is_available(voucher)
+        if _voucher_already_used(str(voucher.get("id")), user_id):
+            raise HTTPException(status_code=409, detail="This voucher has already been used by this account.")
+        if str(voucher.get("provider") or "") != "stripe" or not voucher.get("provider_promotion_id"):
+            raise HTTPException(status_code=422, detail="This voucher cannot be used at Stripe Checkout.")
+        eligible_plan = str(voucher.get("granted_plan_code") or "").strip().lower()
+        if eligible_plan and eligible_plan != plan_code:
+            raise HTTPException(status_code=422, detail="This voucher is not valid for the selected plan.")
+        return voucher
+
+    def _record_voucher_redemption(*, voucher_id: str, user_id: str, code: str, benefit_type: str,
+                                  credits_granted: int = 0, checkout_session_id: Optional[str] = None) -> None:
+        existing = (
+            supabase_client.table("voucher_redemptions")
+            .select("id")
+            .eq("voucher_id", str(voucher_id))
+            .eq("user_id", user_id)
+            .limit(1)
+            .execute()
+        )
+        if existing.data:
+            return
+        supabase_client.table("voucher_redemptions").insert({
+            "voucher_id": str(voucher_id),
+            "user_id": user_id,
+            "code": str(code or "").upper(),
+            "benefit_type": benefit_type,
+            "credits_granted": int(credits_granted or 0),
+            "stripe_checkout_session_id": checkout_session_id,
+            "redeemed_at": _iso(_utc_now()),
+        }).execute()
+        try:
+            voucher = supabase_client.table("promotion_codes").select("redemption_count").eq("id", str(voucher_id)).limit(1).execute()
+            current = int((voucher.data or [{}])[0].get("redemption_count") or 0)
+            supabase_client.table("promotion_codes").update({
+                "redemption_count": current + 1,
+                "updated_at": _iso(_utc_now()),
+            }).eq("id", str(voucher_id)).execute()
+        except Exception:
+            pass
 
     def price_row_id(plan_code: str) -> Optional[str]:
         response = (
@@ -648,6 +737,12 @@ def create_stripe_router(supabase_client) -> APIRouter:
             grant_referral_reward(
                 client_user_id=user_id, source_payment_id=checkout_id
             )
+            if meta.get("voucher_id"):
+                _record_voucher_redemption(
+                    voucher_id=meta["voucher_id"], user_id=user_id,
+                    code=meta.get("voucher_code", ""), benefit_type="stripe_discount",
+                    checkout_session_id=checkout_id,
+                )
             return
 
         if mode == "subscription":
@@ -697,6 +792,12 @@ def create_stripe_router(supabase_client) -> APIRouter:
             )
             if meta.get("upgrade_credit_id"):
                 mark_upgrade_credit_used(user_id, meta["upgrade_credit_id"], stripe_subscription_id)
+            if meta.get("voucher_id"):
+                _record_voucher_redemption(
+                    voucher_id=meta["voucher_id"], user_id=user_id,
+                    code=meta.get("voucher_code", ""), benefit_type="stripe_discount",
+                    checkout_session_id=str(_object_value(session, "id", "")),
+                )
             return
 
         months = int(PLAN_CONFIG[plan_code]["months"])
@@ -764,6 +865,13 @@ def create_stripe_router(supabase_client) -> APIRouter:
             )
             if meta.get("upgrade_credit_id"):
                 mark_upgrade_credit_used(user_id, meta["upgrade_credit_id"], checkout_id)
+
+        if meta.get("voucher_id"):
+            _record_voucher_redemption(
+                voucher_id=meta["voucher_id"], user_id=user_id,
+                code=meta.get("voucher_code", ""), benefit_type="stripe_discount",
+                checkout_session_id=checkout_id,
+            )
 
     def process_invoice_paid(invoice: Any) -> None:
         stripe_subscription_id = _invoice_subscription_id(invoice)
@@ -968,6 +1076,60 @@ def create_stripe_router(supabase_client) -> APIRouter:
             "trainer_pack_price_configured": bool(STRIPE_PRICE_TRAINER_PACK),
         }
 
+    @router.post("/redeem-screening-voucher")
+    def redeem_screening_voucher(
+        payload: VoucherRedeemRequest,
+        authorization: Optional[str] = Header(default=None),
+    ):
+        user = require_user(authorization)
+        code = str(payload.code or "").strip().upper()
+        voucher = _voucher_row(code)
+        if not voucher:
+            raise HTTPException(status_code=404, detail="Voucher code not found.")
+        _voucher_is_available(voucher)
+        if str(voucher.get("promotion_type") or "") != "screening_credit":
+            raise HTTPException(status_code=422, detail="This voucher does not grant screening credits.")
+        if _voucher_already_used(str(voucher.get("id")), user["id"]):
+            raise HTTPException(status_code=409, detail="This voucher has already been used by this account.")
+
+        trainer = (
+            supabase_client.table("trainer_profiles")
+            .select("status")
+            .eq("user_id", user["id"])
+            .limit(1)
+            .execute()
+        )
+        if not trainer.data or str(trainer.data[0].get("status") or "") != "active":
+            raise HTTPException(status_code=403, detail="An active Trainer account is required for this voucher.")
+
+        credits = int(voucher.get("screening_credits") or 0)
+        if credits <= 0:
+            raise HTTPException(status_code=422, detail="This voucher has no screening credits configured.")
+
+        now = _utc_now()
+        end = now + timedelta(days=365)
+        source = f"voucher:{voucher.get('id')}:{user['id']}"
+        supabase_client.table("screening_credit_cycles").insert({
+            "user_id": user["id"],
+            "subscription_id": None,
+            "source": source,
+            "cycle_start": _iso(now),
+            "cycle_end": _iso(end),
+            "grace_expires_at": _iso(end),
+            "credits_granted": credits,
+            "credits_used": 0,
+        }).execute()
+        _record_voucher_redemption(
+            voucher_id=str(voucher.get("id")), user_id=user["id"], code=code,
+            benefit_type="trainer_screening_credit", credits_granted=credits,
+        )
+        return {
+            "ok": True,
+            "code": code,
+            "credits_granted": credits,
+            "expires_at": _iso(end),
+        }
+
     @router.post("/create-checkout-session")
     def create_checkout_session(
         payload: CheckoutRequest,
@@ -1031,8 +1193,17 @@ def create_stripe_router(supabase_client) -> APIRouter:
             "plan_code": plan_code,
         }
 
+        applied_voucher = None
+        voucher_code = str(payload.voucher_code or "").strip().upper()
+        if voucher_code:
+            applied_voucher = _validate_checkout_voucher(
+                voucher_code, user_id=user["id"], plan_code=plan_code
+            )
+            metadata["voucher_id"] = str(applied_voucher.get("id"))
+            metadata["voucher_code"] = voucher_code
+
         upgrade_credit = None
-        if plan_code in {"pro_monthly", "pro_three_month", "pro_annual"}:
+        if plan_code in {"pro_monthly", "pro_three_month", "pro_annual"} and not applied_voucher:
             upgrade_credit = available_upgrade_credit(user["id"])
             if upgrade_credit:
                 if not STRIPE_UPGRADE_COUPON_ID:
@@ -1056,11 +1227,18 @@ def create_stripe_router(supabase_client) -> APIRouter:
                 + ("/trainer" if plan_code == "trainer_pack_30" else "/paywall")
                 + "?payment=cancelled"
             ),
-            # Display Stripe's secure promotion-code field for every
-            # client plan and the Trainer 15-credit pack.
-            "allow_promotion_codes": not bool(upgrade_credit),
+            # Keep Stripe's promotion-code field for ordinary purchases.
+            # When a FlexiLab voucher was entered in-app, apply it directly so
+            # eligibility and one-use-per-account rules are enforced server-side.
+            "allow_promotion_codes": not bool(upgrade_credit or applied_voucher),
         }
-        if upgrade_credit:
+        if applied_voucher:
+            session_params["discounts"] = [{"promotion_code": str(applied_voucher["provider_promotion_id"])}]
+            # A 100% first-month discount must still collect a payment method
+            # so the monthly subscription can renew normally after month one.
+            if plan_code == "pro_monthly":
+                session_params["payment_method_collection"] = "always"
+        elif upgrade_credit:
             session_params["discounts"] = [{"coupon": STRIPE_UPGRADE_COUPON_ID}]
 
         if plan["mode"] == "subscription":

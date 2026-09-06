@@ -24,6 +24,7 @@ FRONTEND_URL = os.environ.get(
     "https://flexi-move-lab.lovable.app",
 ).rstrip("/")
 STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY", "").strip()
+STRIPE_PRICE_MONTHLY = os.environ.get("STRIPE_PRICE_MONTHLY", "").strip()
 stripe.api_key = STRIPE_SECRET_KEY
 
 
@@ -940,6 +941,24 @@ def create_operator_router(
                     raise HTTPException(status_code=422, detail="amount_off_cents must be positive.")
                 coupon_params["amount_off"] = int(payload.amount_off_cents)
                 coupon_params["currency"] = payload.currency.lower()
+            # A voucher can optionally be locked to a specific FlexiLab plan.
+            # The launch "1 month Pro free" voucher uses this to ensure that
+            # a 100% discount cannot be applied to screening or Trainer packs.
+            if payload.granted_plan_code:
+                eligible_plan = payload.granted_plan_code.strip().lower()
+                if eligible_plan != "pro_monthly":
+                    raise HTTPException(status_code=422, detail="Discount vouchers can currently be restricted only to pro_monthly.")
+                if not STRIPE_PRICE_MONTHLY:
+                    raise HTTPException(status_code=503, detail="The monthly Stripe price is not configured.")
+                try:
+                    monthly_price = stripe.Price.retrieve(STRIPE_PRICE_MONTHLY)
+                    product_id = str(getattr(monthly_price, "product", "") or monthly_price.get("product", ""))
+                except stripe.StripeError as exc:
+                    raise HTTPException(status_code=502, detail=getattr(exc, "user_message", None) or str(exc))
+                if not product_id:
+                    raise HTTPException(status_code=502, detail="Unable to resolve the monthly Pro Stripe product.")
+                coupon_params["applies_to"] = {"products": [product_id]}
+
             try:
                 coupon = stripe.Coupon.create(**coupon_params)
                 promo_args: dict[str, Any] = {"code": code, "active": True}
@@ -977,7 +996,12 @@ def create_operator_router(
             "is_active": True,
             "provider": provider,
             "provider_promotion_id": provider_id,
-            "metadata": {"created_by": operator["id"], "app_version": APP_VERSION},
+            "metadata": {
+                "created_by": operator["id"],
+                "app_version": APP_VERSION,
+                "eligible_plan_code": payload.granted_plan_code,
+                "one_redemption_per_user": True,
+            },
         }
         result = supabase_client.table("promotion_codes").insert(row).execute()
         audit(operator, "operator.voucher_created", entity_type="promotion_code", entity_id=str((result.data or [{}])[0].get("id") or ""), after_data=row)
